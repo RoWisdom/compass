@@ -21,7 +21,7 @@ import { DeletePageModal } from "@/components/pages/modals/delete-page-modal";
 // hooks
 import { usePageOperations } from "@/hooks/use-page-operations";
 // plane web hooks
-import type { EPageStoreType } from "@/hooks/store";
+import { EPageStoreType } from "@/hooks/store";
 import { usePageFlag } from "@/hooks/use-page-flag";
 // store types
 import type { TPageInstance } from "@/store/pages/base-page";
@@ -46,7 +46,7 @@ type Props = {
   optionsOrder: TPageActions[];
   page: TPageInstance;
   parentRef?: React.RefObject<HTMLElement>;
-  storeType: EPageStoreType.PROJECT;
+  storeType: EPageStoreType;
 };
 
 export const PageActions = observer(function PageActions(props: Props) {
@@ -178,12 +178,14 @@ export const PageActions = observer(function PageActions(props: Props) {
 
   return (
     <>
-      <DeletePageModal
-        isOpen={deletePageModal}
-        onClose={() => setDeletePageModal(false)}
-        page={page}
-        storeType={storeType}
-      />
+      {storeType === EPageStoreType.PROJECT && (
+        <DeletePageModal
+          isOpen={deletePageModal}
+          onClose={() => setDeletePageModal(false)}
+          page={page}
+          storeType={storeType}
+        />
+      )}
       {parentRef && <ContextMenu parentRef={parentRef} items={arrangedOptions} />}
       <CustomMenu placement="bottom-end" optionsClassName="max-h-[90vh]" ellipsis closeOnSelect>
         {arrangedOptions.map((item) => {

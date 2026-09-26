@@ -115,7 +115,8 @@ export class WorkspacePageStore implements IWorkspacePageStore {
     if (query) pages = pages.filter((page) => (page.name ?? "").toLowerCase().includes(query));
 
     const key2 = this.filters.sortKey === "created_at" ? "created_at" : "updated_at";
-    pages = [...pages].toSorted((a, b) => {
+    // oxlint-disable-next-line unicorn/no-array-sort
+    pages = [...pages].sort((a, b) => {
       const left = new Date((a[key2] as Date | undefined) ?? 0).getTime();
       const right = new Date((b[key2] as Date | undefined) ?? 0).getTime();
       return this.filters.sortBy === "asc" ? left - right : right - left;

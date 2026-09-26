@@ -26,7 +26,7 @@ import { PAGE_NAVIGATION_PANE_TABS_QUERY_PARAM } from "../../navigation-pane";
 
 type Props = {
   page: TPageInstance;
-  storeType: EPageStoreType.PROJECT;
+  storeType: EPageStoreType;
 };
 
 export const PageOptionsDropdown = observer(function PageOptionsDropdown(props: Props) {
