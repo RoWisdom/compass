@@ -4,6 +4,7 @@
 
 # Django imports
 from django.db.models import Q
+from django.shortcuts import get_object_or_404
 
 # Third party imports
 from rest_framework import status
@@ -13,9 +14,10 @@ from rest_framework.response import Response
 from plane.app.permissions import ROLE, allow_permission
 from plane.app.serializers import (
     PageCollectionSerializer,
+    WikiPageDetailSerializer,
     WikiPageIncludeSerializer,
-    WikiPageMoveSerializer,
     WikiPageSerializer,
+    WikiPageUpdateSerializer,
 )
 from plane.db.models import Page, PageCollection
 from plane.utils.wiki_collections import GENERAL, PREDEFINED_KEYS, resolve_collection_key
@@ -137,25 +139,34 @@ class WikiPageViewSet(BaseViewSet):
         return Response({"included": updated}, status=status.HTTP_200_OK)
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    def retrieve(self, request, slug, page_id):
+        """单个已收录页面（含正文）。
+
+        作用域全部继承自 _wiki_page_queryset：未收录、别的工作区、别人的私有
+        页面一律 404 —— 这里不再叠第二层过滤。
+        """
+        page = get_object_or_404(_wiki_page_queryset(request, slug), pk=page_id)
+        return Response(WikiPageDetailSerializer(page).data, status=status.HTTP_200_OK)
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
     def partial_update(self, request, slug, page_id):
-        serializer = WikiPageMoveSerializer(data=request.data)
+        """换集合（collection_id）与/或写正文（description_*），两组可同时给。"""
+        page = get_object_or_404(_wiki_page_queryset(request, slug), pk=page_id)
+
+        serializer = WikiPageUpdateSerializer(page, data=request.data, partial=True)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        page = _wiki_page_queryset(request, slug).filter(id=page_id).first()
-        if page is None:
-            return Response({"error": "Page not found in this wiki."}, status=status.HTTP_404_NOT_FOUND)
-
+        # 集合必须是本工作区的 —— 与 create 同一套校验、同一个 404、同一个 body。
+        # 校验排在写之前：404 路径下正文一个字段都不会动
         collection_id = serializer.validated_data.get("collection_id")
-        target = None
         if collection_id is not None:
             target = PageCollection.objects.filter(id=collection_id, workspace__slug=slug).first()
             if target is None:
                 return Response({"error": "Collection not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        Page.objects.filter(id=page.id).update(collection=target)
-        page.refresh_from_db()
-        return Response(WikiPageSerializer(page).data, status=status.HTTP_200_OK)
+        page = serializer.save()
+        return Response(WikiPageDetailSerializer(page).data, status=status.HTTP_200_OK)
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
     def destroy(self, request, slug, page_id):

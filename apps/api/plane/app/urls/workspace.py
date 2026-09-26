@@ -265,7 +265,7 @@ urlpatterns = [
         PageCollectionViewSet.as_view({"get": "list"}),
         name="workspace-page-collections",
     ),
-    # wiki pages: include / move / remove
+    # wiki pages: detail / include / move / remove
     path(
         "workspaces/<str:slug>/wiki-pages/",
         WikiPageViewSet.as_view({"get": "list", "post": "create"}),
@@ -273,7 +273,7 @@ urlpatterns = [
     ),
     path(
         "workspaces/<str:slug>/wiki-pages/<uuid:page_id>/",
-        WikiPageViewSet.as_view({"patch": "partial_update", "delete": "destroy"}),
+        WikiPageViewSet.as_view({"get": "retrieve", "patch": "partial_update", "delete": "destroy"}),
         name="workspace-wiki-pages",
     ),
 ]

@@ -9,6 +9,7 @@ from rest_framework import serializers
 from plane.db.models import Page, PageCollection
 
 from .base import BaseSerializer
+from .page import PageBinaryUpdateSerializer
 
 
 class PageCollectionSerializer(BaseSerializer):
@@ -60,7 +61,47 @@ class WikiPageIncludeSerializer(serializers.Serializer):
     collection_id = serializers.UUIDField(required=False, allow_null=True)
 
 
-class WikiPageMoveSerializer(serializers.Serializer):
-    """PATCH /wiki-pages/<page_id>/ 的请求体 —— 换集合。"""
+class WikiPageDetailSerializer(WikiPageSerializer):
+    """详情页用：在列表字段之上补正文。
+
+    刻意不继承 PageSerializer —— 那个类依赖 queryset 的 ArrayAgg 注解。
+    description_binary 也不放进来：它是二进制，走 JSON 序列化没有意义，
+    项目页那边是单独一个 octet-stream 端点（PageDescriptionViewSet.retrieve）。
+    """
+
+    class Meta(WikiPageSerializer.Meta):
+        fields = [*WikiPageSerializer.Meta.fields, "description_html", "description_json"]
+        read_only_fields = fields
+
+
+class WikiPageUpdateSerializer(PageBinaryUpdateSerializer):
+    """PATCH wiki-pages/<page_id>/ 的请求体。
+
+    两组字段全部可选、可任意组合：
+      - collection_id：换集合；显式传 null 表示移回 general
+      - description_html / description_json / description_binary：正文
+
+    正文的校验与写入直接复用 PageBinaryUpdateSerializer —— HTML 消毒走
+    validate_html_content，与项目页是同一条路径，不另起一套。
+
+    collection_id 这里只做语法校验：存在性 / 工作区归属由视图前置查，
+    查不到 404 {"error": "Collection not found."} —— 与 create 逐字同形。
+    改成在这里 raise ValidationError 会让同一个输入在 POST 上得到 404、
+    在 PATCH 上得到 400，两个端点对一个错误的说法不一致。
+    """
 
     collection_id = serializers.UUIDField(required=False, allow_null=True)
+
+    def update(self, instance, validated_data):
+        collection_provided = "collection_id" in validated_data
+        collection_id = validated_data.pop("collection_id", None)
+
+        # 只给了 collection_id 时不要空写一次正文
+        if validated_data:
+            instance = super().update(instance, validated_data)
+
+        if collection_provided:
+            instance.collection_id = collection_id
+            instance.save(update_fields=["collection"])
+
+        return instance

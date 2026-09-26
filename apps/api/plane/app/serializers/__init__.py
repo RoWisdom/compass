@@ -139,6 +139,7 @@ from .draft import (
 from .page_collection import (
     PageCollectionSerializer,
     WikiPageSerializer,
+    WikiPageDetailSerializer,
     WikiPageIncludeSerializer,
-    WikiPageMoveSerializer,
+    WikiPageUpdateSerializer,
 )

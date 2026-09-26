@@ -37,6 +37,30 @@ def other_workspace(db, other_user):
     return workspace
 
 
+@pytest.fixture
+def wiki_page(workspace, create_user):
+    """一个已收录进 Wiki 的普通公开页面。"""
+    return Page.objects.create(
+        workspace=workspace,
+        name="Wiki 页面一",
+        owned_by=create_user,
+        access=Page.PUBLIC_ACCESS,
+        is_global=True,
+    )
+
+
+@pytest.fixture
+def other_workspace_wiki_page(other_workspace):
+    """别的工作区里一个同样已收录的页面 —— 收录标记不跨工作区。"""
+    return Page.objects.create(
+        workspace=other_workspace,
+        name="别家的 Wiki 页面",
+        owned_by=other_workspace.owner,
+        access=Page.PUBLIC_ACCESS,
+        is_global=True,
+    )
+
+
 @pytest.mark.contract
 class TestWikiPageList:
     @pytest.mark.django_db
@@ -89,6 +113,26 @@ class TestWikiPageList:
         response = session_client.get(f"/api/workspaces/{workspace.slug}/wiki-pages/?collection={collection.id}")
 
         assert [page["name"] for page in response.data] == ["设计一"]
+
+    @pytest.mark.django_db
+    def test_public_pages_of_other_users_are_still_visible(self, session_client, workspace, create_user, other_user):
+        """可见性只对私有页面收窄 —— 别人的公开页面必须照旧出现在 general。
+
+        把 ``_visible_page_q`` 写成 ``Q(owned_by=request.user)``（即"只看自己的"）
+        会让整个 Wiki 里只剩自己的页面，而上面所有夹具页面都是 create_user 的，
+        现有测试会全绿。这条是那种回归唯一的钉子。
+        """
+        Page.objects.create(
+            workspace=workspace, name="我的公开", owned_by=create_user, access=Page.PUBLIC_ACCESS, is_global=True
+        )
+        Page.objects.create(
+            workspace=workspace, name="别人的公开", owned_by=other_user, access=Page.PUBLIC_ACCESS, is_global=True
+        )
+
+        response = session_client.get(f"/api/workspaces/{workspace.slug}/wiki-pages/?collection=general")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert sorted(page["name"] for page in response.data) == ["别人的公开", "我的公开"]
 
     @pytest.mark.django_db
     def test_row_exposes_collection_id(self, session_client, workspace, create_user):
@@ -303,3 +347,147 @@ class TestWikiPageUpdateAndRemove:
 
         page.refresh_from_db()
         assert page.collection_id is None
+
+
+@pytest.mark.contract
+class TestWikiPageDetailEndpoint:
+    @pytest.mark.django_db
+    def test_retrieve_returns_description_html(self, session_client, workspace, wiki_page):
+        wiki_page.description_html = "<p>正文</p>"
+        wiki_page.description_json = {"type": "doc"}
+        wiki_page.save()
+
+        response = session_client.get(f"/api/workspaces/{workspace.slug}/wiki-pages/{wiki_page.id}/")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["id"] == str(wiki_page.id)
+        assert response.data["description_html"] == "<p>正文</p>"
+        assert response.data["description_json"] == {"type": "doc"}
+
+    @pytest.mark.django_db
+    def test_retrieve_404_for_page_not_in_wiki(self, session_client, workspace, create_user):
+        """未收录（is_global=False）的页面不属于 Wiki，取不到。"""
+        page = Page.objects.create(
+            workspace=workspace,
+            name="未收录",
+            owned_by=create_user,
+            access=Page.PUBLIC_ACCESS,
+            is_global=False,
+        )
+
+        response = session_client.get(f"/api/workspaces/{workspace.slug}/wiki-pages/{page.id}/")
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    @pytest.mark.django_db
+    def test_retrieve_404_across_workspaces(self, session_client, other_workspace_wiki_page, workspace):
+        """别的工作区的页面，即使已收录，也不能通过本工作区读到。"""
+        response = session_client.get(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{other_workspace_wiki_page.id}/"
+        )
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+    @pytest.mark.django_db
+    def test_retrieve_404_for_another_users_private_page(self, session_client, workspace, other_user):
+        """别人的私有页面连正文都取不到 —— 详情页是唯一会吐出正文的读路径。
+
+        作用域来自共享的 _wiki_page_queryset，这里只钉住它确实被继承到：
+        将来谁把 _visible_page_q 挪出共享助手、只留给 list，这条就会红。
+        """
+        private_page = Page.objects.create(
+            workspace=workspace,
+            name="别人的私有",
+            owned_by=other_user,
+            access=Page.PRIVATE_ACCESS,
+            is_global=True,
+        )
+
+        response = session_client.get(f"/api/workspaces/{workspace.slug}/wiki-pages/{private_page.id}/")
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.contract
+class TestWikiPageUpdateEndpoint:
+    @pytest.mark.django_db
+    def test_patch_writes_description_html(self, session_client, workspace, wiki_page):
+        response = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{wiki_page.id}/",
+            {"description_html": "<p>新正文</p>"},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        wiki_page.refresh_from_db()
+        assert "新正文" in wiki_page.description_html
+
+    @pytest.mark.django_db
+    def test_patch_sanitizes_description_html(self, session_client, workspace, wiki_page):
+        """HTML 消毒走的是 PageBinaryUpdateSerializer 那条既有路径。
+
+        断言必须带上「留下的部分确实在」：只断言 ``"<script>" not in`` 对一个
+        根本不写正文的实现同样成立（夹具页面的正文默认就是 ``<p></p>``），
+        这条测试就会永远绿。
+        """
+        response = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{wiki_page.id}/",
+            {"description_html": "<p>hi</p><script>alert(1)</script>"},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        wiki_page.refresh_from_db()
+        assert "<script>" not in wiki_page.description_html
+        assert "<p>hi</p>" in wiki_page.description_html
+
+    @pytest.mark.django_db
+    def test_patch_null_collection_moves_back_to_general(self, session_client, workspace, wiki_page):
+        collection = PageCollection.objects.create(workspace=workspace, name="集合甲", owned_by=wiki_page.owned_by)
+        wiki_page.collection = collection
+        wiki_page.save()
+
+        response = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{wiki_page.id}/",
+            {"collection_id": None},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        wiki_page.refresh_from_db()
+        assert wiki_page.collection_id is None
+
+    @pytest.mark.django_db
+    def test_patch_rejects_collection_from_another_workspace(
+        self, session_client, workspace, wiki_page, other_workspace, create_user
+    ):
+        """跨工作区挂集合必须被挡住，否则是越权写入。
+
+        与 create 逐字同形：404 + {"error": "Collection not found."}。
+        两个端点在同一个输入上给同一个答案，是 Task 4 用户裁定要保住的不对称消失。
+        """
+        foreign = PageCollection.objects.create(workspace=other_workspace, name="别家的集合", owned_by=create_user)
+
+        response = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{wiki_page.id}/",
+            {"collection_id": str(foreign.id)},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.data["error"] == "Collection not found."
+        wiki_page.refresh_from_db()
+        assert wiki_page.collection_id is None
+
+    @pytest.mark.django_db
+    def test_patch_rejects_unknown_collection(self, session_client, workspace, wiki_page):
+        response = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{wiki_page.id}/",
+            {"collection_id": "11111111-1111-1111-1111-111111111111"},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.data["error"] == "Collection not found."
+        wiki_page.refresh_from_db()
+        assert wiki_page.collection_id is None
