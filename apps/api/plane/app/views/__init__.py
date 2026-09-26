@@ -239,4 +239,4 @@ from .user.base import AccountEndpoint, ProfileEndpoint, UserSessionEndpoint
 
 from .timezone.base import TimezoneEndpoint
 
-from .page.collection import PageCollectionViewSet
+from .page.collection import PageCollectionViewSet, WikiPageViewSet

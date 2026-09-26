@@ -8,9 +8,14 @@ from rest_framework.response import Response
 
 # Module imports
 from plane.app.permissions import ROLE, allow_permission
-from plane.app.serializers import PageCollectionSerializer
+from plane.app.serializers import (
+    PageCollectionSerializer,
+    WikiPageIncludeSerializer,
+    WikiPageMoveSerializer,
+    WikiPageSerializer,
+)
 from plane.db.models import Page, PageCollection
-from plane.utils.wiki_collections import PREDEFINED_KEYS, resolve_collection_key
+from plane.utils.wiki_collections import GENERAL, PREDEFINED_KEYS, resolve_collection_key
 
 # Local imports
 from ..base import BaseViewSet
@@ -60,3 +65,76 @@ class PageCollectionViewSet(BaseViewSet):
             },
             status=status.HTTP_200_OK,
         )
+
+
+class WikiPageViewSet(BaseViewSet):
+    """Wiki 里的页面 —— 收录 / 移出 / 换集合。
+
+    收录与移出都只动 ``is_global`` 和 ``collection`` 两个字段：页面本身承载
+    版本历史与评论，移出 Wiki 不等于删除页面。
+    """
+
+    model = Page
+
+    def get_serializer_class(self):
+        return WikiPageSerializer
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    def list(self, request, slug):
+        collection_key = request.GET.get("collection", GENERAL)
+        pages = _wiki_page_queryset(slug).select_related("workspace").select_related("owned_by")
+        pages = [
+            page
+            for page in pages
+            if resolve_collection_key(
+                archived_at=page.archived_at, access=page.access, collection_id=page.collection_id
+            )
+            == collection_key
+        ]
+        serializer = WikiPageSerializer(pages, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    def create(self, request, slug):
+        serializer = WikiPageIncludeSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        page_ids = serializer.validated_data["page_ids"]
+        collection_id = serializer.validated_data.get("collection_id")
+
+        # 只收录本工作区的页面 —— 防止跨工作区越权写入
+        pages = Page.objects.filter(id__in=page_ids, workspace__slug=slug)
+        updated = pages.update(is_global=True, collection_id=collection_id)
+        return Response({"included": updated}, status=status.HTTP_200_OK)
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    def partial_update(self, request, slug, page_id):
+        serializer = WikiPageMoveSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        page = _wiki_page_queryset(slug).filter(id=page_id).first()
+        if page is None:
+            return Response({"error": "Page not found in this wiki."}, status=status.HTTP_404_NOT_FOUND)
+
+        collection_id = serializer.validated_data.get("collection_id")
+        target = None
+        if collection_id is not None:
+            target = PageCollection.objects.filter(id=collection_id, workspace__slug=slug).first()
+            if target is None:
+                return Response({"error": "Collection not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        Page.objects.filter(id=page.id).update(collection=target)
+        page.refresh_from_db()
+        return Response(WikiPageSerializer(page).data, status=status.HTTP_200_OK)
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    def destroy(self, request, slug, page_id):
+        page = _wiki_page_queryset(slug).filter(id=page_id).first()
+        if page is None:
+            return Response({"error": "Page not found in this wiki."}, status=status.HTTP_404_NOT_FOUND)
+
+        # 移出 Wiki 只是取消收录，绝不删除页面本身 —— 页面承载版本历史与评论
+        Page.objects.filter(id=page.id).update(is_global=False, collection=None)
+        return Response(status=status.HTTP_204_NO_CONTENT)

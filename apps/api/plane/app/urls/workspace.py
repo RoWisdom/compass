@@ -37,6 +37,7 @@ from plane.app.views import (
     WorkspaceStickyViewSet,
     WorkspaceUserPreferenceViewSet,
     PageCollectionViewSet,
+    WikiPageViewSet,
 )
 
 
@@ -263,5 +264,16 @@ urlpatterns = [
         "workspaces/<str:slug>/page-collections/",
         PageCollectionViewSet.as_view({"get": "list"}),
         name="workspace-page-collections",
+    ),
+    # wiki pages: include / move / remove
+    path(
+        "workspaces/<str:slug>/wiki-pages/",
+        WikiPageViewSet.as_view({"get": "list", "post": "create"}),
+        name="workspace-wiki-pages",
+    ),
+    path(
+        "workspaces/<str:slug>/wiki-pages/<uuid:page_id>/",
+        WikiPageViewSet.as_view({"patch": "partial_update", "delete": "destroy"}),
+        name="workspace-wiki-pages",
     ),
 ]
