@@ -32,6 +32,11 @@ export type TPageCollectionListResponse = {
   collections: TPageCollection[];
 };
 
+/** `POST wiki-pages/` 的响应：实际收录成功的页面数。 */
+export type TPageIncludeResponse = {
+  included: number;
+};
+
 /** 侧栏选中的分区：预置分区的 key，或某个集合的 uuid。 */
 export type TCollectionFilter = TPredefinedCollectionKey | string;
 
@@ -69,11 +74,24 @@ export class WorkspacePageService extends APIService {
       });
   }
 
-  /** 收录已有页面进 Wiki。 */
-  async includePages(workspaceSlug: string, pageIds: string[], collectionId?: string | null): Promise<TPage[]> {
+  /**
+   * 收录已有页面进 Wiki。
+   *
+   * `collectionId` 必填：省略与传 `null` 在后端是同一种处理，都会把页面放回 general ——
+   * 一篇已经在自定义集合里的页面会被静默移回 general，不报错。所以这里不给默认值，
+   * 强制调用方表态（要放 general 就显式传 `null`）。
+   *
+   * 返回值是成功收录的**条数**，不是页面数组：后端会过滤掉不可见的页面
+   * （别人的私有页、别的工作区的页），`included` 是调用方唯一能察觉被跳过的信号。
+   */
+  async includePages(
+    workspaceSlug: string,
+    pageIds: string[],
+    collectionId: string | null
+  ): Promise<TPageIncludeResponse> {
     return this.post(`/api/workspaces/${workspaceSlug}/wiki-pages/`, {
       page_ids: pageIds,
-      ...(collectionId !== undefined ? { collection_id: collectionId } : {}),
+      collection_id: collectionId,
     })
       .then((response) => response?.data)
       .catch((error) => {
