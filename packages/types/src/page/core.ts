@@ -12,6 +12,7 @@ export type TPage = {
   access: EPageAccess | undefined;
   archived_at: string | null | undefined;
   color: string | undefined;
+  collection_id?: string | null | undefined;
   created_at: Date | undefined;
   created_by: string | undefined;
   description_json: object | undefined;

@@ -285,7 +285,9 @@ export class BasePage extends ExtendedBasePage implements TBasePage {
       runInAction(() => {
         Object.keys(pageData).forEach((key) => {
           const currentPageKey = key as keyof TPage;
-          set(this, key, currentPage?.[currentPageKey] || undefined);
+          // asJSON 是 Page 模型字段的快照，会随 TPage 增字段而滞后（例如 collection_id），
+          // 这里只按 pageData 里出现过的 key 回读，断言到 Partial<TPage> 即可。
+          set(this, key, (currentPage as Partial<TPage> | undefined)?.[currentPageKey] || undefined);
         });
       });
       throw error;
