@@ -382,9 +382,7 @@ class TestWikiPageDetailEndpoint:
     @pytest.mark.django_db
     def test_retrieve_404_across_workspaces(self, session_client, other_workspace_wiki_page, workspace):
         """别的工作区的页面，即使已收录，也不能通过本工作区读到。"""
-        response = session_client.get(
-            f"/api/workspaces/{workspace.slug}/wiki-pages/{other_workspace_wiki_page.id}/"
-        )
+        response = session_client.get(f"/api/workspaces/{workspace.slug}/wiki-pages/{other_workspace_wiki_page.id}/")
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
@@ -490,4 +488,85 @@ class TestWikiPageUpdateEndpoint:
         assert response.status_code == status.HTTP_404_NOT_FOUND
         assert response.data["error"] == "Collection not found."
         wiki_page.refresh_from_db()
+        assert wiki_page.collection_id is None
+
+    @pytest.mark.django_db
+    def test_patch_null_description_json_is_rejected(self, session_client, workspace, wiki_page):
+        """``description_json: null`` 必须 400，且错在字段上、不落到库里。
+
+        Page.description_json 的列是 jsonb NOT NULL（见 226 上的
+        information_schema），而基类 PageBinaryUpdateSerializer 把它声明成
+        allow_null=True。两边一撞，null 通过校验、直达 save()，数据库抛出
+        not-null IntegrityError。
+
+        断言必须落在「字段级错误」上，只看状态码钉不住：修复前该请求也是
+        400，但走的是 BaseViewSet.handle_exception 吞掉 IntegrityError 那条
+        兜底分支（views/base.py:70-84），返回的是与字段无关的
+        {"error": "The payload is not valid"} —— 调用方看不出是哪个字段、
+        更不知道这是一个本该在序列化层就被拒的值。修复后 null 在
+        serializer.is_valid() 就被拒，错误体里带上 description_json。
+
+        还要断言原值没被写坏：只断言 400 对一个「根本没写正文」的实现同样
+        成立。
+        """
+        wiki_page.description_json = {"type": "doc", "keep": True}
+        wiki_page.save()
+
+        response = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{wiki_page.id}/",
+            {"description_json": None},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "description_json" in response.data
+        assert "may not be null" in str(response.data["description_json"])
+        wiki_page.refresh_from_db()
+        assert wiki_page.description_json == {"type": "doc", "keep": True}
+
+    @pytest.mark.django_db
+    def test_patch_writes_description_json(self, session_client, workspace, wiki_page):
+        """对象型 description_json 的写路径 —— 本端点此前对这条路径零覆盖。
+
+        现有测试只用 ORM 种过 description_json，从没让它穿过 PATCH。上面那条
+        500 正是因此才没被发现：这条钉住「修好之后正常对象仍然写得进去」。
+        """
+        payload = {"type": "doc", "content": [{"type": "paragraph"}]}
+
+        response = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{wiki_page.id}/",
+            {"description_json": payload},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["description_json"] == payload
+        wiki_page.refresh_from_db()
+        assert wiki_page.description_json == payload
+
+    @pytest.mark.django_db
+    def test_rejected_collection_does_not_write_the_body(
+        self, session_client, workspace, wiki_page, other_workspace, create_user
+    ):
+        """集合校验必须排在写之前：被 404 挡下的请求不得已经改过正文。
+
+        视图里 get_object_or_404 → is_valid → 集合前置查 → serializer.save()
+        这个顺序是隐式不变量，此前没有任何测试钉住它。将来谁把集合校验挪到
+        save() 之后，这条请求就会「先悄悄写正文、再回 404」—— 调用方以为整
+        个请求被拒，正文却已经变了。这条让那次挪动立刻变红。
+        """
+        foreign = PageCollection.objects.create(workspace=other_workspace, name="别家的集合", owned_by=create_user)
+        wiki_page.description_html = "<p>原始</p>"
+        wiki_page.save()
+
+        response = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{wiki_page.id}/",
+            {"collection_id": str(foreign.id), "description_html": "<p>不该被写进去</p>"},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.data["error"] == "Collection not found."
+        wiki_page.refresh_from_db()
+        assert wiki_page.description_html == "<p>原始</p>"
         assert wiki_page.collection_id is None

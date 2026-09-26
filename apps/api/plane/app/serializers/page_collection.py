@@ -88,9 +88,19 @@ class WikiPageUpdateSerializer(PageBinaryUpdateSerializer):
     查不到 404 {"error": "Collection not found."} —— 与 create 逐字同形。
     改成在这里 raise ValidationError 会让同一个输入在 POST 上得到 404、
     在 PATCH 上得到 400，两个端点对一个错误的说法不一致。
+
+    description_json 刻意重新声明、去掉基类的 allow_null=True：Page 的
+    description_json 列是 jsonb NOT NULL，允许 null 等于放一个必定写库失败
+    的值过校验 —— 请求会带着 IntegrityError 撞进 BaseViewSet.handle_exception，
+    以一个与字段无关的 400（{"error": "The payload is not valid"}）收场，
+    调用方看不出是哪个字段的问题。去掉 allow_null 后 null 在序列化层就被拒
+    （400 "This field may not be null."），与兄弟字段 description_html /
+    description_binary 的行为一致。基类 PageBinaryUpdateSerializer 上同样的
+    声明只留给项目页那条既有路径，不在这里动。
     """
 
     collection_id = serializers.UUIDField(required=False, allow_null=True)
+    description_json = serializers.JSONField(required=False)
 
     def update(self, instance, validated_data):
         collection_provided = "collection_id" in validated_data
