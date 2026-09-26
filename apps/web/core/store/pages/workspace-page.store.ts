@@ -1,0 +1,301 @@
+/**
+ * Copyright (c) 2023-present Plane Software, Inc. and contributors
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * See the LICENSE file for details.
+ */
+
+import { set, unset } from "lodash-es";
+import { action, computed, makeObservable, observable, runInAction } from "mobx";
+import { computedFn } from "mobx-utils";
+// types
+import type { TPage, TPageFilters } from "@plane/types";
+// services
+import type {
+  TCollectionFilter,
+  TPageCollection,
+  TPageCollectionListResponse,
+  TPredefinedCollection,
+} from "@/services/page";
+import { WorkspacePageService } from "@/services/page";
+// store
+import type { CoreRootStore } from "../root.store";
+import type { TWorkspacePage } from "./workspace-page";
+import { WorkspacePage } from "./workspace-page";
+
+type TLoader = "init-loader" | "mutation-loader" | undefined;
+
+type TError = { title: string; description: string };
+
+export interface IWorkspacePageStore {
+  // observables
+  loader: TLoader;
+  data: Record<string, TWorkspacePage>; // pageId => Page
+  collectionPageIds: Record<string, string[]>; // 分区 key 或集合 uuid => pageIds
+  collections: TPageCollection[];
+  predefined: TPredefinedCollection[];
+  error: TError | undefined;
+  filters: TPageFilters;
+  // computed
+  isAnyPageAvailable: boolean;
+  // helper actions
+  getPageById: (pageId: string) => TWorkspacePage | undefined;
+  getPageIdsByCollection: (key: string) => string[] | undefined;
+  getFilteredPageIdsByCollection: (key: string) => string[] | undefined;
+  updateFilters: <T extends keyof TPageFilters>(filterKey: T, filterValue: TPageFilters[T]) => void;
+  clearAllFilters: () => void;
+  // actions
+  fetchCollections: (workspaceSlug: string) => Promise<TPageCollectionListResponse | undefined>;
+  fetchPagesList: (workspaceSlug: string, collection: TCollectionFilter) => Promise<TPage[] | undefined>;
+  fetchPageDetails: (workspaceSlug: string, pageId: string) => Promise<TPage | undefined>;
+  includePages: (workspaceSlug: string, pageIds: string[], collectionId: string | null) => Promise<void>;
+  moveToCollection: (workspaceSlug: string, pageId: string, collectionId: string | null) => Promise<void>;
+  removeFromWiki: (workspaceSlug: string, pageId: string) => Promise<void>;
+}
+
+export class WorkspacePageStore implements IWorkspacePageStore {
+  // observables
+  loader: TLoader = "init-loader";
+  data: Record<string, TWorkspacePage> = {}; // pageId => Page
+  collectionPageIds: Record<string, string[]> = {};
+  collections: TPageCollection[] = [];
+  predefined: TPredefinedCollection[] = [];
+  error: TError | undefined = undefined;
+  filters: TPageFilters = {
+    searchQuery: "",
+    sortKey: "updated_at",
+    sortBy: "desc",
+  };
+  // service
+  service: WorkspacePageService;
+  rootStore: CoreRootStore;
+
+  constructor(private store: CoreRootStore) {
+    makeObservable(this, {
+      loader: observable.ref,
+      data: observable,
+      collectionPageIds: observable,
+      collections: observable,
+      predefined: observable,
+      error: observable,
+      filters: observable,
+      isAnyPageAvailable: computed,
+      updateFilters: action,
+      clearAllFilters: action,
+      fetchCollections: action,
+      fetchPagesList: action,
+      fetchPageDetails: action,
+      includePages: action,
+      moveToCollection: action,
+      removeFromWiki: action,
+    });
+    this.rootStore = store;
+    this.service = new WorkspacePageService();
+    // 与 ProjectPageStore 不同，这里**没有** router.projectId 的 reaction ——
+    // 工作区 store 只依赖 workspaceSlug，切换项目不应触发任何重置。
+  }
+
+  get isAnyPageAvailable() {
+    if (this.loader) return true;
+    return Object.keys(this.data).length > 0;
+  }
+
+  getPageById = computedFn((pageId: string) => this.data?.[pageId] || undefined);
+
+  /** 某个分区已加载的页面 id。分区名与后端 `partition_pages` 的返回值对齐。 */
+  getPageIdsByCollection = computedFn((key: string) => this.collectionPageIds[key] ?? undefined);
+
+  /** 在已加载的 id 之上套一层搜索过滤 + 排序。 */
+  getFilteredPageIdsByCollection = computedFn((key: string) => {
+    const ids = this.collectionPageIds[key];
+    if (!ids) return undefined;
+
+    const query = this.filters.searchQuery.trim().toLowerCase();
+    let pages = ids.map((id) => this.getPageById(id)).filter((page): page is TWorkspacePage => !!page);
+
+    if (query) pages = pages.filter((page) => (page.name ?? "").toLowerCase().includes(query));
+
+    const key2 = this.filters.sortKey === "created_at" ? "created_at" : "updated_at";
+    pages = [...pages].toSorted((a, b) => {
+      const left = new Date((a[key2] as Date | undefined) ?? 0).getTime();
+      const right = new Date((b[key2] as Date | undefined) ?? 0).getTime();
+      return this.filters.sortBy === "asc" ? left - right : right - left;
+    });
+
+    return pages.map((page) => page.id) as string[];
+  });
+
+  updateFilters = <T extends keyof TPageFilters>(filterKey: T, filterValue: TPageFilters[T]) => {
+    runInAction(() => {
+      set(this.filters, [filterKey], filterValue);
+    });
+  };
+
+  clearAllFilters = () =>
+    runInAction(() => {
+      set(this.filters, ["searchQuery"], "");
+    });
+
+  fetchCollections = async (workspaceSlug: string) => {
+    try {
+      const response = await this.service.fetchCollections(workspaceSlug);
+      runInAction(() => {
+        this.collections = response.collections;
+        this.predefined = response.predefined;
+      });
+      return response;
+    } catch (error) {
+      runInAction(() => {
+        this.error = { title: "Failed", description: "Failed to fetch the collections, Please try again later." };
+      });
+      throw error;
+    }
+  };
+
+  /**
+   * @description 拉某个分区的页面。
+   * 分区归属由**服务端**判定（apps/api/plane/utils/wiki_collections.py），
+   * 前端不复制一套优先级规则，只按 key 记下 id 列表。
+   */
+  fetchPagesList = async (workspaceSlug: string, collection: TCollectionFilter) => {
+    try {
+      if (!workspaceSlug || !collection) return undefined;
+
+      const existingIds = this.collectionPageIds[collection];
+      runInAction(() => {
+        this.loader = existingIds && existingIds.length > 0 ? "mutation-loader" : "init-loader";
+        this.error = undefined;
+      });
+
+      const pages = await this.service.fetchPages(workspaceSlug, collection);
+      runInAction(() => {
+        for (const page of pages) {
+          if (page?.id) {
+            const existingPage = this.getPageById(page.id);
+            if (existingPage) {
+              const { name, ...otherFields } = page;
+              existingPage.mutateProperties(otherFields, false);
+            } else {
+              set(this.data, [page.id], new WorkspacePage(this.store, page));
+            }
+          }
+        }
+        set(
+          this.collectionPageIds,
+          [collection],
+          pages.map((page) => page.id).filter((id): id is string => !!id)
+        );
+        this.loader = undefined;
+      });
+
+      return pages;
+    } catch (error) {
+      runInAction(() => {
+        this.loader = undefined;
+        this.error = { title: "Failed", description: "Failed to fetch the pages, Please try again later." };
+      });
+      throw error;
+    }
+  };
+
+  fetchPageDetails = async (workspaceSlug: string, pageId: string) => {
+    try {
+      if (!workspaceSlug || !pageId) return undefined;
+
+      const currentPage = this.getPageById(pageId);
+      runInAction(() => {
+        this.loader = currentPage ? "mutation-loader" : "init-loader";
+        this.error = undefined;
+      });
+
+      const page = await this.service.fetchById(workspaceSlug, pageId);
+      runInAction(() => {
+        if (page?.id) {
+          const pageInstance = this.getPageById(page.id);
+          if (pageInstance) pageInstance.mutateProperties(page, false);
+          else set(this.data, [page.id], new WorkspacePage(this.store, page));
+        }
+        this.loader = undefined;
+      });
+
+      return page;
+    } catch (error) {
+      runInAction(() => {
+        this.loader = undefined;
+        this.error = { title: "Failed", description: "Failed to fetch the page, Please try again later." };
+      });
+      throw error;
+    }
+  };
+
+  /**
+   * 收录已有页面。收录后重新拉一次集合计数与当前分区。
+   *
+   * `collectionId` 必填，理由同 service 层：省略会被后端当成「放回 general」，
+   * 调用方必须自己表态。本方法**丢弃** service 返回的 `{included}` 计数
+   * （计划定的形状），所以「有几页被静默跳过」这个信息在 UI 层拿不到。
+   */
+  includePages = async (workspaceSlug: string, pageIds: string[], collectionId: string | null) => {
+    try {
+      runInAction(() => {
+        this.loader = "mutation-loader";
+        this.error = undefined;
+      });
+
+      await this.service.includePages(workspaceSlug, pageIds, collectionId);
+      await this.fetchCollections(workspaceSlug);
+
+      runInAction(() => {
+        this.loader = undefined;
+      });
+    } catch (error) {
+      runInAction(() => {
+        this.loader = undefined;
+        this.error = { title: "Failed", description: "Failed to add the pages, Please try again later." };
+      });
+      throw error;
+    }
+  };
+
+  /** 换集合。同时把该页面从旧分区的 id 列表里摘掉，避免侧栏计数与实际不一致。 */
+  moveToCollection = async (workspaceSlug: string, pageId: string, collectionId: string | null) => {
+    try {
+      const page = await this.service.update(workspaceSlug, pageId, { collection_id: collectionId });
+
+      runInAction(() => {
+        const instance = this.getPageById(pageId);
+        if (instance) instance.mutateProperties(page, false);
+        for (const key of Object.keys(this.collectionPageIds)) {
+          this.collectionPageIds[key] = this.collectionPageIds[key].filter((id) => id !== pageId);
+        }
+      });
+
+      await this.fetchCollections(workspaceSlug);
+    } catch (error) {
+      runInAction(() => {
+        this.error = { title: "Failed", description: "Failed to move the page, Please try again later." };
+      });
+      throw error;
+    }
+  };
+
+  /** 移出 Wiki。**不删页面** —— 只是取消收录。 */
+  removeFromWiki = async (workspaceSlug: string, pageId: string) => {
+    try {
+      await this.service.removeFromWiki(workspaceSlug, pageId);
+
+      runInAction(() => {
+        unset(this.data, [pageId]);
+        for (const key of Object.keys(this.collectionPageIds)) {
+          this.collectionPageIds[key] = this.collectionPageIds[key].filter((id) => id !== pageId);
+        }
+      });
+
+      await this.fetchCollections(workspaceSlug);
+    } catch (error) {
+      runInAction(() => {
+        this.error = { title: "Failed", description: "Failed to remove the page, Please try again later." };
+      });
+      throw error;
+    }
+  };
+}
