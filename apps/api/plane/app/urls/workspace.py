@@ -36,6 +36,7 @@ from plane.app.views import (
     WorkspaceHomePreferenceViewSet,
     WorkspaceStickyViewSet,
     WorkspaceUserPreferenceViewSet,
+    PageCollectionViewSet,
 )
 
 
@@ -256,5 +257,11 @@ urlpatterns = [
         "workspaces/<str:slug>/sidebar-preferences/",
         WorkspaceUserPreferenceViewSet.as_view(),
         name="workspace-user-preference",
+    ),
+    # wiki page collections
+    path(
+        "workspaces/<str:slug>/page-collections/",
+        PageCollectionViewSet.as_view({"get": "list"}),
+        name="workspace-page-collections",
     ),
 ]
