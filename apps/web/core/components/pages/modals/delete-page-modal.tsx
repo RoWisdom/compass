@@ -23,7 +23,7 @@ type TConfirmPageDeletionProps = {
   isOpen: boolean;
   onClose: () => void;
   page: TPageInstance;
-  storeType: EPageStoreType;
+  storeType: EPageStoreType.PROJECT;
 };
 
 export const DeletePageModal = observer(function DeletePageModal(props: TConfirmPageDeletionProps) {

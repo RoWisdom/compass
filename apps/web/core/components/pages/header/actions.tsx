@@ -19,7 +19,7 @@ import { PageLockControl } from "./lock-control";
 
 type Props = {
   page: TPageInstance;
-  storeType: EPageStoreType;
+  storeType: EPageStoreType.PROJECT;
 };
 
 export const PageHeaderActions = observer(function PageHeaderActions(props: Props) {

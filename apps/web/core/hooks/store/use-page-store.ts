@@ -26,11 +26,11 @@ export const usePageStore = <T extends EPageStoreType>(storeType: T): TReturnTyp
   if (context === undefined) throw new Error("usePageStore must be used within StoreProvider");
 
   if (storeType === EPageStoreType.PROJECT) {
-    return context.projectPages;
+    return context.projectPages as TReturnType[T];
   }
 
   if (storeType === EPageStoreType.WORKSPACE) {
-    return context.workspacePages;
+    return context.workspacePages as TReturnType[T];
   }
 
   throw new Error(`Invalid store type: ${storeType}`);

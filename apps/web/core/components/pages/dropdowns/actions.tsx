@@ -46,7 +46,7 @@ type Props = {
   optionsOrder: TPageActions[];
   page: TPageInstance;
   parentRef?: React.RefObject<HTMLElement>;
-  storeType: EPageStoreType;
+  storeType: EPageStoreType.PROJECT;
 };
 
 export const PageActions = observer(function PageActions(props: Props) {

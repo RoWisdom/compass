@@ -24,7 +24,7 @@ import { PageActions } from "../dropdowns";
 type Props = {
   page: TPageInstance;
   parentRef: React.RefObject<HTMLElement>;
-  storeType: EPageStoreType;
+  storeType: EPageStoreType.PROJECT;
 };
 
 export const BlockItemAction = observer(function BlockItemAction(props: Props) {

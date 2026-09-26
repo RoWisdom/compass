@@ -24,7 +24,7 @@ import { EPageStoreType, usePageStore } from "@/hooks/store";
 type Props = {
   children: React.ReactNode;
   pageType: TPageNavigationTabs;
-  storeType: EPageStoreType;
+  storeType: EPageStoreType.PROJECT;
 };
 
 export const PagesListMainContent = observer(function PagesListMainContent(props: Props) {

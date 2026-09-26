@@ -18,7 +18,7 @@ type TPageView = {
   children: React.ReactNode;
   pageType: TPageNavigationTabs;
   projectId: string;
-  storeType: EPageStoreType;
+  storeType: EPageStoreType.PROJECT;
   workspaceSlug: string;
 };
 

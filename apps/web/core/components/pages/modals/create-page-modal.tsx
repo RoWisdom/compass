@@ -25,7 +25,7 @@ type Props = {
   pageAccess?: EPageAccess;
   handleModalClose: () => void;
   redirectionEnabled?: boolean;
-  storeType: EPageStoreType;
+  storeType: EPageStoreType.PROJECT;
 };
 
 export function CreatePageModal(props: Props) {

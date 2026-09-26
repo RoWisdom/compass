@@ -21,7 +21,7 @@ import { usePage } from "@/hooks/store";
 
 type TPageListBlock = {
   pageId: string;
-  storeType: EPageStoreType;
+  storeType: EPageStoreType.PROJECT;
 };
 
 export const PageListBlock = observer(function PageListBlock(props: TPageListBlock) {

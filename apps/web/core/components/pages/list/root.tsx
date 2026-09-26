@@ -17,7 +17,7 @@ import { PageListBlock } from "./block";
 
 type TPagesListRoot = {
   pageType: TPageNavigationTabs;
-  storeType: EPageStoreType;
+  storeType: EPageStoreType.PROJECT;
 };
 
 export const PagesListRoot = observer(function PagesListRoot(props: TPagesListRoot) {

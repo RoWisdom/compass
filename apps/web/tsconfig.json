@@ -8,6 +8,7 @@
       "@/styles/*": ["./styles/*"],
       "package.json": ["./package.json"]
     },
+    "lib": ["DOM", "DOM.Iterable", "ES2022", "ES2023"],
     "strictNullChecks": true,
     "exactOptionalPropertyTypes": false,
     "noUnusedParameters": false,

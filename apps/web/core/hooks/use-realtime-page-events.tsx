@@ -34,7 +34,7 @@ export type TCustomEventHandlers = {
 
 interface UsePageEventsProps {
   page: TPageInstance;
-  storeType: EPageStoreType;
+  storeType: EPageStoreType.PROJECT;
   getUserDetails: (userId: string) => IUserLite | undefined;
   customRealtimeEventHandlers?: TCustomEventHandlers;
   handlers: TEditorBodyHandlers;
