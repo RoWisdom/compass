@@ -24,8 +24,16 @@ class TestPageCollectionModel:
         # 继承 BaseModel -> AuditModel -> SoftDeleteModel
         assert PageCollection._meta.get_field("deleted_at").null is True
 
-    def test_name_defaults_to_blank(self):
+    def test_name_allows_blank(self):
         assert PageCollection._meta.get_field("name").blank is True
+
+    def test_sort_order_follows_page_default(self):
+        """默认排序值必须跟 `Page.DEFAULT_SORT_ORDER` 走，不能另写一个数。
+
+        锁的是**耦合**：日后谁改了 `Page.DEFAULT_SORT_ORDER`，这条会红。
+        （反过来的情况——今天把引用换成字面量 65535——行为上无从观察，不锁。）
+        """
+        assert PageCollection._meta.get_field("sort_order").default == Page.DEFAULT_SORT_ORDER
 
     def test_page_collection_field_is_nullable(self):
         field = Page._meta.get_field("collection")
