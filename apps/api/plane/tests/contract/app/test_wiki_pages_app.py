@@ -2,10 +2,12 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
+from uuid import uuid4
+
 import pytest
 from rest_framework import status
 
-from plane.db.models import Page, PageCollection
+from plane.db.models import Page, PageCollection, User, Workspace, WorkspaceMember
 
 
 @pytest.fixture
@@ -14,6 +16,25 @@ def project_page(workspace, create_user):
     return Page.objects.create(
         workspace=workspace, name="项目里的页面", owned_by=create_user, access=Page.PUBLIC_ACCESS
     )
+
+
+@pytest.fixture
+def other_user(db):
+    """本工作区里的第二个用户。
+
+    User.username 是 unique=True，而 create_user fixture 建的第一个用户
+    username 是 ""，所以这里必须显式给一个非空值，否则 fixture setup 就撞
+    IntegrityError。
+    """
+    return User.objects.create(email="other@plane.so", username="other-user")
+
+
+@pytest.fixture
+def other_workspace(db, other_user):
+    """另一个工作区（连同它的成员关系），用来验证跨工作区隔离。"""
+    workspace = Workspace.objects.create(name="Other", owner=other_user, slug="other-workspace")
+    WorkspaceMember.objects.create(workspace=workspace, member=other_user, role=20)
+    return workspace
 
 
 @pytest.mark.contract
@@ -37,6 +58,21 @@ class TestWikiPageList:
 
         assert response.status_code == status.HTTP_200_OK
         assert [page["name"] for page in response.data] == ["私有"]
+
+    @pytest.mark.django_db
+    def test_private_partition_hides_other_users_pages(self, session_client, workspace, create_user, other_user):
+        """私有 = 只看自己的：别人的私有页面不得出现在我的 private 分区里。"""
+        Page.objects.create(
+            workspace=workspace, name="我的私有", owned_by=create_user, access=Page.PRIVATE_ACCESS, is_global=True
+        )
+        Page.objects.create(
+            workspace=workspace, name="别人的私有", owned_by=other_user, access=Page.PRIVATE_ACCESS, is_global=True
+        )
+
+        response = session_client.get(f"/api/workspaces/{workspace.slug}/wiki-pages/?collection=private")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert [page["name"] for page in response.data] == ["我的私有"]
 
     @pytest.mark.django_db
     def test_filters_by_user_collection(self, session_client, workspace, create_user):
@@ -130,6 +166,60 @@ class TestWikiPageInclude:
         assert response.data["included"] == 0
         foreign_page.refresh_from_db()
         assert foreign_page.is_global is False
+
+    @pytest.mark.django_db
+    def test_cannot_include_another_users_private_page(self, session_client, workspace, other_user):
+        """别人的私有页面不能被收录 —— 与跨工作区一样静默跳过，不是 403。"""
+        foreign_private = Page.objects.create(
+            workspace=workspace, name="别人的私有", owned_by=other_user, access=Page.PRIVATE_ACCESS
+        )
+
+        response = session_client.post(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/",
+            {"page_ids": [str(foreign_private.id)]},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["included"] == 0
+        foreign_private.refresh_from_db()
+        assert foreign_private.is_global is False
+
+    @pytest.mark.django_db
+    def test_cannot_include_into_another_workspaces_collection(
+        self, session_client, workspace, other_workspace, project_page
+    ):
+        """跨工作区的集合 id 必须 404，且页面保持原样（is_global / collection 不变）。"""
+        foreign_collection = PageCollection.objects.create(
+            workspace=other_workspace, name="别家的集合", owned_by=other_workspace.owner
+        )
+
+        response = session_client.post(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/",
+            {"page_ids": [str(project_page.id)], "collection_id": str(foreign_collection.id)},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.data["error"] == "Collection not found."
+        project_page.refresh_from_db()
+        assert project_page.is_global is False
+        assert project_page.collection_id is None
+
+    @pytest.mark.django_db
+    def test_nonexistent_collection_is_rejected(self, session_client, workspace, project_page):
+        """不存在的集合 id 必须 404 —— 直接写进 FK 会 IntegrityError，用户输入换来 500。"""
+        response = session_client.post(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/",
+            {"page_ids": [str(project_page.id)], "collection_id": str(uuid4())},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.data["error"] == "Collection not found."
+        project_page.refresh_from_db()
+        assert project_page.is_global is False
+        assert project_page.collection_id is None
 
     @pytest.mark.django_db
     def test_empty_page_ids_is_rejected(self, session_client, workspace):

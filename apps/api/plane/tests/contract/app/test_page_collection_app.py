@@ -5,7 +5,7 @@
 import pytest
 from rest_framework import status
 
-from plane.db.models import Page, PageCollection
+from plane.db.models import Page, PageCollection, User
 
 
 @pytest.fixture
@@ -18,6 +18,16 @@ def wiki_page(workspace, create_user):
         access=Page.PUBLIC_ACCESS,
         is_global=True,
     )
+
+
+@pytest.fixture
+def other_user(db):
+    """本工作区里的第二个用户。
+
+    User.username 是 unique=True，而 create_user fixture 建的第一个用户
+    username 是 ""，所以这里必须显式给一个非空值。
+    """
+    return User.objects.create(email="other@plane.so", username="other-user")
 
 
 @pytest.mark.contract
@@ -77,6 +87,22 @@ class TestPageCollectionEndpoint:
         by_key = {item["key"]: item["page_count"] for item in response.data["predefined"]}
         assert by_key["private"] == 1
         assert by_key["general"] == 0
+
+    @pytest.mark.django_db
+    def test_private_count_hides_other_users_pages(self, session_client, workspace, create_user, other_user):
+        """私有分区的计数必须与 /wiki-pages/ 列表同口径 —— 否则侧栏显示
+        私有(2) 而列表只有 1 行。"""
+        Page.objects.create(
+            workspace=workspace, name="我的私有", owned_by=create_user, access=Page.PRIVATE_ACCESS, is_global=True
+        )
+        Page.objects.create(
+            workspace=workspace, name="别人的私有", owned_by=other_user, access=Page.PRIVATE_ACCESS, is_global=True
+        )
+
+        response = session_client.get(f"/api/workspaces/{workspace.slug}/page-collections/")
+
+        by_key = {item["key"]: item["page_count"] for item in response.data["predefined"]}
+        assert by_key["private"] == 1
 
     @pytest.mark.django_db
     def test_shared_is_always_empty_in_oss(self, session_client, workspace, wiki_page):

@@ -2,6 +2,9 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
+# Django imports
+from django.db.models import Q
+
 # Third party imports
 from rest_framework import status
 from rest_framework.response import Response
@@ -21,12 +24,26 @@ from plane.utils.wiki_collections import GENERAL, PREDEFINED_KEYS, resolve_colle
 from ..base import BaseViewSet
 
 
-def _wiki_page_queryset(slug):
-    """工作区里「已收录进 Wiki」的页面。
+def _visible_page_q(user):
+    """可见性条件：非私有页面人人可见，私有页面只有属主可见。
+
+    私有 = 只看自己的。这里的判定刻意与 resolve_collection_key 对 private 的
+    定义（``access == Page.PRIVATE_ACCESS``）用同一个常量，将来多出第三种
+    access 值时两边不会打架。
+    """
+    return ~Q(access=Page.PRIVATE_ACCESS) | Q(owned_by=user)
+
+
+def _wiki_page_queryset(request, slug):
+    """工作区里「已收录进 Wiki」、且对调用者可见的页面。
 
     is_global=True 是收录标记 —— 项目页面不会自动出现在 Wiki 里。
+
+    私有页面必须在这里滤掉：过滤若只写在某个 action 里，别的 action（以及
+    共用本函数的计数端点）就会把整个工作区的私有页面元信息发给任何成员，
+    侧栏还会出现「私有(5) 但列表 2 行」的口径分裂。
     """
-    return Page.objects.filter(workspace__slug=slug, is_global=True)
+    return Page.objects.filter(workspace__slug=slug, is_global=True).filter(_visible_page_q(request.user))
 
 
 class PageCollectionViewSet(BaseViewSet):
@@ -37,7 +54,7 @@ class PageCollectionViewSet(BaseViewSet):
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
     def list(self, request, slug):
-        pages = list(_wiki_page_queryset(slug).values("id", "archived_at", "access", "collection_id"))
+        pages = list(_wiki_page_queryset(request, slug).values("id", "archived_at", "access", "collection_id"))
 
         counts = {key: 0 for key in PREDEFINED_KEYS}
         per_collection = {}
@@ -82,7 +99,7 @@ class WikiPageViewSet(BaseViewSet):
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
     def list(self, request, slug):
         collection_key = request.GET.get("collection", GENERAL)
-        pages = _wiki_page_queryset(slug).select_related("workspace").select_related("owned_by")
+        pages = _wiki_page_queryset(request, slug).select_related("workspace").select_related("owned_by")
         pages = [
             page
             for page in pages
@@ -103,9 +120,20 @@ class WikiPageViewSet(BaseViewSet):
         page_ids = serializer.validated_data["page_ids"]
         collection_id = serializer.validated_data.get("collection_id")
 
-        # 只收录本工作区的页面 —— 防止跨工作区越权写入
-        pages = Page.objects.filter(id__in=page_ids, workspace__slug=slug)
-        updated = pages.update(is_global=True, collection_id=collection_id)
+        # 集合必须是本工作区的 —— 与 partial_update 同一套校验。缺了它，别家的
+        # 集合 id 会被直接写进 FK（页面在本工作区落不进任何分区，等于从侧栏
+        # 消失），不存在的 id 则在提交时炸成 500
+        collection = None
+        if collection_id is not None:
+            collection = PageCollection.objects.filter(id=collection_id, workspace__slug=slug).first()
+            if collection is None:
+                return Response({"error": "Collection not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # 只收录本工作区、且对调用者可见的页面 —— 防止跨工作区越权写入，也防止
+        # 别人的私有页面被 is_global=True 发布进共享的私有分区。别人的私有页面
+        # 与别的工作区的页面一样：静默跳过，不进 included 计数，不报 403
+        pages = Page.objects.filter(id__in=page_ids, workspace__slug=slug).filter(_visible_page_q(request.user))
+        updated = pages.update(is_global=True, collection=collection)
         return Response({"included": updated}, status=status.HTTP_200_OK)
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
@@ -114,7 +142,7 @@ class WikiPageViewSet(BaseViewSet):
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        page = _wiki_page_queryset(slug).filter(id=page_id).first()
+        page = _wiki_page_queryset(request, slug).filter(id=page_id).first()
         if page is None:
             return Response({"error": "Page not found in this wiki."}, status=status.HTTP_404_NOT_FOUND)
 
@@ -131,7 +159,7 @@ class WikiPageViewSet(BaseViewSet):
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
     def destroy(self, request, slug, page_id):
-        page = _wiki_page_queryset(slug).filter(id=page_id).first()
+        page = _wiki_page_queryset(request, slug).filter(id=page_id).first()
         if page is None:
             return Response({"error": "Page not found in this wiki."}, status=status.HTTP_404_NOT_FOUND)
 
