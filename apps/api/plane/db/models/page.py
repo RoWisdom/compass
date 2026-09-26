@@ -49,6 +49,13 @@ class Page(BaseModel):
     view_props = models.JSONField(default=get_view_props)
     logo_props = models.JSONField(default=dict)
     is_global = models.BooleanField(default=False)
+    collection = models.ForeignKey(
+        "db.PageCollection",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pages",
+    )
     projects = models.ManyToManyField("db.Project", related_name="pages", through="db.ProjectPage")
     moved_to_page = models.UUIDField(null=True, blank=True)
     moved_to_project = models.UUIDField(null=True, blank=True)
@@ -153,6 +160,29 @@ class ProjectPage(BaseModel):
 
     def __str__(self):
         return f"{self.project.name} {self.page.name}"
+
+
+class PageCollection(BaseModel):
+    """工作区级的页面集合（罗盘 Wiki）。
+
+    四个预置分区（general / private / shared / archived）**不在这里存行** ——
+    它们由 plane.utils.wiki_collections 从页面自身字段推导。这张表只存
+    用户自建的集合。
+    """
+
+    workspace = models.ForeignKey("db.Workspace", on_delete=models.CASCADE, related_name="page_collections")
+    name = models.TextField(blank=True)
+    owned_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="page_collections")
+    sort_order = models.FloatField(default=Page.DEFAULT_SORT_ORDER)
+
+    class Meta:
+        verbose_name = "Page Collection"
+        verbose_name_plural = "Page Collections"
+        db_table = "page_collections"
+        ordering = ("-created_at",)
+
+    def __str__(self):
+        return f"{self.workspace.slug} <{self.name}>"
 
 
 class PageVersion(BaseModel):
