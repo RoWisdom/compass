@@ -28,13 +28,24 @@ Two invariants are pinned here, both easy to lose:
    page that was saved.
 """
 
+from datetime import date
 from uuid import uuid4
 
 import pytest
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from plane.db.models import Page, Project, ProjectMember, ProjectPage, User, WorkspaceMember
+from plane.db.models import (
+    Page,
+    PageCollection,
+    Project,
+    ProjectMember,
+    ProjectPage,
+    User,
+    Workspace,
+    WorkspaceMember,
+)
+from plane.utils.error_codes import ERROR_CODES
 
 XSS_PAYLOAD = "<p>正文</p><img src=x onerror=alert(1)>"
 
@@ -219,6 +230,79 @@ class TestWikiPageDescriptionEndpoint:
         assert response.data["error_message"] == "PAGE_LOCKED"
 
     @pytest.mark.django_db
+    def test_patch_400s_when_the_page_is_archived(self, session_client, workspace, wiki_page):
+        """``archived_at`` 非空的页不可写正文。
+
+        这个分支（`collection.py:417-424`）此前可达但零覆盖：既有套件只用
+        ``django_db`` 之外的手段种过归档页，从没让一个 PATCH 撞进它。与
+        ``PAGE_LOCKED`` 同形 —— 400 + 数字 ``error_code`` + 名字放
+        ``error_message``，所以这里的断言与上一条并列写，钉住两半一致的形状。
+        """
+        wiki_page.archived_at = date(2026, 1, 1)
+        wiki_page.save(update_fields=["archived_at"])
+
+        response = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{wiki_page.id}/description/",
+            {"description_html": "<p>归档页也写</p>"},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data["error_code"] == ERROR_CODES["PAGE_ARCHIVED"]
+        assert response.data["error_message"] == "PAGE_ARCHIVED"
+        # 被 400 挡下的请求不得已经改过正文 —— 断言状态码对一个「先写后拒」的
+        # 实现同样成立。
+        wiki_page.refresh_from_db()
+        assert "归档页也写" not in wiki_page.description_html
+
+    @pytest.mark.django_db
+    def test_patch_404s_for_a_collection_from_another_workspace(
+        self, session_client, workspace, wiki_page, create_user
+    ):
+        """别的工作区的 collection_id 必须 404，而不是被写成 FK。
+
+        本端点复用 ``WikiPageUpdateSerializer``，于是**连带接受**它声明的每个字段，
+        其中就有 ``collection_id`` —— 但兄弟路由 ``WikiPageViewSet.partial_update``
+        为它做的前置检查这里一条都没有。缺了它，别的工作区的集合会被直接写成本页的
+        FK：页面在本工作区落不进任何分区（等于从侧栏消失），而集合那边多出一个
+        跨工作区的引用。
+
+        断言与 metadata 路由逐字同形：404 + ``{"error": "Collection not found."}``。
+        """
+        other_workspace = Workspace.objects.create(name="Other", owner=create_user, slug="other-workspace")
+        foreign = PageCollection.objects.create(workspace=other_workspace, name="别家的集合", owned_by=create_user)
+
+        response = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{wiki_page.id}/description/",
+            {"collection_id": str(foreign.id)},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.data["error"] == "Collection not found."
+        wiki_page.refresh_from_db()
+        assert wiki_page.collection_id is None
+
+    @pytest.mark.django_db
+    def test_patch_404s_for_an_unknown_collection(self, session_client, workspace, wiki_page):
+        """不存在的 collection_id 必须 404，而不是一路落到 DB 炸成 500。
+
+        ``PageCollection`` 是外键：给一个随机 UUID 过得了序列化层（它只做语法校验），
+        真正拦得住它的只有这里的前置查。修复前它撞到提交时的 IntegrityError，
+        调用方拿到的是与字段无关的兜底错误 —— 看不出是哪个字段的问题。
+        """
+        response = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{wiki_page.id}/description/",
+            {"collection_id": "11111111-1111-1111-1111-111111111111"},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.data["error"] == "Collection not found."
+        wiki_page.refresh_from_db()
+        assert wiki_page.collection_id is None
+
+    @pytest.mark.django_db
     def test_patch_403s_for_a_guest(self, guest_client, workspace, wiki_page):
         """GUEST is read-only，与 wiki 的其它写端点一致。
 
@@ -295,3 +379,74 @@ class TestWikiPageDescriptionEndpoint:
         # 计数这条只有在这个 PATCH 被证明发生过之后才有意义。
         assert response.status_code == status.HTTP_200_OK
         assert PageVersion.objects.filter(page=linked_wiki_page).count() == before
+
+    @pytest.mark.django_db
+    def test_patch_rename_moves_the_mirror(self, session_client, workspace, linked_wiki_page, isolate_markdown_mirror):
+        """本端点上改名也必须把镜像搬走。
+
+        协同编辑器的标题同步 PATCH 的是**元数据**路由，但正文端点同样接受 ``name``
+        （序列化器是同一个），所以「改标题」在这条路由上是常规路径，不是边角。
+        不搬的话：DB 改了名、vault 里留下旧文件，下一次正文写入按新标题再写一份 ——
+        同一个 ``frontmatter.id`` 出现两份。
+        """
+        written = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{linked_wiki_page.id}/description/",
+            {"description_html": "<p>改名前的正文</p>"},
+            format="json",
+        )
+        assert written.status_code == status.HTTP_200_OK
+
+        before = list(isolate_markdown_mirror.rglob("*.md"))
+        assert len(before) == 1, f"正文端点应当写出恰好一份镜像：{before!r}"
+        old_file = before[0]
+
+        renamed = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{linked_wiki_page.id}/description/",
+            {"name": "改名后的标题"},
+            format="json",
+        )
+
+        assert renamed.status_code == status.HTTP_200_OK
+        linked_wiki_page.refresh_from_db()
+        assert linked_wiki_page.name == "改名后的标题"
+
+        # 关键的一行：不断它的话，「搬了」和「没搬」都只有一份文件 —— 测试会空转。
+        assert not old_file.exists(), "改名前的镜像文件必须被搬走，不能留在原路径"
+        after = list(isolate_markdown_mirror.rglob("*.md"))
+        assert len(after) == 1, f"镜像应当被搬移而不是复制出第二份：{after!r}"
+
+    @pytest.mark.django_db
+    def test_patch_rename_and_body_together_keeps_the_new_body(
+        self, session_client, workspace, linked_wiki_page, isolate_markdown_mirror
+    ):
+        """改名 + 同一个请求里带新正文：**必须先搬、后写正文**。
+
+        ``move_page_markdown`` 做的是 ``old_path.replace(new_path)``。如果正文镜像
+        先把新路径写好了，这一搬就会拿旧文件把新正文盖掉 —— 内容静默丢失，
+        而文件数、路径、状态码全都正常。上面那条只数文件数的测试抓不到这个：
+        「先写后搬」在它眼里完全合法。这条就是给那个顺序上的牙。
+        """
+        written = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{linked_wiki_page.id}/description/",
+            {"description_html": "<p>改名前的正文</p>"},
+            format="json",
+        )
+        assert written.status_code == status.HTTP_200_OK
+        assert len(list(isolate_markdown_mirror.rglob("*.md"))) == 1
+
+        renamed = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{linked_wiki_page.id}/description/",
+            {"name": "改名后的标题", "description_html": "<p>改名后的正文</p>"},
+            format="json",
+        )
+
+        assert renamed.status_code == status.HTTP_200_OK
+        linked_wiki_page.refresh_from_db()
+        assert linked_wiki_page.name == "改名后的标题"
+
+        after = list(isolate_markdown_mirror.rglob("*.md"))
+        assert len(after) == 1, f"改名 + 写正文之后应当仍只有一份镜像：{after!r}"
+        text = after[0].read_text(encoding="utf-8")
+        assert "改名后的正文" in text
+        # 正向对照的另一半：旧正文不得被搬过来的旧文件盖回来。
+        assert "改名前的正文" not in text

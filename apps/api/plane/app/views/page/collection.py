@@ -427,7 +427,29 @@ class WikiPageDescriptionViewSet(BaseViewSet):
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        serializer.save()
+        # 集合必须是本工作区的 —— 与 metadata 路由（WikiPageViewSet.partial_update）同一个校验、
+        # 同一个 404、同一个 body。复用 WikiPageUpdateSerializer 就是连带接受它声明的每个字段，
+        # 所以这里欠着这条前置检查：缺了它，别的工作区的 collection_id 会被直接写成本页的 FK，
+        # 而不存在的 UUID 会一路落到 DB、以 500 收场。
+        # 校验排在 save() 之前：404 路径下正文一个字段都不会动。
+        collection_id = serializer.validated_data.get("collection_id")
+        if collection_id is not None:
+            target = PageCollection.objects.filter(id=collection_id, workspace__slug=slug).first()
+            if target is None:
+                return Response({"error": "Collection not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # 旧名必须在 save() **之前**记下来：serializer.update() 就地改 instance，
+        # save() 之后 page.name 已经是新值，就再也算不出旧路径了。
+        old_name = page.name
+
+        page = serializer.save()
+
+        # 改名 = 镜像换路径。**必须先搬、后写正文**，顺序是载荷：
+        # move_page_markdown 做的是 old_path.replace(new_path)。如果正文镜像先把新路径写好了，
+        # 这一搬就会拿旧文件把新正文盖掉 —— 内容静默丢失。
+        # 先搬后写的最终状态才两个都对：一个文件、新名字、新正文。
+        if page.name != old_name:
+            _move_wiki_page_mirror(page, old_name)
 
         # Mirror the page body as a local Markdown file (best-effort, skips
         # pages with no project — see _mirror_wiki_page).

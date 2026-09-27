@@ -1200,6 +1200,36 @@ class TestWikiPageTitleUpdate:
         assert wiki_page.name == "只改标题"
         assert wiki_page.description_html == "<p>原有正文</p>"
 
+    @pytest.mark.django_db
+    def test_rename_refreshes_updated_at(self, session_client, workspace, wiki_page):
+        """改标题必须刷新 updated_at。
+
+        `updated_at` 是 `auto_now=True`，而 ``WikiPageUpdateSerializer.update()`` 走
+        ``instance.save(update_fields=[...])`` —— `_save_table` 只为 ``update_fields``
+        里点名的字段跑 ``pre_save``，所以 ``"updated_at"`` 一旦从那个列表里漏掉，
+        改标题就**完全不刷时间戳**，列表默认排序键 ``-updated_at`` 一动不动。
+
+        这条正是 ``serializers/page_collection.py:127-132`` 那段注释警告的事，此前
+        没有测试钉住它。手法照抄本文件
+        ``test_including_and_removing_refresh_updated_at``（:436）：先把
+        updated_at 用同一条绕过 auto_now 的 ``QuerySet.update()`` 按到 30 天前，
+        这样断言 ``>`` 有确定的比较基准，不依赖两次调用之间的挂钟差。
+        """
+        stale = timezone.now() - timedelta(days=30)
+        Page.objects.filter(id=wiki_page.id).update(updated_at=stale)
+
+        response = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{wiki_page.id}/",
+            {"name": "改名也刷时间戳"},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        wiki_page.refresh_from_db()
+        # 先断言改名本身发生过：没改名时这条会退化成「什么都没动」的比较。
+        assert wiki_page.name == "改名也刷时间戳"
+        assert wiki_page.updated_at > stale
+
 
 @pytest.mark.contract
 class TestRenameMovesTheMirror:
@@ -1283,4 +1313,7 @@ class TestRenameMovesTheMirror:
         assert response.status_code == status.HTTP_200_OK
         wiki_page.refresh_from_db()
         assert wiki_page.name == "无项目也改名"
-        assert list(isolate_markdown_mirror.rglob("*.md")) == []
+        # `rglob("*")` 而不是 `rglob("*.md")`：无守卫时 `_project_name(None)` 退化成
+        # 字符串 "None"、`mkdir` 出一个**空目录** —— `*.md` 看不见它，断言照样通过，
+        # 这条测试就空转了。`*` 能看见目录本身，缺守卫立刻变红。
+        assert list(isolate_markdown_mirror.rglob("*")) == []
