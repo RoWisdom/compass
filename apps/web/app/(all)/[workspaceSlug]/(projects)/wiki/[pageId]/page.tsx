@@ -79,7 +79,14 @@ function WikiPageDetail({ params }: Route.ComponentProps) {
         </div>
         <div className="h-full w-full overflow-y-auto px-6 py-5">
           {description_html && (
-            // 服务端已消毒（nh3 / validate_html_content），此处只负责渲染
+            // 服务端已消毒（nh3 / validate_html_content），此处只负责渲染。
+            // 守这条不变量的是三个写入路径，三条都必须走 validate_html_content：
+            // ① PageBinaryUpdateSerializer.validate_description_html（项目页正文 PATCH +
+            //    Wiki 的 WikiPageUpdateSerializer 继承它）；
+            // ② PageDetailSerializer.validate_description_html（项目页 partial_update）；
+            // ③ PageSerializer.create 体内的显式消毒（description_html 走 context、
+            //    不是序列化器字段，validate_* 钩子对它不会执行）。
+            // 少任何一条，这个 sink 就是存储型 XSS。
             <div className="prose-sm max-w-none prose" dangerouslySetInnerHTML={{ __html: description_html }} />
           )}
         </div>

@@ -66,6 +66,14 @@ class PageSerializer(BaseSerializer):
         description_binary = self.context["description_binary"]
         description_html = self.context["description_html"]
 
+        # `description_html` arrives via context, not as a serializer field, so a
+        # `validate_description_html` method would never run for this path.
+        # Sanitize it here — see the note on PageDetailSerializer for why.
+        if description_html:
+            _, _, sanitized_html = validate_html_content(description_html)
+            if sanitized_html is not None:
+                description_html = sanitized_html
+
         # Get the workspace id from the project
         project = Project.objects.get(pk=project_id)
 
@@ -128,6 +136,24 @@ class PageSerializer(BaseSerializer):
 
 class PageDetailSerializer(PageSerializer):
     description_html = serializers.CharField()
+
+    def validate_description_html(self, value):
+        """Sanitize the HTML content on write.
+
+        Every other write path to `description_html` goes through
+        `validate_html_content`; this serializer is the one that
+        `PageViewSet.partial_update` uses, so it needs the same treatment.
+        The wiki detail route renders `description_html` with
+        `dangerouslySetInnerHTML`, so an unsanitized value here is stored XSS.
+        """
+        if not value:
+            return value
+
+        is_valid, error_message, sanitized_html = validate_html_content(value)
+        if not is_valid:
+            raise serializers.ValidationError(error_message)
+
+        return sanitized_html if sanitized_html is not None else value
 
     class Meta(PageSerializer.Meta):
         fields = PageSerializer.Meta.fields + ["description_html"]

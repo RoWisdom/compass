@@ -148,7 +148,20 @@ class WikiPageViewSet(BaseViewSet):
             return Response(WikiPageSerializer(candidates, many=True).data, status=status.HTTP_200_OK)
 
         collection_key = request.GET.get("collection", GENERAL)
-        pages = _wiki_page_queryset(request, slug).select_related("workspace").select_related("owned_by")
+        # 列表行不需要正文，但 `_wiki_page_queryset` 是**整行**取出来的 —— 其中
+        # `description_binary` 是 Yjs 协同文档的全量二进制、`description_json` 是
+        # jsonb 正文（`db/models/page.py:33-35`）。整行取出来只为在 Python 里读三个
+        # 字段（archived_at / access / collection_id，都在 WikiPageSerializer.Meta.fields
+        # 里），然后把行交给一个**根本不输出这些列**的序列化器。
+        # 姊妹端点 `PageCollectionViewSet.list` 已经用 `.values(...)` 只取 4 列（:60），同理。
+        # 这里用 `.defer` 而不是 `.only`：`.only` 漏一个字段就会在序列化时触发逐行补查
+        # （N+1），而 `.defer` 只是把重列移出 SELECT，其余行为完全不变。
+        pages = (
+            _wiki_page_queryset(request, slug)
+            .select_related("workspace")
+            .select_related("owned_by")
+            .defer("description_json", "description_binary", "description_html", "description_stripped")
+        )
         pages = [
             page
             for page in pages
@@ -178,6 +191,13 @@ class WikiPageViewSet(BaseViewSet):
             if collection is None:
                 return Response({"error": "Collection not found."}, status=status.HTTP_404_NOT_FOUND)
 
+        # 这里按**工作区**收窄，而不是像候选分支那样再按「我参与的项目」：
+        # 收录/移出是**工作区级**动作（ADMIN/MEMBER 执行），「已收录页面对全工作区可见」
+        # 是工作区级 Wiki 的设计意图；而候选列表是**发现**面 —— 它会把未收录页的**标题**
+        # 摆给调用者看，那才是需要按项目收窄的泄漏面（见 list 分支的候选过滤器）。
+        # create/destroy 操作的是调用者**已经知道 id** 的页面，没有这层泄漏。
+        # 这个不对称是有意的，别「修」成一致。
+        #
         # 只收录本工作区、且对调用者可见的页面 —— 防止跨工作区越权写入，也防止
         # 别人的私有页面被 is_global=True 发布进共享的私有分区。别人的私有页面
         # 与别的工作区的页面一样：静默跳过，不进 included 计数，不报 403
@@ -219,6 +239,9 @@ class WikiPageViewSet(BaseViewSet):
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
     def destroy(self, request, slug, page_id):
+        # 作用域与 create 同一条裁定：按**工作区**收窄，不按「我参与的项目」。
+        # 与 create 一样，操作对象是调用者已经知道 id 的页面，收窄在这里只是让
+        # 工作区级动作变得不可预期；需要按项目收窄的是候选**发现**面，不是这里。
         page = _wiki_page_queryset(request, slug).filter(id=page_id).first()
         if page is None:
             return Response({"error": "Page not found in this wiki."}, status=status.HTTP_404_NOT_FOUND)

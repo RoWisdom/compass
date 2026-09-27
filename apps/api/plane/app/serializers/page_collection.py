@@ -112,6 +112,12 @@ class WikiPageUpdateSerializer(PageBinaryUpdateSerializer):
 
         if collection_provided:
             instance.collection_id = collection_id
-            instance.save(update_fields=["collection"])
+            # `updated_at` 是 auto_now，而 `_save_table` 只对 update_fields 里列出的字段
+            # 调 pre_save ⇒ 不列它就一动不动。收录/移出是**刻意**刷新这个戳的
+            # （见 collection.py 的 create/destroy），而 -updated_at 是候选排序键；
+            # 换集合是第三条写入路径，当时没人看见，这里补上。
+            # `updated_by` **不写** —— 与收录/移出同一条裁定：只刷新时间戳，
+            # 不把操作者盖到「最后编辑者」位上。
+            instance.save(update_fields=["collection", "updated_at"])
 
         return instance
