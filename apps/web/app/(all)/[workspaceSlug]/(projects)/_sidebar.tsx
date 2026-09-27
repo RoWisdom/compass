@@ -17,6 +17,7 @@ import { useAppTheme } from "@/hooks/store/use-app-theme";
 // local imports
 import { ExtendedAppSidebar } from "./extended-sidebar";
 import { AppSidebar } from "./sidebar";
+import { WikiSidebar } from "./wiki/sidebar";
 
 export const ProjectAppSidebar = observer(function ProjectAppSidebar() {
   // store hooks
@@ -38,6 +39,7 @@ export const ProjectAppSidebar = observer(function ProjectAppSidebar() {
   const isAnyExtendedSidebarOpen = isExtendedSidebarOpened;
 
   const isNotificationsPath = pathname.includes(`/${workspaceSlug}/notifications`);
+  const isWikiPath = pathname.includes(`/${workspaceSlug}/wiki`);
 
   // handlers
   const handleWidthChange = (width: number) => setValue(width);
@@ -66,7 +68,7 @@ export const ProjectAppSidebar = observer(function ProjectAppSidebar() {
         isAnyExtendedSidebarExpanded={isAnyExtendedSidebarOpen}
         isAnySidebarDropdownOpen={isAnySidebarDropdownOpen}
       >
-        <AppSidebar />
+        {isWikiPath ? <WikiSidebar /> : <AppSidebar />}
       </ResizableSidebar>
     </>
   );
