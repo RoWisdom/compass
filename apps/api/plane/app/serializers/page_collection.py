@@ -77,8 +77,9 @@ class WikiPageDetailSerializer(WikiPageSerializer):
 class WikiPageUpdateSerializer(PageBinaryUpdateSerializer):
     """PATCH wiki-pages/<page_id>/ 的请求体。
 
-    两组字段全部可选、可任意组合：
+    三组字段全部可选、可任意组合：
       - collection_id：换集合；显式传 null 表示移回 general
+      - name：改标题（协同服务器的标题同步会 PATCH 它）
       - description_html / description_json / description_binary：正文
 
     正文的校验与写入直接复用 PageBinaryUpdateSerializer —— HTML 消毒走
@@ -100,24 +101,43 @@ class WikiPageUpdateSerializer(PageBinaryUpdateSerializer):
     """
 
     collection_id = serializers.UUIDField(required=False, allow_null=True)
+    name = serializers.CharField(required=False, allow_blank=True)
     description_json = serializers.JSONField(required=False)
 
     def update(self, instance, validated_data):
         collection_provided = "collection_id" in validated_data
         collection_id = validated_data.pop("collection_id", None)
 
-        # 只给了 collection_id 时不要空写一次正文
+        # Pop `name` before delegating: PageBinaryUpdateSerializer.update() only
+        # knows the three description_* fields, so a `name` left in the dict
+        # would be silently dropped there — a 200 that changes nothing.
+        name_provided = "name" in validated_data
+        name = validated_data.pop("name", None)
+
+        # 只给了 collection_id / name 时不要空写一次正文
         if validated_data:
             instance = super().update(instance, validated_data)
 
-        if collection_provided:
-            instance.collection_id = collection_id
-            # `updated_at` 是 auto_now，而 `_save_table` 只对 update_fields 里列出的字段
-            # 调 pre_save ⇒ 不列它就一动不动。收录/移出是**刻意**刷新这个戳的
-            # （见 collection.py 的 create/destroy），而 -updated_at 是候选排序键；
-            # 换集合是第三条写入路径，当时没人看见，这里补上。
-            # `updated_by` **不写** —— 与收录/移出同一条裁定：只刷新时间戳，
-            # 不把操作者盖到「最后编辑者」位上。
-            instance.save(update_fields=["collection", "updated_at"])
+        if name_provided:
+            instance.name = name
+
+        if collection_provided or name_provided:
+            if collection_provided:
+                instance.collection_id = collection_id
+
+            # `updated_at` is auto_now, and `_save_table` only runs `pre_save`
+            # for the fields named in `update_fields` — leaving it out freezes
+            # the timestamp. `-updated_at` is the candidate sort key and the
+            # collection/create/destroy paths all refresh it deliberately;
+            # renaming a page is a fourth write path and must do the same.
+            # `updated_by` is **not** written — same ruling as the
+            # include/remove paths: refresh the timestamp, do not stamp the
+            # actor onto the "last edited by" slot.
+            update_fields = ["updated_at"]
+            if name_provided:
+                update_fields.append("name")
+            if collection_provided:
+                update_fields.append("collection")
+            instance.save(update_fields=update_fields)
 
         return instance

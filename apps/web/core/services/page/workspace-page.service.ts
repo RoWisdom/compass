@@ -155,10 +155,14 @@ export class WorkspacePageService extends APIService {
   }
 
   /**
-   * 换集合。`collectionId = null` 表示移回 general。
+   * 换集合，以及（本阶段起）改标题。`collectionId = null` 表示移回 general。
    *
-   * **只做换集合**，不能用它改标题等元数据：`WikiPageUpdateSerializer` 没有 `name` 字段，
-   * DRF 会静默忽略未知键 —— 一次「改标题」会返回 200 而什么都没变。
+   * **不要用它改其它元数据**：`WikiPageUpdateSerializer` 只声明了
+   * `collection_id` / `name` / 三个 `description_*`，传别的键 DRF 会静默忽略 ——
+   * 返回 200 而什么都没变。
+   *
+   * （这条注释曾写着「不能改标题，因为序列化器没有 `name` 字段」。Phase 1B 给
+   *   序列化器加上了 `name`，协同服务器的标题同步依赖它，所以那句话不再成立。）
    */
   async update(
     workspaceSlug: string,

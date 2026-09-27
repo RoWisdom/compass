@@ -1109,3 +1109,93 @@ class TestWikiPageGuestWriteAccess:
 
         assert listed.status_code == status.HTTP_200_OK
         assert detailed.status_code == status.HTTP_200_OK
+
+
+@pytest.mark.contract
+class TestWikiPageTitleUpdate:
+    """The collaboration server PATCHes ``{name: ...}`` to rename a wiki page.
+
+    ``WikiPageUpdateSerializer`` extends a plain ``serializers.Serializer``, not
+    a ``ModelSerializer``: ``name`` is not derived from the model, DRF silently
+    ignores unknown keys, and ``update()`` assigns fields by hand. So accepting
+    a title takes two edits — the field declaration *and* the assignment. With
+    only the first, a rename returns 200 and changes nothing.
+
+    Both live title paths depend on this: ``title-sync.ts`` (on document load,
+    migrating an old title into the Yjs binary) and ``title-update-manager.ts``
+    (debounced, on every keystroke in the title field).
+    """
+
+    @pytest.mark.django_db
+    def test_patch_updates_the_name(self, session_client, workspace, wiki_page):
+        response = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{wiki_page.id}/",
+            {"name": "改过的标题"},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        wiki_page.refresh_from_db()
+        assert wiki_page.name == "改过的标题"
+        # The response is what the live server reads back; an assertion on the
+        # DB alone would pass even if the serializer dropped the field.
+        assert response.data["name"] == "改过的标题"
+
+    @pytest.mark.django_db
+    def test_patch_updates_name_and_collection_together(self, session_client, workspace, wiki_page):
+        """Both groups are documented as independently optional and combinable."""
+        # 两个 import 都不必写：`PageCollection` 在本文件模块级已导入（:15），
+        # `uuid4` 也已导入（:6）**且本测试根本不用它** ——
+        # 留着未使用的局部 import 会吃一条 ruff F401，直接卡住 Python 那道门。
+        collection = PageCollection.objects.create(workspace=workspace, name="目标集合", owned_by=wiki_page.owned_by)
+
+        response = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{wiki_page.id}/",
+            {"name": "双改", "collection_id": str(collection.id)},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        wiki_page.refresh_from_db()
+        assert wiki_page.name == "双改"
+        assert str(wiki_page.collection_id) == str(collection.id)
+
+    @pytest.mark.django_db
+    def test_patch_accepts_an_empty_name(self, session_client, workspace, wiki_page):
+        """``Page.name`` is ``TextField(blank=True)`` — a blank title is legal.
+
+        Pinned because the natural instinct is ``required=True``, which would
+        turn the editor's "clear the title" gesture into a 400.
+        """
+        response = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{wiki_page.id}/",
+            {"name": ""},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        wiki_page.refresh_from_db()
+        assert wiki_page.name == ""
+
+    @pytest.mark.django_db
+    def test_patch_with_only_a_name_does_not_touch_the_description(self, session_client, workspace, wiki_page):
+        """A rename must not blank the body.
+
+        ``PageBinaryUpdateSerializer.update()`` writes every description field
+        present in ``validated_data``; if ``name`` were left in the dict it
+        would be ignored there, and if the collection branch were widened
+        carelessly it could save a stale instance over fresh content.
+        """
+        wiki_page.description_html = "<p>原有正文</p>"
+        wiki_page.save(update_fields=["description_html"])
+
+        response = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{wiki_page.id}/",
+            {"name": "只改标题"},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        wiki_page.refresh_from_db()
+        assert wiki_page.name == "只改标题"
+        assert wiki_page.description_html == "<p>原有正文</p>"
