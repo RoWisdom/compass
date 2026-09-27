@@ -103,12 +103,16 @@ export const CollectionFormModal = observer(function CollectionFormModal(props: 
     // 成功路径整个移出上面的 try。写入这时**已经落库**，下面两下都不是请求：
     // 侧栏的 `onCreated` 会 `router.push`，它抛错若落进上面的 catch，用户就会看到一个
     // 「创建失败」toast、外加一个已经建好的集合（`PageCollection.name` 无唯一约束，
-    // 重试即重复建立），弹窗也留在原地不关。
+    // 重试即重复建立）。
     //
-    // 这里的 `handleClose` 是**点击那一帧**的闭包，那一帧 `isSubmitting` 为 false，
-    // 所以不会被为 I-2 加的守卫挡住 —— 守卫拦的是「请求在飞时用户主动取消」，此刻请求早已结束。
-    if (created) onCreated?.(created);
+    // `handleClose` 因此必须排在 `onCreated` **之前**：它是**点击那一帧**的闭包，
+    // 那一帧 `isSubmitting` 为 false，所以不会被为 I-2 加的守卫挡住 —— 守卫拦的是
+    // 「请求在飞时用户主动取消」，此刻请求早已结束。而若把关闭排在 `onCreated` 之后，
+    // 一旦 `router.push` 抛错，`finally` 早已把 `isSubmitting` 复位，弹窗就会关不掉、
+    // 停在原地且还能再次提交；先关再回调也让导航发生前弹窗就已消失，本就是更好的终态。
+    // **不要**给 `onCreated` 套 try/catch —— 吞掉导航错误比让它暴露更糟。
     handleClose();
+    if (created) onCreated?.(created);
   };
 
   return (
