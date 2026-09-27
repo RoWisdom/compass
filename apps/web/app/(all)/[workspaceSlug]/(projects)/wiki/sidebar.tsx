@@ -18,13 +18,15 @@ import { CustomMenu } from "@plane/ui";
 import { cn } from "@plane/utils";
 // components
 import { CollectionFormModal } from "@/components/pages/wiki/collection-form-modal";
+import { PageFormModal } from "@/components/pages/wiki/page-form-modal";
 import { SidebarWrapper } from "@/components/sidebar/sidebar-wrapper";
 // hooks
 import { EPageStoreType, usePageStore } from "@/hooks/store";
 import { useUserPermissions } from "@/hooks/store/user";
 import { useAppRouter } from "@/hooks/use-app-router";
 // services
-import type { TPageCollection, TPredefinedCollectionKey } from "@/services/page";
+import { isPredefinedCollectionKey } from "@/services/page";
+import type { TPageCollection, TPageCreateTarget, TPredefinedCollectionKey } from "@/services/page";
 
 /**
  * 「集合」组之外的预置分区，按官方侧栏的顺序排在集合组下面。
@@ -52,12 +54,42 @@ export const WikiSidebar = observer(function WikiSidebar() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   /** `null` = 新建模式；有值 = 重命名这个。弹窗的两种模式由它一个变量分叉。 */
   const [editingCollection, setEditingCollection] = useState<TPageCollection | null>(null);
+  const [isPageFormOpen, setIsPageFormOpen] = useState(false);
 
   // 权限口径沿用 wiki-list-main-content.tsx:39-42 的同一谓词：写端点不含 GUEST。
   const canManageCollections = allowPermissions(
     [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
     EUserPermissionsLevel.WORKSPACE
   );
+
+  // 新建页面的入口复用集合写入口**同一个谓词**（写端点只给 ADMIN/MEMBER），
+  // 再加一层分区过滤：`archived` 下**不显示** —— 新建的页面不可能是归档的
+  // （归档由 `archived_at` 决定，而它在 `resolve_collection_key` 里优先级最高）。
+  //
+  // **与顶栏收录按钮的 gating 有意分叉**：顶栏用 `canIncludeIntoCollection` 把
+  // `private` / `archived` 都排除（`wiki/header.tsx:52`），因为把一个**已存在**的页面
+  // "收录"进 Private 没有意义；而**新建**一个私有页在 Private 视图下是自然动作。
+  // 这条差异是有意的，别"修"成一致。
+  const canCreatePage = canManageCollections && activeCollection !== "archived";
+
+  /**
+   * 新页面落到**当前分区**（设计 §3.2d）。推导只在这里做一次，弹窗只负责把结果发出去。
+   *
+   * `private` 只能靠 `access=1` 表达：「私有」是 `resolve_collection_key` 里优先级高于
+   * `collection_id` 的**派生**分区，库里根本没有一行叫 private 的集合可传。
+   * 另外两个预置分区到不了这里：`archived` 已把按钮藏掉，`shared` 在
+   * `resolve_collection_key` 里**永不返回**。
+   */
+  const pageTarget: TPageCreateTarget =
+    activeCollection === "private"
+      ? { collection_id: null, access: 1 }
+      : {
+          // `general`（以及任何预置键）→ 不指定集合；自建集合 → 传它自己的 uuid。
+          // 用现成的 `isPredefinedCollectionKey` 而不是手写 `=== "general"`：
+          // 预置键的定义只有一处，加第五个分区时这里不用改。
+          collection_id: isPredefinedCollectionKey(activeCollection) ? null : activeCollection,
+          access: 0,
+        };
 
   // 集合列表（含计数）
   useSWR(
@@ -79,6 +111,26 @@ export const WikiSidebar = observer(function WikiSidebar() {
     setEditingCollection(collection);
     setIsFormOpen(true);
   };
+
+  /**
+   * 侧栏顶部的 `＋ New page`。
+   *
+   * 落点是 `SidebarWrapper` 的 **`quickActions` 插槽**（`sidebar-wrapper.tsx:26,:72`）——
+   * 它在全仓无人使用，正是为这种"标题下面一行快捷动作"准备的。
+   *
+   * 隐藏（**不渲染**）而不是 disabled：一个不解释原因的灰按钮和没有入口一样糟，
+   * 与侧栏 `＋`（`:124`）和顶栏收录按钮同一条口径。
+   */
+  const newPageAction = canCreatePage ? (
+    <button
+      type="button"
+      onClick={() => setIsPageFormOpen(true)}
+      className="flex w-full items-center gap-2 rounded-md border-[0.5px] border-subtle px-2 py-1.5 text-13 text-secondary hover:bg-layer-1/50"
+    >
+      <Plus className="h-3.5 w-3.5" />
+      {t("wiki_collections.menu.create_new_page")}
+    </button>
+  ) : undefined;
 
   /**
    * `options` 只给用户自建集合传 —— `General` 是**派生**分区（`collection_id IS NULL`），
@@ -106,7 +158,7 @@ export const WikiSidebar = observer(function WikiSidebar() {
   );
 
   return (
-    <SidebarWrapper title="Wiki">
+    <SidebarWrapper title="Wiki" quickActions={newPageAction}>
       <div className="flex w-full flex-col gap-1">
         {/*
           「集合」组 = `general` 预置分区 + 全部用户自建集合。官方把 General 摆在
@@ -167,6 +219,8 @@ export const WikiSidebar = observer(function WikiSidebar() {
         handleClose={() => setIsFormOpen(false)}
         onCreated={(created) => router.push(`/${workspaceSlug}/wiki/?collection=${created.id}`)}
       />
+
+      <PageFormModal isOpen={isPageFormOpen} handleClose={() => setIsPageFormOpen(false)} target={pageTarget} />
     </SidebarWrapper>
   );
 });
