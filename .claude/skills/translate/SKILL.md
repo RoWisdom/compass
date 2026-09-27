@@ -250,19 +250,20 @@ Every `{count, plural, …}` string must contain **every** keyword the target la
 
 Below are the required keywords for locales currently in the repo. When adding a new locale, look up its categories in CLDR and add the row here.
 
-| Locale                                             | Required keywords                                                                     | Example mapping                                                               |
-| -------------------------------------------------- | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| en, es, de, tr-TR, vi-VN, id, ja, ko, zh-CN, zh-TW | `one, other` (single-form locales may use `other` alone, but **always emit `other`**) | 1 → one; 2+ → other                                                           |
-| fr                                                 | `one, many, other`                                                                    | 0, 1 → one; 1 000 000 → many; else other                                      |
-| it                                                 | `one, many, other`                                                                    | 1 → one; 1 000 000 → many; else other                                         |
-| pt-BR                                              | `one, many, other`                                                                    | 0, 1 → one; 1 000 000 → many; else other                                      |
-| ro                                                 | `one, few, other`                                                                     | 1 → one; 0, 2–19 → few; 20+ → other                                           |
-| pl                                                 | `one, few, many, other`                                                               | 1 → one; 2–4 (not 12–14) → few; 0, 5–20, many-digit → many; decimals → other  |
-| cs                                                 | `one, few, many, other`                                                               | 1 → one; 2–4 → few; decimals → many; 0, 5+ → other                            |
-| sk                                                 | `one, few, many, other`                                                               | same pattern as cs                                                            |
-| ru                                                 | `one, few, many, other`                                                               | 1, 21, 31… → one; 2–4, 22–24… → few; 0, 5–20, 25–30… → many; decimals → other |
-| ua                                                 | `one, few, many, other`                                                               | same pattern as ru                                                            |
-| ar (when added)                                    | `zero, one, two, few, many, other`                                                    | Six categories — the maximum any language uses                                |
+| Locale                                         | Required keywords                                                                     | Example mapping                                                               |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| en, de, tr-TR, vi-VN, id, ja, ko, zh-CN, zh-TW | `one, other` (single-form locales may use `other` alone, but **always emit `other`**) | 1 → one; 2+ → other                                                           |
+| fr                                             | `one, many, other`                                                                    | 0, 1 → one; 1 000 000 → many; else other                                      |
+| it                                             | `one, many, other`                                                                    | 1 → one; 1 000 000 → many; else other                                         |
+| pt-BR                                          | `one, many, other`                                                                    | 0, 1 → one; 1 000 000 → many; else other                                      |
+| es                                             | `one, many, other`                                                                    | 1 → one; 1 000 000 → many; else other                                         |
+| ro                                             | `one, few, other`                                                                     | 1 → one; 0, 2–19 → few; 20+ → other                                           |
+| pl                                             | `one, few, many, other`                                                               | 1 → one; 2–4 (not 12–14) → few; 0, 5–20, many-digit → many; decimals → other  |
+| cs                                             | `one, few, many, other`                                                               | 1 → one; 2–4 → few; decimals → many; 0, 5+ → other                            |
+| sk                                             | `one, few, many, other`                                                               | same pattern as cs                                                            |
+| ru                                             | `one, few, many, other`                                                               | 1, 21, 31… → one; 2–4, 22–24… → few; 0, 5–20, 25–30… → many; decimals → other |
+| ua                                             | `one, few, many, other`                                                               | same pattern as ru                                                            |
+| ar (when added)                                | `zero, one, two, few, many, other`                                                    | Six categories — the maximum any language uses                                |
 
 > **Note on the consolidated row.** CLDR itself only requires `other` for `tr-TR`, `vi-VN`, `id`, `ja`, `ko`, `zh-CN`, `zh-TW` (single-form locales). Emitting both `one` and `other` with identical content is a **project convention** — it keeps tooling and linters consistent across the codebase. It is not a CLDR requirement, and `Intl.PluralRules` will return only `"other"` for these locales at runtime.
 
@@ -527,7 +528,7 @@ pnpm --filter @plane/i18n run check:sync
 - **Coining new feature-noun translations** — `Cycle → Cercle` (fr — invented; the natural cognate is the same `Cycle`), `Cycle → 循环` (zh-CN — non-glossary; use `周期`), `Epic → Saga` (es — non-glossary; use `Epic`). The glossary is the source of truth.
 - **Missing `few` / `many` in Slavic languages** — Russian/Polish/Czech/Slovak/Ukrainian strings with only `one / other` are grammatically wrong for counts 2–4 and 5+. Fix in the same PR.
 - **Wrong Slavic case form inside ICU plurals** — for ru/ua, `few` is genitive singular (`# Цикла`), not nominative plural (`# Циклы`). See the case-form table.
-- **Inventing `few` in German, `many` in Spanish, etc.** — languages not in CLDR for that form. Remove the spurious keyword.
+- **Inventing `few` in German, `two` in English, etc.** — languages not in CLDR for that form. Remove the spurious keyword. (Spanish is **not** an example: `es` has `many`, firing at 1 000 000 — see the CLDR table above. An earlier revision of this skill wrongly listed it.)
 - **Translating `{count}` or renaming `{name}`** — ICU variables are lookup keys; rename breaks runtime substitution.
 - **Dropping `<0>`/`<1>` numbering in `Trans`** — react-i18next matches by number; renumbering breaks the component.
 - **Copying English as a translation** — `sync-check` passes, users see English. The fastest way to ship bad i18n.
