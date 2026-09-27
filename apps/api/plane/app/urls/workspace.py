@@ -266,6 +266,11 @@ urlpatterns = [
         PageCollectionViewSet.as_view({"get": "list", "post": "create"}),
         name="workspace-page-collections",
     ),
+    path(
+        "workspaces/<str:slug>/page-collections/<uuid:pk>/",
+        PageCollectionViewSet.as_view({"patch": "partial_update"}),
+        name="workspace-page-collection",
+    ),
     # wiki pages: detail / include / move / remove
     path(
         "workspaces/<str:slug>/wiki-pages/",

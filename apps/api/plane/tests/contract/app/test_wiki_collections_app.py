@@ -148,3 +148,82 @@ class TestWikiCollectionCreate:
 
         assert response.status_code == status.HTTP_403_FORBIDDEN
         assert PageCollection.objects.count() == 0
+
+
+@pytest.mark.contract
+class TestWikiCollectionRename:
+    @pytest.fixture
+    def collection(self, workspace, create_user):
+        return PageCollection.objects.create(workspace=workspace, name="旧名", owned_by=create_user)
+
+    @pytest.mark.django_db
+    def test_renames_collection(self, session_client, workspace, collection):
+        response = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/page-collections/{collection.id}/", {"name": "新名"}, format="json"
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["name"] == "新名"
+        assert str(response.data["id"]) == str(collection.id)
+
+        list_response = session_client.get(f"/api/workspaces/{workspace.slug}/page-collections/")
+        assert [item["name"] for item in list_response.data["collections"]] == ["新名"]
+
+    @pytest.mark.django_db
+    def test_rejects_blank_name(self, session_client, workspace, collection):
+        response = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/page-collections/{collection.id}/", {"name": ""}, format="json"
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        collection.refresh_from_db()
+        assert collection.name == "旧名"
+
+    @pytest.mark.django_db
+    def test_other_workspace_collection_is_404(self, session_client, workspace, other_workspace_collection):
+        """跨工作区改名必须 404，且**不是** `{"error": "Collection not found."}`。
+
+        作用域内的 PATCH 主体走 `get_object_or_404(qs, pk=...)` → Django 默认 body，
+        与 `WikiPageViewSet.partial_update` 是同一个形状；
+        `{"error": "Collection not found."}`（`WikiPageViewSet.partial_update` 里那段）只在**载荷里的一个
+        UUID 字段**指向别家集合时用。两者不是同一种 404，别为了「统一」把它们并成一个。
+        """
+        response = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/page-collections/{other_workspace_collection.id}/",
+            {"name": "改别家的"},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert "error" not in response.data
+        other_workspace_collection.refresh_from_db()
+        assert other_workspace_collection.name == "别家的集合"
+
+    @pytest.mark.django_db
+    def test_guest_is_forbidden(self, guest_client, workspace, collection):
+        response = guest_client.patch(
+            f"/api/workspaces/{workspace.slug}/page-collections/{collection.id}/", {"name": "guest 改的"}, format="json"
+        )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        collection.refresh_from_db()
+        assert collection.name == "旧名"
+
+    @pytest.mark.django_db
+    def test_sort_order_is_not_writable(self, session_client, workspace, collection):
+        """`sort_order` 已收成只读 —— 传它会被 DRF 静默忽略（读字段不进 validated_data）。
+
+        写契约因此精确等于 `{name}`，没有第二个可写字段可以漂。
+        """
+        original_sort_order = collection.sort_order
+
+        response = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/page-collections/{collection.id}/",
+            {"name": "新名", "sort_order": 999},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["sort_order"] == original_sort_order
+        collection.refresh_from_db()
+        assert collection.sort_order == original_sort_order
