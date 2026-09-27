@@ -39,7 +39,9 @@
       "create_new_page": "Creează o pagină nouă",
       "add_existing_page": "Adaugă o pagină existentă",
       "edit_collection": "Editează colecția",
-      "collection_options": "Opțiuni colecție"
+      "collection_options": "Opțiuni colecție",
+      "move_to_collection": "Mută în colecție",
+      "remove_from_wiki": "Elimină din Wiki"
     },
     "add_existing_page_modal": {
       "search_placeholder": "Caută pagini",

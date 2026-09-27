@@ -39,7 +39,9 @@
       "create_new_page": "新しいページを作成",
       "add_existing_page": "既存のページを追加",
       "edit_collection": "コレクションを編集",
-      "collection_options": "コレクションのオプション"
+      "collection_options": "コレクションのオプション",
+      "move_to_collection": "コレクションに移動",
+      "remove_from_wiki": "Wikiから削除"
     },
     "add_existing_page_modal": {
       "search_placeholder": "ページを検索",

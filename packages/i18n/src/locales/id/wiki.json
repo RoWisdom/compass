@@ -39,7 +39,9 @@
       "create_new_page": "Buat halaman baru",
       "add_existing_page": "Tambah halaman yang sudah ada",
       "edit_collection": "Edit koleksi",
-      "collection_options": "Opsi koleksi"
+      "collection_options": "Opsi koleksi",
+      "move_to_collection": "Pindahkan ke koleksi",
+      "remove_from_wiki": "Hapus dari Wiki"
     },
     "add_existing_page_modal": {
       "search_placeholder": "Cari halaman",

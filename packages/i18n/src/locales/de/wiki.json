@@ -39,7 +39,9 @@
       "create_new_page": "Neue Seite erstellen",
       "add_existing_page": "Vorhandene Seite hinzufügen",
       "edit_collection": "Sammlung bearbeiten",
-      "collection_options": "Sammlungsoptionen"
+      "collection_options": "Sammlungsoptionen",
+      "move_to_collection": "In Sammlung verschieben",
+      "remove_from_wiki": "Aus Wiki entfernen"
     },
     "add_existing_page_modal": {
       "search_placeholder": "Nach Seiten suchen",

@@ -39,7 +39,9 @@
       "create_new_page": "Criar nova página",
       "add_existing_page": "Adicionar página existente",
       "edit_collection": "Editar coleção",
-      "collection_options": "Opções da coleção"
+      "collection_options": "Opções da coleção",
+      "move_to_collection": "Mover para a coleção",
+      "remove_from_wiki": "Remover do Wiki"
     },
     "add_existing_page_modal": {
       "search_placeholder": "Pesquisar páginas",

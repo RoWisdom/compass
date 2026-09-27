@@ -39,7 +39,9 @@
       "create_new_page": "Создать новую страницу",
       "add_existing_page": "Добавить существующую страницу",
       "edit_collection": "Редактировать коллекцию",
-      "collection_options": "Параметры коллекции"
+      "collection_options": "Параметры коллекции",
+      "move_to_collection": "Переместить в коллекцию",
+      "remove_from_wiki": "Удалить из Wiki"
     },
     "add_existing_page_modal": {
       "search_placeholder": "Поиск страниц",

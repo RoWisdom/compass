@@ -39,7 +39,9 @@
       "create_new_page": "Tạo trang mới",
       "add_existing_page": "Thêm trang hiện có",
       "edit_collection": "Chỉnh sửa bộ sưu tập",
-      "collection_options": "Tùy chọn bộ sưu tập"
+      "collection_options": "Tùy chọn bộ sưu tập",
+      "move_to_collection": "Chuyển đến bộ sưu tập",
+      "remove_from_wiki": "Xóa khỏi Wiki"
     },
     "add_existing_page_modal": {
       "search_placeholder": "Tìm kiếm trang",

@@ -39,7 +39,9 @@
       "create_new_page": "새 페이지 만들기",
       "add_existing_page": "기존 페이지 추가",
       "edit_collection": "컬렉션 편집",
-      "collection_options": "컬렉션 옵션"
+      "collection_options": "컬렉션 옵션",
+      "move_to_collection": "컬렉션으로 이동",
+      "remove_from_wiki": "위키에서 제거"
     },
     "add_existing_page_modal": {
       "search_placeholder": "페이지 검색",

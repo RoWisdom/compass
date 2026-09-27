@@ -39,7 +39,9 @@
       "create_new_page": "Vytvořit novou stránku",
       "add_existing_page": "Přidat existující stránku",
       "edit_collection": "Upravit kolekci",
-      "collection_options": "Možnosti kolekce"
+      "collection_options": "Možnosti kolekce",
+      "move_to_collection": "Přesunout do kolekce",
+      "remove_from_wiki": "Odebrat z Wiki"
     },
     "add_existing_page_modal": {
       "search_placeholder": "Hledat stránky",

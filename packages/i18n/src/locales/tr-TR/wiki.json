@@ -39,7 +39,9 @@
       "create_new_page": "Yeni sayfa oluştur",
       "add_existing_page": "Var olan sayfa ekle",
       "edit_collection": "Koleksiyonu düzenle",
-      "collection_options": "Koleksiyon seçenekleri"
+      "collection_options": "Koleksiyon seçenekleri",
+      "move_to_collection": "Koleksiyona taşı",
+      "remove_from_wiki": "Wiki'den kaldır"
     },
     "add_existing_page_modal": {
       "search_placeholder": "Sayfa ara",

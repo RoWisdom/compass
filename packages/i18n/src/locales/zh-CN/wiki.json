@@ -41,7 +41,7 @@
       "edit_collection": "编辑集合",
       "collection_options": "集合选项",
       "move_to_collection": "移动到集合",
-      "remove_from_wiki": "从 Wiki 中移出"
+      "remove_from_wiki": "从 Wiki 中移除"
     },
     "add_existing_page_modal": {
       "search_placeholder": "搜索页面",
