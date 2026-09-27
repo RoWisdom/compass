@@ -183,16 +183,23 @@ export class WorkspacePageStore implements IWorkspacePageStore {
    * 返回值**透传 service 的新集合** —— 调用方要拿它的 id 跳转。
    */
   createCollection = async (workspaceSlug: string, name: string) => {
+    let collection: TPageCollection;
     try {
-      const collection = await this.service.createCollection(workspaceSlug, name);
-      await this.fetchCollections(workspaceSlug);
-      return collection;
+      collection = await this.service.createCollection(workspaceSlug, name);
     } catch (error) {
       runInAction(() => {
         this.error = { title: "Failed", description: "Failed to create the collection, Please try again later." };
       });
       throw error;
     }
+
+    // 重拉集合**移出写入的 try**：写入此刻已经落库，让刷新失败把它报成「创建失败」是撒谎。
+    // 创建路径上这个谎还有第二个代价 —— 弹窗会留在原地诱导重试，而 `PageCollection.name`
+    // 没有唯一约束，重试会真的建出第二个集合。失败由 `fetchCollections` 自己记进 `this.error`，
+    // 与 `move-to-collection-modal.tsx:66-68` 同一条规矩：刷新失败只记不报。
+    await this.fetchCollections(workspaceSlug).catch(() => {});
+
+    return collection;
   };
 
   /**
@@ -202,16 +209,21 @@ export class WorkspacePageStore implements IWorkspacePageStore {
    * 与 `createCollection` 同样不设 `loader`。
    */
   updateCollection = async (workspaceSlug: string, collectionId: string, name: string) => {
+    let collection: Omit<TPageCollection, "page_count">;
     try {
-      const collection = await this.service.updateCollection(workspaceSlug, collectionId, name);
-      await this.fetchCollections(workspaceSlug);
-      return collection;
+      collection = await this.service.updateCollection(workspaceSlug, collectionId, name);
     } catch (error) {
       runInAction(() => {
         this.error = { title: "Failed", description: "Failed to rename the collection, Please try again later." };
       });
       throw error;
     }
+
+    // 同 `createCollection`：重拉集合不在写入的 try 里。改名已经落库，刷新失败只能记进
+    // `this.error`，不能冒泡成「重命名失败」—— 弹窗靠这个异常决定 toast 的成败，报错即撒谎。
+    await this.fetchCollections(workspaceSlug).catch(() => {});
+
+    return collection;
   };
 
   /**
