@@ -127,10 +127,10 @@ class PageCollectionViewSet(BaseViewSet):
     def partial_update(self, request, slug, pk):
         """重命名集合。写契约只有 `name`（`sort_order` 已只读）。
 
-        注释里刻意**不**复述 `WikiPageViewSet.partial_update` 关于 deferrable 外键 /
-        autocommit 的那段长说明（`WikiPageViewSet.partial_update` 里那段）：它解释的是**外键字段**
-        写入的结局，而本端点没有外键可写 —— 照抄会产生一份与实际不符的第三份副本。
-        这里只有一个作用域纪律要记：与 metadata 路由同一套（`WikiPageViewSet.partial_update`）。
+        注释里刻意**不**复述 `WikiPageDescriptionViewSet.partial_update` 里那段关于
+        deferrable 外键 / autocommit 的长说明：它解释的是**外键字段**写入的结局，
+        而本端点没有外键可写 —— 照抄会产生一份与实际不符的第三份副本。
+        这里只有一个作用域纪律要记：与 `WikiPageViewSet.partial_update` 同一套。
 
         返回体**不带 `page_count`**：那是 `list` 为了侧栏一次渲染完才现算的，重命名这一刀
         再算一遍就要复制那段计数查询，而调用方（弹窗）本来就只拿它判成功、随后由 store
