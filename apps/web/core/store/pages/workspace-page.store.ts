@@ -14,6 +14,7 @@ import type {
   TCollectionFilter,
   TPageCollection,
   TPageCollectionListResponse,
+  TPageCreatePayload,
   TPageIncludeResponse,
   TPredefinedCollection,
 } from "@/services/page";
@@ -53,6 +54,7 @@ export interface IWorkspacePageStore {
     collectionId: string,
     name: string
   ) => Promise<Omit<TPageCollection, "page_count">>;
+  createPage: (workspaceSlug: string, payload: TPageCreatePayload) => Promise<TPage>;
   fetchPagesList: (workspaceSlug: string, collection: TCollectionFilter) => Promise<TPage[] | undefined>;
   fetchPageDetails: (workspaceSlug: string, pageId: string) => Promise<TPage | undefined>;
   fetchCandidates: (workspaceSlug: string) => Promise<TPage[]>;
@@ -100,6 +102,7 @@ export class WorkspacePageStore implements IWorkspacePageStore {
       fetchCollections: action,
       createCollection: action,
       updateCollection: action,
+      createPage: action,
       fetchPagesList: action,
       fetchPageDetails: action,
       fetchCandidates: action,
@@ -224,6 +227,37 @@ export class WorkspacePageStore implements IWorkspacePageStore {
     await this.fetchCollections(workspaceSlug).catch(() => {});
 
     return collection;
+  };
+
+  /**
+   * 在 Wiki 里新建页面。
+   *
+   * **不设 `loader`** —— 与 `createCollection` 同一条理由：`loader` 驱动的是整个主面板的
+   * 加载骨架，而建页只是往当前分区多插一行，把整页打回骨架是过度反应。调用方（弹窗）
+   * 自己有 submitting 态。
+   *
+   * **不得吞掉异常** —— 弹窗靠"action 是否 reject"决定 toast 成败，与 `createCollection`
+   * 同一个契约。
+   *
+   * 返回值**透传 service 的新页面** —— 调用方要拿它的 id 跳转。
+   */
+  createPage = async (workspaceSlug: string, payload: TPageCreatePayload) => {
+    let page: TPage;
+    try {
+      page = await this.service.createPage(workspaceSlug, payload);
+    } catch (error) {
+      runInAction(() => {
+        this.error = { title: "Failed", description: "Failed to create the page, Please try again later." };
+      });
+      throw error;
+    }
+
+    // 重拉集合**移出写入的 try**：写入此刻已经落库，让刷新失败把它报成「创建失败」是撒谎。
+    // 与 createCollection / updateCollection 同一条规矩（Round A 的 I-1a）。
+    // 这一步不只是刷计数 —— 新页面此刻已经在库里，重拉之后它才会出现在侧栏那个分区。
+    await this.fetchCollections(workspaceSlug).catch(() => {});
+
+    return page;
   };
 
   /**

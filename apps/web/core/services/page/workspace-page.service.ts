@@ -71,6 +71,41 @@ export type TPageIncludeResponse = {
   included: number;
 };
 
+/**
+ * 新页面的归属 —— **由侧栏按当前分区推导好**再交给弹窗（设计 §3.2d 的表）。
+ *
+ * 两个字段直接就是请求体的两个字段名，推导规则只有一份、就在 `sidebar.tsx` 里；
+ * 弹窗不再自己推一遍，也不接受"传了个集合却又说它是私有的"这种自相矛盾的组合。
+ *
+ * `collection_id` 为 `null` 时页面落 general —— 与 `includePages` 的 `collectionId`
+ * 是同一个语义（省略与传 `null` 在后端是同一种处理）。
+ */
+export type TPageCreateTarget = {
+  collection_id: string | null;
+  /**
+   * `1` = 私有。私有分区**只能**靠它表达 —— 优先级是
+   * archived > private > collection_id > general，所以私有页的 `collection` 会被完全忽略，
+   * 「建到 Private 视图」不可能是 `collection_id=private`。
+   */
+  access: 0 | 1;
+};
+
+/**
+ * `POST wiki-pages/create/` 的请求体。四个键**全部可选** —— 建一个页面不需要任何参数，
+ * 空 `{}` 是合法载荷（后端会建出一个空名、公开、无项目、落 general 的页面）。
+ *
+ * - `project_id` —— 给了就挂到该项目下，并因此**获得一个 vault 落点**
+ *   （`2-项目/<项目名>/`）；不给就是"无项目页"，**永远不会进 vault**。
+ * - `collection_id` —— 只对"建到某个自建集合"有意义；`access=1` 时它会被忽略。
+ * - `access` —— 0 公开 / 1 私有。省略即 0。
+ */
+export type TPageCreatePayload = {
+  name?: string;
+  project_id?: string | null;
+  collection_id?: string | null;
+  access?: 0 | 1;
+};
+
 /** 侧栏选中的分区：预置分区的 key，或某个集合的 uuid。 */
 export type TCollectionFilter = TPredefinedCollectionKey | string;
 
@@ -128,6 +163,22 @@ export class WorkspacePageService extends APIService {
     name: string
   ): Promise<Omit<TPageCollection, "page_count">> {
     return this.patch(`/api/workspaces/${workspaceSlug}/page-collections/${collectionId}/`, { name })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data ?? error;
+      });
+  }
+
+  /**
+   * 在 Wiki 里**新建**一个页面。
+   *
+   * 与 `includePages` 的分界：那个是"把已有页面收录进来"，这个是"从零建一个"。
+   *
+   * **返回新页面** —— 调用方（弹窗）要用它的 `id` 跳过去，所以这里不能像别的写方法
+   * 那样只返回 void。
+   */
+  async createPage(workspaceSlug: string, payload: TPageCreatePayload): Promise<TPage> {
+    return this.post(`/api/workspaces/${workspaceSlug}/wiki-pages/create/`, payload)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data ?? error;
