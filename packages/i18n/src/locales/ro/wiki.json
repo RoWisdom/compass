@@ -45,7 +45,7 @@
     },
     "add_existing_page_modal": {
       "search_placeholder": "Caută pagini",
-      "success_message": "{count} pagini au fost adăugate în colecție.",
+      "success_message": "{count} {count, plural, one {pagină a fost adăugată} few {pagini au fost adăugate} other {de pagini au fost adăugate}} în colecție.",
       "error_message": "Paginile nu au putut fi mutate. Te rugăm să încerci din nou.",
       "no_pages_found": "Nu au fost găsite pagini care să corespundă căutării",
       "no_pages_available": "Nu există pagini disponibile pentru mutare",

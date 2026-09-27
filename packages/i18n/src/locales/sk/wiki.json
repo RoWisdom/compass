@@ -45,7 +45,7 @@
     },
     "add_existing_page_modal": {
       "search_placeholder": "Hľadať stránky",
-      "success_message": "Do kolekcie bolo pridaných {count} stránok.",
+      "success_message": "Do kolekcie {count, plural, one {bola pridaná {count} stránka} few {boli pridané {count} stránky} many {bolo pridaných {count} stránky} other {bolo pridaných {count} stránok}}.",
       "error_message": "Stránky sa nepodarilo presunúť. Skúste to prosím znova.",
       "no_pages_found": "Neboli nájdené žiadne stránky zodpovedajúce vášmu vyhľadávaniu",
       "no_pages_available": "Žiadne stránky na presun",

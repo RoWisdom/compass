@@ -45,7 +45,7 @@
     },
     "add_existing_page_modal": {
       "search_placeholder": "Buscar páginas",
-      "success_message": "Se añadieron {count} páginas a la colección.",
+      "success_message": "Se {count, plural, one {añadió {count} página} other {añadieron {count} páginas}} a la colección.",
       "error_message": "No se pudieron mover las páginas. Inténtalo de nuevo.",
       "no_pages_found": "No se encontraron páginas que coincidan con tu búsqueda",
       "no_pages_available": "No hay páginas disponibles para mover",

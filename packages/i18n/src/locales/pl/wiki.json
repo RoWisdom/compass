@@ -45,7 +45,7 @@
     },
     "add_existing_page_modal": {
       "search_placeholder": "Szukaj stron",
-      "success_message": "Dodano {count} stron do kolekcji.",
+      "success_message": "Dodano {count} {count, plural, one {stronę} few {strony} many {stron} other {strony}} do kolekcji.",
       "error_message": "Nie udało się przenieść stron. Spróbuj ponownie.",
       "no_pages_found": "Nie znaleziono stron pasujących do wyszukiwania",
       "no_pages_available": "Brak stron dostępnych do przeniesienia",

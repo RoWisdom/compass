@@ -45,7 +45,7 @@
     },
     "add_existing_page_modal": {
       "search_placeholder": "Hledat stránky",
-      "success_message": "Do kolekce bylo přidáno {count} stránek.",
+      "success_message": "Do kolekce {count, plural, one {byla přidána {count} stránka} few {byly přidány {count} stránky} many {bylo přidáno {count} stránky} other {bylo přidáno {count} stránek}}.",
       "error_message": "Stránky se nepodařilo přesunout. Zkuste to prosím znovu.",
       "no_pages_found": "Nebyly nalezeny žádné stránky odpovídající vašemu hledání",
       "no_pages_available": "Žádné stránky k přesunu",

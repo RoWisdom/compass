@@ -45,7 +45,7 @@
     },
     "add_existing_page_modal": {
       "search_placeholder": "Cerca pagine",
-      "success_message": "{count} pagine aggiunte alla raccolta.",
+      "success_message": "{count} {count, plural, one {pagina aggiunta} many {pagine aggiunte} other {pagine aggiunte}} alla raccolta.",
       "error_message": "Non è stato possibile spostare le pagine. Riprova.",
       "no_pages_found": "Nessuna pagina trovata per la tua ricerca",
       "no_pages_available": "Nessuna pagina disponibile da spostare",
