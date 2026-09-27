@@ -47,6 +47,8 @@ export interface IWorkspacePageStore {
   clearAllFilters: () => void;
   // actions
   fetchCollections: (workspaceSlug: string) => Promise<TPageCollectionListResponse | undefined>;
+  createCollection: (workspaceSlug: string, name: string) => Promise<TPageCollection>;
+  updateCollection: (workspaceSlug: string, collectionId: string, name: string) => Promise<TPageCollection>;
   fetchPagesList: (workspaceSlug: string, collection: TCollectionFilter) => Promise<TPage[] | undefined>;
   fetchPageDetails: (workspaceSlug: string, pageId: string) => Promise<TPage | undefined>;
   fetchCandidates: (workspaceSlug: string) => Promise<TPage[]>;
@@ -92,6 +94,8 @@ export class WorkspacePageStore implements IWorkspacePageStore {
       updateFilters: action,
       clearAllFilters: action,
       fetchCollections: action,
+      createCollection: action,
+      updateCollection: action,
       fetchPagesList: action,
       fetchPageDetails: action,
       fetchCandidates: action,
@@ -159,6 +163,48 @@ export class WorkspacePageStore implements IWorkspacePageStore {
     } catch (error) {
       runInAction(() => {
         this.error = { title: "Failed", description: "Failed to fetch the collections, Please try again later." };
+      });
+      throw error;
+    }
+  };
+
+  /**
+   * 新建集合。
+   *
+   * **不设 `loader`** —— 与 `moveToCollection` / `removeFromWiki` 同一惯例：
+   * `loader` 驱动的是整个主面板的加载骨架，而新建集合只是往侧栏多插一行；
+   * 把整页打回骨架是过度反应。调用方（弹窗）自己有 submitting 态。
+   *
+   * 成功后按本文件既有惯例重拉集合（`:273` / `:302` / `:323` 三处都这么做）。
+   * 返回值**透传 service 的新集合** —— 调用方要拿它的 id 跳转。
+   */
+  createCollection = async (workspaceSlug: string, name: string) => {
+    try {
+      const collection = await this.service.createCollection(workspaceSlug, name);
+      await this.fetchCollections(workspaceSlug);
+      return collection;
+    } catch (error) {
+      runInAction(() => {
+        this.error = { title: "Failed", description: "Failed to create the collection, Please try again later." };
+      });
+      throw error;
+    }
+  };
+
+  /**
+   * 重命名集合。
+   *
+   * **不得吞掉异常** —— 弹窗靠它决定 toast 是「已重命名」还是「重命名失败」。
+   * 与 `createCollection` 同样不设 `loader`。
+   */
+  updateCollection = async (workspaceSlug: string, collectionId: string, name: string) => {
+    try {
+      const collection = await this.service.updateCollection(workspaceSlug, collectionId, name);
+      await this.fetchCollections(workspaceSlug);
+      return collection;
+    } catch (error) {
+      runInAction(() => {
+        this.error = { title: "Failed", description: "Failed to rename the collection, Please try again later." };
       });
       throw error;
     }

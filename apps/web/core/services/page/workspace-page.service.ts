@@ -98,6 +98,35 @@ export class WorkspacePageService extends APIService {
       });
   }
 
+  /**
+   * 新建集合。**返回新集合** —— 调用方（侧栏）要用响应里的 id 跳到新集合去，
+   * 所以这里不能像别的写方法那样只返回 void。
+   *
+   * 后端返回的 body 与 `list` 的每一行同形（含 `page_count: 0`），
+   * 所以调用方可以直接拿它塞进侧栏，不必为「新建」写兼容分支。
+   */
+  async createCollection(workspaceSlug: string, name: string): Promise<TPageCollection> {
+    return this.post(`/api/workspaces/${workspaceSlug}/page-collections/`, { name })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data ?? error;
+      });
+  }
+
+  /**
+   * 重命名集合。写契约只有 `name` —— 传别的键 DRF 会静默忽略（返回 200 而什么都没变）。
+   *
+   * 返回体**不带** `page_count`（后端只回裸集合）：那个计数是 `list` 现算给侧栏用的，
+   * 这里的调用方只拿它判成功，随后由 store 重拉整个集合列表补齐计数。
+   */
+  async updateCollection(workspaceSlug: string, collectionId: string, name: string): Promise<TPageCollection> {
+    return this.patch(`/api/workspaces/${workspaceSlug}/page-collections/${collectionId}/`, { name })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data ?? error;
+      });
+  }
+
   /** 某个分区下的已收录页面。分区由**服务端**判定优先级，前端不重复一套规则。 */
   async fetchPages(workspaceSlug: string, collection: TCollectionFilter): Promise<TPage[]> {
     return this.get(`/api/workspaces/${workspaceSlug}/wiki-pages/`, {
