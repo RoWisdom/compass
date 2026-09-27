@@ -277,6 +277,13 @@ urlpatterns = [
         WikiPageViewSet.as_view({"get": "list", "post": "create"}),
         name="workspace-wiki-pages",
     ),
+    # 字面段 `create` 与下面的 `<uuid:page_id>` 不冲突（UUID 转换器不匹配 "create"），
+    # 但仍然显式排在它前面 —— 顺序是写明的，不依赖转换器的巧合。
+    path(
+        "workspaces/<str:slug>/wiki-pages/create/",
+        WikiPageViewSet.as_view({"post": "create_page"}),
+        name="workspace-wiki-page-create",
+    ),
     path(
         "workspaces/<str:slug>/wiki-pages/<uuid:page_id>/",
         WikiPageViewSet.as_view({"get": "retrieve", "patch": "partial_update", "delete": "destroy"}),

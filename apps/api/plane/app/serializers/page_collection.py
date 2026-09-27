@@ -159,3 +159,47 @@ class WikiPageUpdateSerializer(PageBinaryUpdateSerializer):
             instance.save(update_fields=update_fields)
 
         return instance
+
+
+class WikiPageCreateSerializer(serializers.Serializer):
+    """``POST /wiki-pages/create/`` 的请求体 —— 在 Wiki 里**新建**一个页面。
+
+    与 ``WikiPageIncludeSerializer`` 的分界：那个是「把已有页面收录进来」（吃
+    ``page_ids``、回 ``{"included": n}``），这个是「从零建一个页面」。两者都写
+    ``is_global``，但只有这里会 create 一行 ``Page``。
+
+    刻意**不继承 ``PageSerializer``**：那个类的 ``create()`` 从项目推 workspace
+    （``serializers/page.py:95`` ``workspace_id=project.workspace_id``），而本端点的
+    页面**可以没有项目** —— 没有项目就没有 workspace 可推，那一步直接崩。
+    workspace 由视图经 ``context`` 直接给，不由任何外键推导。
+
+    ``name`` 允许空、且**不设 max_length**：``Page.name`` 是 ``TextField(blank=True)``，
+    i18n 有 ``wiki_collections.list.untitled``（「未命名」）而**没有**「页面名必填」键 ——
+    官方把空名页当成一等公民。集合名那个 255 的上限有 ``form.name_max_length`` 文案作
+    依据，这里没有对应文案，加限制没有规格依据。
+    """
+
+    name = serializers.CharField(required=False, allow_blank=True, default="")
+    # ChoiceField 而不是 IntegerField + 手写范围检查：``Page.ACCESS_CHOICES`` 就是
+    # 模型自己声明的合法集，写死一遍 (0, 1) 等于在序列化器里存了第二个真相源。
+    # 传 7 会被 DRF 拒成 400 并列出合法值，不需要自己拼错误信息。
+    access = serializers.ChoiceField(choices=Page.ACCESS_CHOICES, required=False, default=Page.PUBLIC_ACCESS)
+    collection_id = serializers.UUIDField(required=False, allow_null=True)
+
+    def create(self, validated_data):
+        workspace = self.context["workspace"]
+        owned_by = self.context["owned_by"]
+
+        return Page.objects.create(
+            name=validated_data.get("name", ""),
+            # 建出来就是空正文。``Page.description_html`` 的列默认值也是 ``"<p></p>"``，
+            # 这里显式给一次，好让"建的页是什么样"在这一个地方看得全。
+            description_html="<p></p>",
+            description_json={},
+            # 在 Wiki 里建的页面天然已收录 —— 这就是它出现在侧栏的条件。
+            is_global=True,
+            owned_by=owned_by,
+            workspace=workspace,
+            access=validated_data.get("access", Page.PUBLIC_ACCESS),
+            collection_id=validated_data.get("collection_id"),
+        )

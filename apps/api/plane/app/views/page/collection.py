@@ -19,6 +19,7 @@ from rest_framework.response import Response
 from plane.app.permissions import ROLE, allow_permission
 from plane.app.serializers import (
     PageCollectionSerializer,
+    WikiPageCreateSerializer,
     WikiPageDetailSerializer,
     WikiPageIncludeSerializer,
     WikiPageSerializer,
@@ -271,6 +272,44 @@ class WikiPageViewSet(BaseViewSet):
         # （-updated_at）不会刷新。
         updated = pages.update(is_global=True, collection=collection, updated_at=timezone.now())
         return Response({"included": updated}, status=status.HTTP_200_OK)
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
+    def create_page(self, request, slug):
+        """在 Wiki 里**新建**一个页面。
+
+        与 ``create`` 分居两个动作：那个是「把已有页面收录进来」（``is_global=False``
+        → ``True``），这个是「从零建一个 ``is_global=True`` 的页面」。共用一个 action
+        名字会让两条完全不同的写路径挤在一处，所以路由也用字面段 ``create/`` 区分。
+
+        权限与 ``create`` / ``partial_update`` / ``destroy`` 同一条收窄裁定：写端点
+        不含 GUEST。
+
+        与项目页的 ``PageViewSet.create``（``views/page/base.py:192-223``）**有意分叉**，
+        **别以为这里漏抄了**：那个端点存盘后还会调 ``page_transaction.delay``（``:215``），
+        这里**不调** —— Phase1B 裁定「wiki 的写路径不攒版本历史与事务记录」。
+        （顺带校准一个容易记错的细节：那个 ``create`` 里也**没有**
+        ``track_page_version.delay``，本仓唯一一处它在 ``:694``，属于正文端点
+        ``PagesDescriptionViewSet.partial_update``。）
+        **后果不可逆**：通过 Wiki 建出的页面不产生版本行，事后无法回填。
+        """
+        workspace = get_object_or_404(Workspace, slug=slug)
+
+        serializer = WikiPageCreateSerializer(
+            data=request.data,
+            context={"workspace": workspace, "owned_by": request.user},
+        )
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        page = serializer.save()
+
+        # 把正文镜像成本地 ``.md``。**尽力而为**：无项目的页面由 ``_mirror_wiki_page``
+        # 自己 warn 后跳过（镜像根 ``MARKDOWN_STORAGE_PATH`` 指向「项目」那一层，
+        # 无项目页按定义无处可写 —— 见 ``_wiki_page_project_id`` 的 docstring）。
+        # 无项目的页面照样建成功，那才是本端点的重点。
+        _mirror_wiki_page(page, "<p></p>")
+
+        return Response(WikiPageSerializer(page).data, status=status.HTTP_201_CREATED)
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
     def retrieve(self, request, slug, page_id):
