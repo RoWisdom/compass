@@ -176,9 +176,10 @@ export class WorkspacePageService extends APIService {
       });
   }
 
-  /** 写正文。走同一个 PATCH，只是载荷是 TDocumentPayload。 */
-  async updateDescription(workspaceSlug: string, pageId: string, data: TDocumentPayload): Promise<TPage> {
-    return this.patch(`/api/workspaces/${workspaceSlug}/wiki-pages/${pageId}/`, data)
+  /** 写正文。走**二进制正文**端点：只有它才写 vault 镜像（与项目页兄弟同一形状）。
+   *  指回元数据路由会让镜像在 websocket 断线时静默不更新 —— 而那正是回退存在的唯一场景。 */
+  async updateDescription(workspaceSlug: string, pageId: string, data: TDocumentPayload): Promise<any> {
+    return this.patch(`/api/workspaces/${workspaceSlug}/wiki-pages/${pageId}/description/`, data)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data ?? error;
