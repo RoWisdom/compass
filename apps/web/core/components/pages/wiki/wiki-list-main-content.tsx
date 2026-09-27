@@ -64,13 +64,36 @@ export const WikiListMainContent = observer(function WikiListMainContent(props: 
       </>
     );
 
+  // 空分区也必须给收录入口。`isAnyPageAvailable` 是 `Object.keys(this.data).length > 0`
+  // （`workspace-page.store.ts:102-105`），而 `data` 只增不减 —— 工作区一旦加载出任何一页，
+  // 上面那个分支就再也进不去了。渲染空分区而不给 CTA，等于「收录」这个动作在整个 UI 里不可达。
+  // fork 源 `pages-list-main-content.tsx:98-133` 在空 tab 时是有 CTA 的，这里照它的形状补上。
   if (filteredPageIds?.length === 0)
     return (
-      <EmptyStateDetailed
-        assetKey="search"
-        title={t("common_empty_state.search.title")}
-        description={t("common_empty_state.search.description")}
-      />
+      <>
+        <EmptyStateDetailed
+          assetKey="page"
+          // 用 `list.no_pages_*` 而不是 `common_empty_state.search.*`：wiki 里没有任何 UI 会写
+          // `filters.searchQuery`，所以这个分支的真实触发条件就是「分区为空」，不是「搜不到」。
+          // 这两个键在 en 与 zh-CN 都已存在（「还没有页面」/「此集合当前没有任何页面。」），
+          // 且全 apps/web 无人消费 —— 不新增文案。
+          title={t("wiki_collections.list.no_pages_title")}
+          description={t("wiki_collections.list.no_pages_description")}
+          actions={[
+            {
+              label: t("wiki_collections.menu.add_existing_page"),
+              onClick: () => setIsAddExistingModalOpen(true),
+              variant: "primary",
+              disabled: !canIncludePages,
+            },
+          ]}
+        />
+        <AddExistingPageModal
+          isOpen={isAddExistingModalOpen}
+          collection={collection}
+          handleClose={() => setIsAddExistingModalOpen(false)}
+        />
+      </>
     );
 
   return <div className="h-full w-full overflow-hidden">{children}</div>;

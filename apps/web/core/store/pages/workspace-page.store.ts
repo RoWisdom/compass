@@ -14,6 +14,7 @@ import type {
   TCollectionFilter,
   TPageCollection,
   TPageCollectionListResponse,
+  TPageIncludeResponse,
   TPredefinedCollection,
 } from "@/services/page";
 import { WorkspacePageService } from "@/services/page";
@@ -49,7 +50,11 @@ export interface IWorkspacePageStore {
   fetchPagesList: (workspaceSlug: string, collection: TCollectionFilter) => Promise<TPage[] | undefined>;
   fetchPageDetails: (workspaceSlug: string, pageId: string) => Promise<TPage | undefined>;
   fetchCandidates: (workspaceSlug: string) => Promise<TPage[]>;
-  includePages: (workspaceSlug: string, pageIds: string[], collectionId: string | null) => Promise<void>;
+  includePages: (
+    workspaceSlug: string,
+    pageIds: string[],
+    collectionId: string | null
+  ) => Promise<TPageIncludeResponse>;
   moveToCollection: (workspaceSlug: string, pageId: string, collectionId: string | null) => Promise<void>;
   removeFromWiki: (workspaceSlug: string, pageId: string) => Promise<void>;
 }
@@ -246,8 +251,13 @@ export class WorkspacePageStore implements IWorkspacePageStore {
    * 收录已有页面。收录后重新拉一次集合计数与当前分区。
    *
    * `collectionId` 必填，理由同 service 层：省略会被后端当成「放回 general」，
-   * 调用方必须自己表态。本方法**丢弃** service 返回的 `{included}` 计数
-   * （计划定的形状），所以「有几页被静默跳过」这个信息在 UI 层拿不到。
+   * 调用方必须自己表态。
+   *
+   * **返回 service 的 `{included}` 计数，不要丢掉它。** 后端 `includePages` 会经
+   * `_visible_page_q` 滤掉他人私有页与跨工作区页（`collection.py:137`），被滤掉的页面
+   * **静默跳过、不报错** —— 这个计数是调用方唯一能察觉「有几页没被收录」的信号，
+   * 也是成功 toast 里 `{count}` 的唯一来源（`add_existing_page_modal.success_message`
+   * 是 ICU 带复数的串，没有 `count` 就渲染原始 ICU 文本）。
    */
   includePages = async (workspaceSlug: string, pageIds: string[], collectionId: string | null) => {
     try {
@@ -256,12 +266,14 @@ export class WorkspacePageStore implements IWorkspacePageStore {
         this.error = undefined;
       });
 
-      await this.service.includePages(workspaceSlug, pageIds, collectionId);
+      const response = await this.service.includePages(workspaceSlug, pageIds, collectionId);
       await this.fetchCollections(workspaceSlug);
 
       runInAction(() => {
         this.loader = undefined;
       });
+
+      return response;
     } catch (error) {
       runInAction(() => {
         this.loader = undefined;

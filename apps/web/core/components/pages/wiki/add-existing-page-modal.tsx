@@ -56,10 +56,11 @@ export const AddExistingPageModal = observer(function AddExistingPageModal(props
     if (!workspaceSlug || selectedPageIds.length === 0) return;
     setIsSubmitting(true);
     try {
-      await includePages(workspaceSlug, selectedPageIds, collection);
+      const { included } = await includePages(workspaceSlug, selectedPageIds, collection);
       setToast({
         type: TOAST_TYPE.SUCCESS,
-        title: t("wiki_collections.add_existing_page_modal.success_message"),
+        // `{count}` 必须传：这个键是 ICU 带复数的串，不传就渲染出原始 ICU 文本。
+        title: t("wiki_collections.add_existing_page_modal.success_message", { count: included }),
       });
       setSelectedPageIds([]);
       handleClose();
