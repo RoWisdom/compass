@@ -33,6 +33,7 @@ export interface IWorkspacePageStore {
   collectionPageIds: Record<string, string[]>; // 分区 key 或集合 uuid => pageIds
   collections: TPageCollection[];
   predefined: TPredefinedCollection[];
+  candidates: TPage[];
   error: TError | undefined;
   filters: TPageFilters;
   // computed
@@ -47,6 +48,7 @@ export interface IWorkspacePageStore {
   fetchCollections: (workspaceSlug: string) => Promise<TPageCollectionListResponse | undefined>;
   fetchPagesList: (workspaceSlug: string, collection: TCollectionFilter) => Promise<TPage[] | undefined>;
   fetchPageDetails: (workspaceSlug: string, pageId: string) => Promise<TPage | undefined>;
+  fetchCandidates: (workspaceSlug: string) => Promise<TPage[]>;
   includePages: (workspaceSlug: string, pageIds: string[], collectionId: string | null) => Promise<void>;
   moveToCollection: (workspaceSlug: string, pageId: string, collectionId: string | null) => Promise<void>;
   removeFromWiki: (workspaceSlug: string, pageId: string) => Promise<void>;
@@ -59,6 +61,7 @@ export class WorkspacePageStore implements IWorkspacePageStore {
   collectionPageIds: Record<string, string[]> = {};
   collections: TPageCollection[] = [];
   predefined: TPredefinedCollection[] = [];
+  candidates: TPage[] = [];
   error: TError | undefined = undefined;
   filters: TPageFilters = {
     searchQuery: "",
@@ -76,6 +79,7 @@ export class WorkspacePageStore implements IWorkspacePageStore {
       collectionPageIds: observable,
       collections: observable,
       predefined: observable,
+      candidates: observable,
       error: observable,
       filters: observable,
       isAnyPageAvailable: computed,
@@ -84,6 +88,7 @@ export class WorkspacePageStore implements IWorkspacePageStore {
       fetchCollections: action,
       fetchPagesList: action,
       fetchPageDetails: action,
+      fetchCandidates: action,
       includePages: action,
       moveToCollection: action,
       removeFromWiki: action,
@@ -226,6 +231,15 @@ export class WorkspacePageStore implements IWorkspacePageStore {
       });
       throw error;
     }
+  };
+
+  /** 收录弹窗的候选页面。刻意不写进 this.data —— 它们是未收录页面。 */
+  fetchCandidates = async (workspaceSlug: string) => {
+    const candidates = await this.service.fetchCandidates(workspaceSlug);
+    runInAction(() => {
+      this.candidates = candidates;
+    });
+    return candidates;
   };
 
   /**

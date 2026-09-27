@@ -100,6 +100,17 @@ class WikiPageViewSet(BaseViewSet):
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
     def list(self, request, slug):
+        # 收录弹窗要的是「还没收录的」页面 —— 同一个端点把过滤方向反过来，
+        # 于是「未收录」的定义（is_global）在整个仓库里只有一处。
+        if request.GET.get("include_candidates") == "true":
+            candidates = (
+                Page.objects.filter(workspace__slug=slug, is_global=False)
+                .select_related("workspace")
+                .select_related("owned_by")
+                .order_by("-updated_at")
+            )
+            return Response(WikiPageSerializer(candidates, many=True).data, status=status.HTTP_200_OK)
+
         collection_key = request.GET.get("collection", GENERAL)
         pages = _wiki_page_queryset(request, slug).select_related("workspace").select_related("owned_by")
         pages = [

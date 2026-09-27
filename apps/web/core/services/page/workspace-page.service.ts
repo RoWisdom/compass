@@ -65,6 +65,17 @@ export class WorkspacePageService extends APIService {
       });
   }
 
+  /** 本工作区**尚未收录**的页面 —— 「Add existing page」的候选。 */
+  async fetchCandidates(workspaceSlug: string): Promise<TPage[]> {
+    return this.get(`/api/workspaces/${workspaceSlug}/wiki-pages/`, {
+      params: { include_candidates: true },
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   /** 单个页面（含正文）。 */
   async fetchById(workspaceSlug: string, pageId: string): Promise<TPage> {
     return this.get(`/api/workspaces/${workspaceSlug}/wiki-pages/${pageId}/`)

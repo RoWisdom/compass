@@ -570,3 +570,32 @@ class TestWikiPageUpdateEndpoint:
         wiki_page.refresh_from_db()
         assert wiki_page.description_html == "<p>原始</p>"
         assert wiki_page.collection_id is None
+
+
+@pytest.mark.contract
+class TestWikiPageCandidates:
+    @pytest.mark.django_db
+    def test_candidates_are_the_uncollected_pages(self, session_client, workspace, wiki_page, project_page):
+        """候选 = 本工作区 is_global=False 的页面；已收录的不在其中。"""
+        response = session_client.get(f"/api/workspaces/{workspace.slug}/wiki-pages/?include_candidates=true")
+
+        assert response.status_code == status.HTTP_200_OK
+        ids = [item["id"] for item in response.data]
+        assert str(project_page.id) in ids
+        assert str(wiki_page.id) not in ids
+
+    @pytest.mark.django_db
+    def test_candidates_are_workspace_scoped(self, session_client, workspace, other_workspace, create_user):
+        """别的工作区的未收录页面不能出现。"""
+        foreign = Page.objects.create(
+            workspace=other_workspace,
+            name="别家的未收录",
+            owned_by=create_user,
+            access=Page.PUBLIC_ACCESS,
+            is_global=False,
+        )
+
+        response = session_client.get(f"/api/workspaces/{workspace.slug}/wiki-pages/?include_candidates=true")
+
+        ids = [item["id"] for item in response.data]
+        assert str(foreign.id) not in ids
