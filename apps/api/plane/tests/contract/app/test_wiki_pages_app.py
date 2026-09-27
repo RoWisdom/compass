@@ -1199,3 +1199,88 @@ class TestWikiPageTitleUpdate:
         wiki_page.refresh_from_db()
         assert wiki_page.name == "只改标题"
         assert wiki_page.description_html == "<p>原有正文</p>"
+
+
+@pytest.mark.contract
+class TestRenameMovesTheMirror:
+    """A rename must carry the page's vault mirror with it.
+
+    The mirror path is name-derived (``utils/markdown_storage.py`` ``_file_stem``),
+    and ``WikiPageViewSet.partial_update`` is the route the collaboration server's
+    title sync PATCHes. Without the move, a rename leaves the old file behind and
+    the next body write drops a second one under the new title — two files sharing
+    one ``frontmatter.id``, inside the user's real Obsidian vault.
+
+    ``isolate_markdown_mirror`` (``conftest.py:19-42``) is autouse, so nothing here
+    can reach that vault.
+    """
+
+    @pytest.fixture
+    def linked_page(self, workspace, create_user):
+        """A wiki page that belongs to a project — the mirrorable shape."""
+        project = Project.objects.create(name="镜像项目", identifier="MIR", workspace=workspace, created_by=create_user)
+        ProjectMember.objects.create(project=project, member=create_user, workspace=workspace, role=20)
+        page = Page.objects.create(
+            workspace=workspace,
+            name="镜像前的标题",
+            owned_by=create_user,
+            access=Page.PUBLIC_ACCESS,
+            is_global=True,
+        )
+        ProjectPage.objects.create(project=project, page=page, workspace=workspace)
+        return page
+
+    @pytest.mark.django_db
+    def test_rename_moves_the_mirrored_file(self, session_client, workspace, linked_page, isolate_markdown_mirror):
+        # 先用正文端点造出镜像 —— 真实顺序就是「先写正文，再改标题」。
+        written = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{linked_page.id}/description/",
+            {"description_html": "<p>镜像我</p>"},
+            format="json",
+        )
+        assert written.status_code == status.HTTP_200_OK
+
+        before = list(isolate_markdown_mirror.rglob("*.md"))
+        assert len(before) == 1, f"正文端点应当写出恰好一份镜像：{before!r}"
+        old_file = before[0]
+        old_text = old_file.read_text(encoding="utf-8")
+        assert "镜像我" in old_text
+
+        renamed = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{linked_page.id}/",
+            {"name": "改名后的标题"},
+            format="json",
+        )
+
+        assert renamed.status_code == status.HTTP_200_OK
+        linked_page.refresh_from_db()
+        assert linked_page.name == "改名后的标题"
+
+        after = list(isolate_markdown_mirror.rglob("*.md"))
+        # 关键的一行：不断它的话，「搬了」和「没搬」都只有一份文件 —— 测试会空转。
+        assert not old_file.exists(), "改名前的镜像文件必须被搬走，不能留在原路径"
+        assert len(after) == 1, f"镜像应当被搬移而不是复制出第二份：{after!r}"
+        # 同一份内容换了路径，而不是在别处新写了一个空文件。
+        assert after[0].read_text(encoding="utf-8") == old_text
+
+    @pytest.mark.django_db
+    def test_rename_without_a_project_writes_nothing(
+        self, session_client, workspace, wiki_page, isolate_markdown_mirror
+    ):
+        """No project link -> no directory -> skip and log, the same ruling as the write.
+
+        Guards the failure direction (design §2.3c): an implementation that guessed
+        a directory would put a file somewhere the user did not ask for. The rename
+        itself must still succeed — a page whose markdown cannot be mirrored is
+        still a page the user renamed.
+        """
+        response = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{wiki_page.id}/",
+            {"name": "无项目也改名"},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        wiki_page.refresh_from_db()
+        assert wiki_page.name == "无项目也改名"
+        assert list(isolate_markdown_mirror.rglob("*.md")) == []

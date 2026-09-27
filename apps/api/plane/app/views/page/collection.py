@@ -26,6 +26,7 @@ from plane.app.serializers import (
 )
 from plane.db.models import Page, PageCollection, ProjectPage
 from plane.utils.error_codes import ERROR_CODES
+from plane.utils.markdown_storage import move_page_markdown
 from plane.utils.wiki_collections import GENERAL, PREDEFINED_KEYS, resolve_collection_key
 
 # Local imports
@@ -35,7 +36,7 @@ from ..base import BaseViewSet
 # prohibition (`views/page/base.py` carries unrelated uncommitted work).
 # Importing its mirror helpers rather than copying them keeps one definition of
 # how a page becomes markdown — do not "fix" this by inlining a copy.
-from .base import _page_ancestors, _write_page_mirror
+from .base import _page_ancestors, _project_name, _write_page_mirror
 
 logger = logging.getLogger(__name__)
 
@@ -232,7 +233,7 @@ class WikiPageViewSet(BaseViewSet):
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
     def partial_update(self, request, slug, page_id):
-        """换集合（collection_id）与/或写正文（description_*），两组可同时给。"""
+        """换集合（collection_id）、改标题（name）与/或写正文（description_*），可任意组合。"""
         page = get_object_or_404(_wiki_page_queryset(request, slug), pk=page_id)
 
         serializer = WikiPageUpdateSerializer(page, data=request.data, partial=True)
@@ -247,7 +248,20 @@ class WikiPageViewSet(BaseViewSet):
             if target is None:
                 return Response({"error": "Collection not found."}, status=status.HTTP_404_NOT_FOUND)
 
+        # 旧名必须在 save() **之前**记下来：serializer.update() 就地改 instance，
+        # save() 之后 page.name 已经是新值，就再也算不出旧路径了。
+        old_name = page.name
+
         page = serializer.save()
+
+        # 改名 = 镜像文件换路径，与项目页路径同一条裁定（views/page/base.py:260-269）。
+        # 不搬的话：DB 改了名、vault 里留下旧文件，下一次正文写入按新标题再写一份 ——
+        # 同一个 frontmatter.id 出现两份。协同服务器的标题同步会对这个端点做防抖 PATCH，
+        # 所以这是常规路径，不是边角。搬移是尽力而为（move_page_markdown 内部吞 OSError），
+        # 失败方向永远是「文件没搬」而不是「改名失败」。
+        if page.name != old_name:
+            _move_wiki_page_mirror(page, old_name)
+
         return Response(WikiPageDetailSerializer(page).data, status=status.HTTP_200_OK)
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
@@ -265,8 +279,8 @@ class WikiPageViewSet(BaseViewSet):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-def _mirror_wiki_page(page, description_html):
-    """Mirror a wiki page's body to a local ``.md``; skip if it has no project.
+def _wiki_page_project_id(page):
+    """Resolve the project a wiki page mirrors into, or ``None`` when it has none.
 
     ``_write_page_mirror`` is project-scoped by construction: it resolves a
     directory name through ``Project.objects.filter(pk=project_id)``, and
@@ -280,18 +294,28 @@ def _mirror_wiki_page(page, description_html):
     and archived pages from inclusion, so a public page belonging to no project
     can be included in the wiki. The ruling (design §2.3c, 2026-09-27) is to
     skip and log — the failure direction is "no file", never "a file in the
-    wrong place".
+    wrong place". The write and the move both honour it, which is why they
+    share this resolver instead of each deciding for itself.
 
     Multi-project pages: a page may belong to several projects. ``.first()``
     picks an arbitrary one, which is fine while the data is 1:1 (it is today:
     3 pages, 1 project) but is a real decision the day it is not. Noted here
     rather than solved, because Phase 1B has nothing to base the choice on.
     """
-    project_id = (
+    return (
         ProjectPage.objects.filter(page_id=page.id, deleted_at__isnull=True)
         .values_list("project_id", flat=True)
         .first()
     )
+
+
+def _mirror_wiki_page(page, description_html):
+    """Mirror a wiki page's body to a local ``.md``; skip if it has no project.
+
+    See ``_wiki_page_project_id`` for why a project-less page is skipped
+    rather than guessed at.
+    """
+    project_id = _wiki_page_project_id(page)
 
     if project_id is None:
         logger.warning(
@@ -308,6 +332,41 @@ def _mirror_wiki_page(page, description_html):
         page.name,
         _page_ancestors(page.parent_id),
         description_html,
+    )
+
+
+def _move_wiki_page_mirror(page, old_name):
+    """Move a wiki page's ``.md`` after a rename; skip if it has no project.
+
+    The mirror path is name-derived, so a rename that is not carried into the
+    filesystem leaves the old file behind and lets the next body write create a
+    second one under the new title — two files, one ``frontmatter.id``.
+
+    The wiki metadata route never reparents, so old and new ancestors are the
+    same list; both are passed because that is ``move_page_markdown``'s
+    contract. Best-effort like every other mirror call: it swallows ``OSError``
+    and logs, so a read-only vault cannot fail a rename.
+    """
+    project_id = _wiki_page_project_id(page)
+
+    if project_id is None:
+        logger.warning(
+            "Skipping markdown mirror move for wiki page %s: no live ProjectPage link. "
+            "MARKDOWN_STORAGE_PATH points at the projects directory, so a page with no "
+            "project has no folder to mirror into.",
+            page.id,
+        )
+        return
+
+    ancestors = _page_ancestors(page.parent_id)
+    move_page_markdown(
+        project_name=_project_name(project_id),
+        project_id=str(project_id),
+        old_ancestors=ancestors,
+        new_ancestors=ancestors,
+        page_id=str(page.id),
+        old_name=old_name,
+        new_name=page.name,
     )
 
 
