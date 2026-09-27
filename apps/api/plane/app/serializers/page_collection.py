@@ -12,16 +12,34 @@ from .base import BaseSerializer
 from .page import PageBinaryUpdateSerializer
 
 
+# 集合名的长度上限。前端同口径的文案是 `wiki_collections.form.name_max_length`，
+# 本仓 `common.title_should_be_less_than_255_characters` 也用同一措辞配 255 ——
+# 按仓库既有约定读作「最多 255」。见设计 §3.1b 的说明。
+MAX_NAME_LENGTH = 255
+
+
 class PageCollectionSerializer(BaseSerializer):
     """用户自建集合。
 
     只暴露元信息，不暴露页面列表 —— 页面走 /wiki-pages/ 端点。
+
+    写契约**精确等于** `{name}`：`sort_order` 收成了只读，模型上也没有别的可写字段。
     """
+
+    # 显式声明，而不是靠模型的 `TextField(blank=True)` 派生：那样 DRF 会给出
+    # `required=False` + `allow_blank=True`，空名字能一路写进库。
+    # **不要**改回 `validate_name`** —— 它挡不住缺键的请求：DRF 只在字段出现在载荷里时
+    # 才跑 `validate_<field>`，一个 `{}` 会绕过它建出 `name=""` 的集合，而前端
+    # `form.name_required` 要求非空。`allow_blank=False` 让「缺键」「空串」都变 400，
+    # 「纯空白」则由 DRF 默认的 `trim_whitespace=True` 先切成 `""` 再被拒。
+    name = serializers.CharField(max_length=MAX_NAME_LENGTH, allow_blank=False)
 
     class Meta:
         model = PageCollection
         fields = ["id", "name", "sort_order", "created_at"]
-        read_only_fields = ["id", "created_at"]
+        # `sort_order` 收成只读：没有任何调用方需要写它，模型有默认值
+        # （`Page.DEFAULT_SORT_ORDER` = 65535.0）。收窄之后没有第二个可写字段可以漂。
+        read_only_fields = ["id", "sort_order", "created_at"]
 
 
 class WikiPageSerializer(serializers.ModelSerializer):

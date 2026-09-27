@@ -24,7 +24,7 @@ from plane.app.serializers import (
     WikiPageSerializer,
     WikiPageUpdateSerializer,
 )
-from plane.db.models import Page, PageCollection, ProjectPage
+from plane.db.models import Page, PageCollection, ProjectPage, Workspace
 from plane.utils.error_codes import ERROR_CODES
 from plane.utils.markdown_storage import move_page_markdown
 from plane.utils.wiki_collections import GENERAL, PREDEFINED_KEYS, resolve_collection_key
@@ -98,6 +98,29 @@ class PageCollectionViewSet(BaseViewSet):
                 "collections": data,
             },
             status=status.HTTP_200_OK,
+        )
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
+    def create(self, request, slug):
+        """新建集合。
+
+        权限**不含 GUEST** —— 承设计 §4.2 对写端点的收窄裁定（读端点 `list` 保留 GUEST）。
+        """
+        # `owned_by` 是模型上的必填 FK，而序列化器的写契约只有 `name` ——
+        # 归属只能在这里给，别把它加进序列化器（那会让调用方能伪造别人的 owned_by）。
+        workspace = get_object_or_404(Workspace, slug=slug)
+
+        serializer = PageCollectionSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        collection = serializer.save(workspace=workspace, owned_by=request.user)
+
+        # 带上 `page_count`，与 `list` 里的每一行同形 —— 前端拿到 201 就能直接塞进侧栏。
+        # 新集合必然是 0：它刚建出来，还没有任何页面能指向它。
+        return Response(
+            {**PageCollectionSerializer(collection).data, "page_count": 0},
+            status=status.HTTP_201_CREATED,
         )
 
 

@@ -263,7 +263,7 @@ urlpatterns = [
     # wiki page collections
     path(
         "workspaces/<str:slug>/page-collections/",
-        PageCollectionViewSet.as_view({"get": "list"}),
+        PageCollectionViewSet.as_view({"get": "list", "post": "create"}),
         name="workspace-page-collections",
     ),
     # wiki pages: detail / include / move / remove
