@@ -86,6 +86,33 @@ class TestWikiPageCreateWithoutAProject:
         listed = session_client.get(f"/api/workspaces/{workspace.slug}/wiki-pages/", {"collection": "general"})
         assert [str(row["id"]) for row in listed.data] == [str(page.id)]
 
+        # 前端的落点是 `router.push('/wiki/<id>')`（`wiki/sidebar.tsx` 的新建流程），
+        # 浏览器随即打**详情**路由。列表里查得到、详情取不到，用户看到的就是
+        # 「建完跳过去 404」。详情与列表是**两套**过滤条件（`_wiki_page_queryset`
+        # 走 `WikiPageViewSet.retrieve`），所以必须分开锁。
+        detail = session_client.get(f"/api/workspaces/{workspace.slug}/wiki-pages/{page.id}/")
+        assert detail.status_code == status.HTTP_200_OK
+        assert str(detail.data["id"]) == str(page.id)
+
+    @pytest.mark.django_db
+    def test_explicit_null_project_id_is_accepted(self, session_client, workspace):
+        """显式传 ``project_id: null`` 也建得出来 —— 与"压根不传这个键"是两条输入。
+
+        ``project_id`` 是 ``UUIDField(required=False, allow_null=True)``；少了
+        ``allow_null``，一个显式的 null 会被 DRF 拒成 400，尽管它的语义就是"没有项目"。
+        落库后走的是 ``is not None`` 的 **False** 分支：不建 ``ProjectPage`` 关联行
+        （``WikiPageCreateSerializer.create`` 与 ``WikiPageViewSet.create_page``
+        两处都以同一个 ``is not None`` 分叉，这条输入把它们一起走通了）。
+        """
+        response = session_client.post(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/create/", {"project_id": None}, format="json"
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        page = Page.objects.get(pk=response.data["id"])
+        assert page.projects.count() == 0
+        assert ProjectPage.objects.filter(page_id=page.id).count() == 0
+
     @pytest.mark.django_db
     def test_blank_name_is_accepted(self, session_client, workspace):
         """空名字合法 —— ``Page.name`` 是 ``TextField(blank=True)``，i18n 有
@@ -130,6 +157,12 @@ class TestWikiPageCreateWithoutAProject:
 
         general = session_client.get(f"/api/workspaces/{workspace.slug}/wiki-pages/", {"collection": "general"})
         assert general.data == []
+
+        # 私有页同样要能被**详情**路由取到 —— 前端建完就跳 `/wiki/<id>`，
+        # 而 `private` 是靠 `access=1` 派生的分区，详情那条 queryset 单独判一次。
+        detail = session_client.get(f"/api/workspaces/{workspace.slug}/wiki-pages/{page_id}/")
+        assert detail.status_code == status.HTTP_200_OK
+        assert str(detail.data["id"]) == str(page_id)
 
     @pytest.mark.django_db
     def test_rejects_an_access_value_that_is_not_zero_or_one(self, session_client, workspace):

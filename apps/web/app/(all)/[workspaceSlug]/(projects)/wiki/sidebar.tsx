@@ -116,10 +116,14 @@ export const WikiSidebar = observer(function WikiSidebar() {
    * 侧栏顶部的 `＋ New page`。
    *
    * 落点是 `SidebarWrapper` 的 **`quickActions` 插槽**（`sidebar-wrapper.tsx:26,:72`）——
-   * 它在全仓无人使用，正是为这种"标题下面一行快捷动作"准备的。
+   * 正是为这种"标题下面一行快捷动作"准备的。但它是**共享**插槽，不是本页独占：
+   * Projects 侧栏已经在用它（`(projects)/sidebar.tsx` 的
+   * `quickActions={<SidebarQuickActions />}`），所以在 `sidebar-wrapper.tsx` 里改这个
+   * 槽位的样式或位置，会**同时**改掉 Projects 侧栏 —— 要动它就得两头一起看。
    *
    * 隐藏（**不渲染**）而不是 disabled：一个不解释原因的灰按钮和没有入口一样糟，
-   * 与侧栏 `＋`（`:124`）和顶栏收录按钮同一条口径。
+   * 与侧栏集合组标题里那个 `＋`（打开 `CollectionFormModal`、由
+   * `canManageCollections` 门控）和顶栏收录按钮同一条口径。
    */
   const newPageAction = canCreatePage ? (
     <button
