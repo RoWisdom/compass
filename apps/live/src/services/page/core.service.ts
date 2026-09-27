@@ -19,13 +19,28 @@ export type TUserMention = {
 export abstract class PageCoreService extends APIService {
   protected abstract basePath: string;
 
-  constructor() {
-    super();
+  
+
+  /**
+   * The URL of a page resource, before any sub-resource suffix.
+   *
+   * Project pages live under `${basePath}/pages/<id>/` — the `pages/` segment
+   * is in every project-page route. Workspace (wiki) pages do not have it:
+   * their routes are `/api/workspaces/<slug>/wiki-pages/<id>/`. Making the page
+   * URL a seam instead of inlining the interpolation lets a subclass change
+   * that one segment without copying five method bodies.
+   *
+   * The default is what every existing caller already used, byte for byte —
+   * `ProjectPageService` does not override it, so project-page URLs are
+   * unchanged. `tests/services/page/page-url.test.ts` pins that.
+   */
+  protected pageUrl(pageId: string): string {
+    return `${this.basePath}/pages/${pageId}`;
   }
 
   async fetchDetails(pageId: string): Promise<TPage> {
     try {
-      const response = await this.get(`${this.basePath}/pages/${pageId}/`, {
+      const response = await this.get(`${this.pageUrl(pageId)}/`, {
         headers: this.getHeader(),
       });
       return response?.data as TPage;
@@ -40,7 +55,7 @@ export abstract class PageCoreService extends APIService {
 
   async fetchDescriptionBinary(pageId: string): Promise<Buffer> {
     try {
-      const response = await this.get(`${this.basePath}/pages/${pageId}/description/`, {
+      const response = await this.get(`${this.pageUrl(pageId)}/description/`, {
         headers: {
           ...this.getHeader(),
           "Content-Type": "application/octet-stream",
@@ -88,7 +103,7 @@ export abstract class PageCoreService extends APIService {
 
     try {
       return await Promise.race([
-        this.patch(`${this.basePath}/pages/${pageId}/`, data, {
+        this.patch(`${this.pageUrl(pageId)}/`, data, {
           headers: this.getHeader(),
           signal: abortSignal,
         })
@@ -117,7 +132,7 @@ export abstract class PageCoreService extends APIService {
 
   async updateDescriptionBinary(pageId: string, data: TDocumentPayload): Promise<any> {
     try {
-      const response = await this.patch(`${this.basePath}/pages/${pageId}/description/`, data, {
+      const response = await this.patch(`${this.pageUrl(pageId)}/description/`, data, {
         headers: this.getHeader(),
       });
       return response?.data as unknown;
@@ -137,7 +152,7 @@ export abstract class PageCoreService extends APIService {
    */
   async fetchUserMentions(pageId: string): Promise<TUserMention[]> {
     try {
-      const response = await this.get(`${this.basePath}/pages/${pageId}/mentions/`, {
+      const response = await this.get(`${this.pageUrl(pageId)}/mentions/`, {
         headers: this.getHeader(),
         params: {
           mention_type: "user_mention",
