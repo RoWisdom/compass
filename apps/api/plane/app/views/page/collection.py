@@ -103,8 +103,12 @@ class WikiPageViewSet(BaseViewSet):
         # 收录弹窗要的是「还没收录的」页面 —— 同一个端点把过滤方向反过来，
         # 于是「未收录」的定义（is_global）在整个仓库里只有一处。
         if request.GET.get("include_candidates") == "true":
+            # 可见性过滤不能省：候选列表把工作区里**所有**未收录页的标题摆给任何成员看，
+            # 别人的私有页也在其中。这条不变量只写在 _visible_page_q 里，凡是
+            # Page 查询都要带上（本文件 docstring 已写明；:87/:215/:390 各有测试锁住）。
             candidates = (
                 Page.objects.filter(workspace__slug=slug, is_global=False)
+                .filter(_visible_page_q(request.user))
                 .select_related("workspace")
                 .select_related("owned_by")
                 .order_by("-updated_at")

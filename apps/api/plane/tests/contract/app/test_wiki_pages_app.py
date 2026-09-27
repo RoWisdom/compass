@@ -585,7 +585,9 @@ class TestWikiPageCandidates:
         assert str(wiki_page.id) not in ids
 
     @pytest.mark.django_db
-    def test_candidates_are_workspace_scoped(self, session_client, workspace, other_workspace, create_user):
+    def test_candidates_are_workspace_scoped(
+        self, session_client, workspace, project_page, other_workspace, create_user
+    ):
         """别的工作区的未收录页面不能出现。"""
         foreign = Page.objects.create(
             workspace=other_workspace,
@@ -598,4 +600,27 @@ class TestWikiPageCandidates:
         response = session_client.get(f"/api/workspaces/{workspace.slug}/wiki-pages/?include_candidates=true")
 
         ids = [item["id"] for item in response.data]
+        # 先断言列表非空：否则下面那句 not in 在空列表上恒真，这条测试就是空的。
+        assert str(project_page.id) in ids
         assert str(foreign.id) not in ids
+
+    @pytest.mark.django_db
+    def test_candidates_hide_other_users_private_pages(self, session_client, workspace, other_user, project_page):
+        """别人的**私有**未收录页不能出现在候选里。
+
+        与 :87（列表 private 分区）、:215（POST 收录）、:390（详情页）三条同款不变量：
+        私有页面必须在 _visible_page_q 这一处滤掉，任何 action 都不能绕过去。
+        """
+        other_private = Page.objects.create(
+            workspace=workspace,
+            name="同事的私有未收录页",
+            owned_by=other_user,
+            access=Page.PRIVATE_ACCESS,
+            is_global=False,
+        )
+
+        response = session_client.get(f"/api/workspaces/{workspace.slug}/wiki-pages/?include_candidates=true")
+
+        ids = [item["id"] for item in response.data]
+        assert str(project_page.id) in ids
+        assert str(other_private.id) not in ids
