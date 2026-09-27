@@ -85,6 +85,7 @@ export const coreRoutes: RouteConfigEntry[] = [
         // Wiki
         layout("./(all)/[workspaceSlug]/(projects)/wiki/layout.tsx", [
           route(":workspaceSlug/wiki", "./(all)/[workspaceSlug]/(projects)/wiki/page.tsx"),
+          route(":workspaceSlug/wiki/:pageId", "./(all)/[workspaceSlug]/(projects)/wiki/[pageId]/page.tsx"),
         ]),
 
         // Notifications
