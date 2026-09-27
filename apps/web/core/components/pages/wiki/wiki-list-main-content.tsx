@@ -16,6 +16,8 @@ import { AddExistingPageModal } from "@/components/pages/wiki/add-existing-page-
 // hooks
 import { EPageStoreType, usePageStore } from "@/hooks/store";
 import { useUserPermissions } from "@/hooks/store/user";
+// services
+import { canIncludeIntoCollection } from "@/services/page";
 
 type Props = {
   collection: string;
@@ -37,6 +39,10 @@ export const WikiListMainContent = observer(function WikiListMainContent(props: 
     [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
     EUserPermissionsLevel.WORKSPACE
   );
+  // 只有 `general` 与自建集合能接收收录。`private`/`shared`/`archived` 是**派生**分区：
+  // 页面落在哪儿由 access/archived_at 决定，不由 collection_id 决定（见
+  // `canIncludeIntoCollection` 的注释）。在那三个分区里给收录入口，用户选中的页面会跑到别处去。
+  const canIncludeHere = canIncludeIntoCollection(collection);
 
   if (loader === "init-loader") return <PageLoader />;
 
@@ -47,20 +53,26 @@ export const WikiListMainContent = observer(function WikiListMainContent(props: 
           assetKey="page"
           title={t("project_empty_state.pages.title")}
           description={t("project_empty_state.pages.description")}
-          actions={[
-            {
-              label: t("wiki_collections.menu.add_existing_page"),
-              onClick: () => setIsAddExistingModalOpen(true),
-              variant: "primary",
-              disabled: !canIncludePages,
-            },
-          ]}
+          actions={
+            canIncludeHere
+              ? [
+                  {
+                    label: t("wiki_collections.menu.add_existing_page"),
+                    onClick: () => setIsAddExistingModalOpen(true),
+                    variant: "primary",
+                    disabled: !canIncludePages,
+                  },
+                ]
+              : undefined
+          }
         />
-        <AddExistingPageModal
-          isOpen={isAddExistingModalOpen}
-          collection={collection}
-          handleClose={() => setIsAddExistingModalOpen(false)}
-        />
+        {canIncludeHere && (
+          <AddExistingPageModal
+            isOpen={isAddExistingModalOpen}
+            collection={collection}
+            handleClose={() => setIsAddExistingModalOpen(false)}
+          />
+        )}
       </>
     );
 
@@ -79,20 +91,26 @@ export const WikiListMainContent = observer(function WikiListMainContent(props: 
           // 且全 apps/web 无人消费 —— 不新增文案。
           title={t("wiki_collections.list.no_pages_title")}
           description={t("wiki_collections.list.no_pages_description")}
-          actions={[
-            {
-              label: t("wiki_collections.menu.add_existing_page"),
-              onClick: () => setIsAddExistingModalOpen(true),
-              variant: "primary",
-              disabled: !canIncludePages,
-            },
-          ]}
+          actions={
+            canIncludeHere
+              ? [
+                  {
+                    label: t("wiki_collections.menu.add_existing_page"),
+                    onClick: () => setIsAddExistingModalOpen(true),
+                    variant: "primary",
+                    disabled: !canIncludePages,
+                  },
+                ]
+              : undefined
+          }
         />
-        <AddExistingPageModal
-          isOpen={isAddExistingModalOpen}
-          collection={collection}
-          handleClose={() => setIsAddExistingModalOpen(false)}
-        />
+        {canIncludeHere && (
+          <AddExistingPageModal
+            isOpen={isAddExistingModalOpen}
+            collection={collection}
+            handleClose={() => setIsAddExistingModalOpen(false)}
+          />
+        )}
       </>
     );
 

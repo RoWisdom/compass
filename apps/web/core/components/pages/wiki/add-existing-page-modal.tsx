@@ -17,6 +17,8 @@ import { EModalWidth, Input, ModalCore } from "@plane/ui";
 import { getPageName } from "@plane/utils";
 // hooks
 import { EPageStoreType, usePageStore } from "@/hooks/store";
+// services
+import { isPredefinedCollectionKey } from "@/services/page";
 
 type Props = {
   isOpen: boolean;
@@ -35,14 +37,21 @@ export const AddExistingPageModal = observer(function AddExistingPageModal(props
   // plane hooks
   const { t } = useTranslation();
   // store hooks
-  const { candidates, includePages, fetchCandidates } = usePageStore(EPageStoreType.WORKSPACE);
+  const { candidates, includePages, fetchCandidates, fetchPagesList } = usePageStore(EPageStoreType.WORKSPACE);
 
   // 候选 = 本工作区**未收录**的页面。收录是唯一入口（设计决策 #1），
   // 所以这里只能从已有页面里挑，不能在 Wiki 里凭空造。
-  const { isLoading } = useSWR(
+  const { isLoading, mutate: revalidateCandidates } = useSWR(
     isOpen && workspaceSlug ? `WIKI_CANDIDATES_${workspaceSlug}` : null,
     isOpen && workspaceSlug ? () => fetchCandidates(workspaceSlug) : null
   );
+
+  // 预置分区键（"general" 等）**不是 uuid**，原样传给后端会被 `collection_id` 的 UUIDField
+  // 拒掉、整个请求 400（`apps/api/plane/app/serializers/page_collection.py:61`：
+  // `collection_id = serializers.UUIDField(required=False, allow_null=True)`）。
+  // 传 null 即「落回 general」—— 正是 general 分区的语义。其余预置分区走不到这里
+  // （父组件已关掉它们的收录入口），但这个映射本身是全的：任何取值都拼不出非法请求。
+  const collectionId = isPredefinedCollectionKey(collection) ? null : collection;
 
   const query = searchQuery.trim().toLowerCase();
   const filteredCandidates = candidates.filter((page) => (page.name ?? "").toLowerCase().includes(query));
@@ -56,7 +65,19 @@ export const AddExistingPageModal = observer(function AddExistingPageModal(props
     if (!workspaceSlug || selectedPageIds.length === 0) return;
     setIsSubmitting(true);
     try {
-      const { included } = await includePages(workspaceSlug, selectedPageIds, collection);
+      const { included } = await includePages(workspaceSlug, selectedPageIds, collectionId);
+      // 收录改的是页面的 `is_global`，而列表数据在 store 的
+      // `data`/`collectionPageIds` 里（`workspace-page.store.ts:170-205`），列表页的 SWR key
+      // 只含分区、收录后不变 —— 不重拉的话，刚收录的页面要手动刷新才出现。
+      // `collection` 就是当前分区键，正是 `fetchPagesList` 要的那个参数。
+      //
+      // 这两下都是**尽力而为的刷新，不 await、失败也不报错**：收录这时已经落库了，
+      // 让刷新失败把它变成「Error!」toast 是撒谎。store 自己会把失败记进 `this.error`。
+      fetchPagesList(workspaceSlug, collection).catch(() => {});
+      // 候选缓存同理：不失效的话，重开弹窗还能勾到刚收录过的页面，后端会静默跳过
+      // （`included` 小于勾选数）。必须在 `handleClose()` **之前**调用 —— 关掉之后
+      // SWR key 变成 null，mutate 就没东西可刷了。
+      revalidateCandidates();
       setToast({
         type: TOAST_TYPE.SUCCESS,
         // `{count}` 必须传：这个键是 ICU 带复数的串，不传就渲染出原始 ICU 文本。

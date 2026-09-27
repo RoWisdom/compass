@@ -624,3 +624,27 @@ class TestWikiPageCandidates:
         ids = [item["id"] for item in response.data]
         assert str(project_page.id) in ids
         assert str(other_private.id) not in ids
+
+    @pytest.mark.django_db
+    def test_candidates_exclude_own_private_pages(self, session_client, workspace, create_user, project_page):
+        """**自己**的私有未收录页也不做候选。
+
+        私有页的归属由 `access` 决定，不由 `collection_id` 决定：`resolve_collection_key`
+        的优先级是 archived > private > 用户集合 > general，所以即便带着 collection_id 收录，
+        它也会落到 private 分区，而不是用户当时所在的那个分区。摆进候选只会让用户以为
+        「收录到这里」，实际去了别处 —— 与 `test_candidates_hide_other_users_private_pages`
+        是同一处过滤的两个方向，少了哪一条都锁不住 `.exclude(access=PRIVATE_ACCESS)`。
+        """
+        own_private = Page.objects.create(
+            workspace=workspace,
+            name="我自己的私有未收录页",
+            owned_by=create_user,
+            access=Page.PRIVATE_ACCESS,
+            is_global=False,
+        )
+
+        response = session_client.get(f"/api/workspaces/{workspace.slug}/wiki-pages/?include_candidates=true")
+
+        ids = [item["id"] for item in response.data]
+        assert str(project_page.id) in ids
+        assert str(own_private.id) not in ids

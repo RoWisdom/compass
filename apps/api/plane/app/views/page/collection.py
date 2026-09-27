@@ -109,6 +109,11 @@ class WikiPageViewSet(BaseViewSet):
             candidates = (
                 Page.objects.filter(workspace__slug=slug, is_global=False)
                 .filter(_visible_page_q(request.user))
+                # 私有页**不进候选**，自己的也不进。候选摆的是「收录到这个分区」，
+                # 而私有页的归属由 access 决定（resolve_collection_key 的优先级是
+                # archived > private > 用户集合 > general）—— 收录后它必落 private 分区，
+                # 不是用户当时所在的那个。摆出来只会让人以为「收录到这里」。
+                .exclude(access=Page.PRIVATE_ACCESS)
                 .select_related("workspace")
                 .select_related("owned_by")
                 .order_by("-updated_at")

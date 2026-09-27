@@ -10,13 +10,40 @@ import type { TDocumentPayload, TPage } from "@plane/types";
 // services
 import { APIService } from "@/services/api.service";
 
-/** 四个预置分区。名字由前端从 i18n 的 `wiki_collections.predefined.*` 取，后端只给 key 与计数。 */
-export type TPredefinedCollectionKey = "general" | "private" | "shared" | "archived";
+/**
+ * 四个预置分区键。名字由前端从 i18n 的 `wiki_collections.predefined.*` 取，后端只给 key 与计数。
+ *
+ * **与后端 `apps/api/plane/utils/wiki_collections.py` 的 `PREDEFINED_KEYS` 必须一致。**
+ * 中间没有共享常量的通道，只能各写一份 —— 后端那边同样把 `PRIVATE_ACCESS` 手抄了一份并用
+ * `tests/unit/utils/test_wiki_collections.py` 锁住，这里沿用同一套办法。
+ * 类型由数组派生（而不是各写一遍），至少保证本文件内部不会漂移。
+ */
+export const PREDEFINED_COLLECTION_KEYS = ["general", "private", "shared", "archived"] as const;
+
+export type TPredefinedCollectionKey = (typeof PREDEFINED_COLLECTION_KEYS)[number];
 
 export type TPredefinedCollection = {
   key: TPredefinedCollectionKey;
   page_count: number;
 };
+
+/** `collection` 是预置分区键，还是用户自建集合的 uuid？ */
+export const isPredefinedCollectionKey = (collection: string): collection is TPredefinedCollectionKey =>
+  (PREDEFINED_COLLECTION_KEYS as readonly string[]).includes(collection);
+
+/**
+ * 这个分区能不能接收「收录」动作？只有两类可以：
+ *
+ * - `general` —— 预置分区里唯一归属明确的：`collection_id` 传 `null` 即落回 general；
+ * - 用户自建集合 —— 传它自己的 uuid。
+ *
+ * `private` / `shared` / `archived` 是**派生**分区：页面落在哪里由 `access` / `archived_at`
+ * 决定，不由 `collection_id` 决定（后端 `resolve_collection_key` 的优先级是
+ * archived > private > 用户集合 > general）。在这三个分区里给收录入口，用户选中的页面会
+ * 跑到别处去，所以干脆不给。
+ */
+export const canIncludeIntoCollection = (collection: string): boolean =>
+  !isPredefinedCollectionKey(collection) || collection === "general";
 
 /** 用户自建集合。 */
 export type TPageCollection = {

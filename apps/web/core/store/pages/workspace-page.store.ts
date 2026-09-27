@@ -248,7 +248,8 @@ export class WorkspacePageStore implements IWorkspacePageStore {
   };
 
   /**
-   * 收录已有页面。收录后重新拉一次集合计数与当前分区。
+   * 收录已有页面。收录后重新拉一次集合计数；当前分区的列表由调用方用 `fetchPagesList`
+   * 重拉（见 `add-existing-page-modal.tsx`）—— 本方法不知道调用方在看哪个分区。
    *
    * `collectionId` 必填，理由同 service 层：省略会被后端当成「放回 general」，
    * 调用方必须自己表态。
