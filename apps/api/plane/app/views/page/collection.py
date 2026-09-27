@@ -198,7 +198,10 @@ class WikiPageViewSet(BaseViewSet):
 
         # 集合必须是本工作区的 —— 与 partial_update 同一套校验。缺了它，别家的
         # 集合 id 会被直接写进 FK（页面在本工作区落不进任何分区，等于从侧栏
-        # 消失），不存在的 id 则在提交时炸成 500
+        # 消失）；不存在的 id **不会**炸成 500（原先这里这么写，是错的）——
+        # 外键约束是 deferrable 的，请求照样以 200 返回、坏写入到事务收尾才炸，
+        # 生产走 autocommit 时则由 handle_exception 兜成 400
+        # {"error": "The payload is not valid"}（views/base.py:70-84）
         collection = None
         if collection_id is not None:
             collection = PageCollection.objects.filter(id=collection_id, workspace__slug=slug).first()

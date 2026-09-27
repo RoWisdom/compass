@@ -285,11 +285,18 @@ class TestWikiPageDescriptionEndpoint:
 
     @pytest.mark.django_db
     def test_patch_404s_for_an_unknown_collection(self, session_client, workspace, wiki_page):
-        """不存在的 collection_id 必须 404，而不是一路落到 DB 炸成 500。
+        """不存在的 collection_id 必须 404，而不是一路落到 DB。
 
         ``PageCollection`` 是外键：给一个随机 UUID 过得了序列化层（它只做语法校验），
-        真正拦得住它的只有这里的前置查。修复前它撞到提交时的 IntegrityError，
-        调用方拿到的是与字段无关的兜底错误 —— 看不出是哪个字段的问题。
+        真正拦得住它的只有这里的前置查。
+
+        缺这条前置查时**不会**看到 500（这里原先这么写，是错的）：外键约束是
+        deferrable 的，请求会以 **200** 正常返回、坏写入直到事务收尾才炸
+        （测试里是 teardown 的 ``SET CONSTRAINTS ALL IMMEDIATE``）；生产走 autocommit
+        时则由 ``BaseViewSet.handle_exception`` 把 ``IntegrityError`` 兜成与字段无关的
+        400 ``{"error": "The payload is not valid"}``。
+        两条路都不告诉调用方是哪个字段的问题，而第一条**看起来像写入成功了** ——
+        比 500 更难发现，所以这条守卫比它看上去更必要。
         """
         response = session_client.patch(
             f"/api/workspaces/{workspace.slug}/wiki-pages/{wiki_page.id}/description/",
@@ -301,6 +308,29 @@ class TestWikiPageDescriptionEndpoint:
         assert response.data["error"] == "Collection not found."
         wiki_page.refresh_from_db()
         assert wiki_page.collection_id is None
+
+    @pytest.mark.django_db
+    def test_patch_writes_a_collection_from_this_workspace(self, session_client, workspace, wiki_page, create_user):
+        """本工作区的 collection_id 必须**写进去**（200）。
+
+        这条是上面两条 404 的**对照组**：缺了它，一个把守卫写成「只要给了
+        collection_id 就 404」的**过火**实现能让那两条全绿 —— 它们只证明「该拒的拒了」，
+        证明不了「该收的收了」。守卫必须是**按条件**拒绝，而不是无条件拒绝。
+
+        断言落在「FK 真的写进去了」，不是只看 200：只看状态码对一个
+        「200 但什么都没写」的实现同样成立。
+        """
+        mine = PageCollection.objects.create(workspace=workspace, name="本家的集合", owned_by=create_user)
+
+        response = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{wiki_page.id}/description/",
+            {"collection_id": str(mine.id)},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        wiki_page.refresh_from_db()
+        assert wiki_page.collection_id == mine.id
 
     @pytest.mark.django_db
     def test_patch_403s_for_a_guest(self, guest_client, workspace, wiki_page):
