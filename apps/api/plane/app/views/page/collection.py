@@ -2,8 +2,12 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
+# Python imports
+import logging
+
 # Django imports
 from django.db.models import Q
+from django.http import StreamingHttpResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
@@ -20,11 +24,20 @@ from plane.app.serializers import (
     WikiPageSerializer,
     WikiPageUpdateSerializer,
 )
-from plane.db.models import Page, PageCollection
+from plane.db.models import Page, PageCollection, ProjectPage
+from plane.utils.error_codes import ERROR_CODES
 from plane.utils.wiki_collections import GENERAL, PREDEFINED_KEYS, resolve_collection_key
 
 # Local imports
 from ..base import BaseViewSet
+
+# READ-ONLY import from a sibling module that is under a HARD NO-WRITE
+# prohibition (`views/page/base.py` carries unrelated uncommitted work).
+# Importing its mirror helpers rather than copying them keeps one definition of
+# how a page becomes markdown — do not "fix" this by inlining a copy.
+from .base import _page_ancestors, _write_page_mirror
+
+logger = logging.getLogger(__name__)
 
 
 def _visible_page_q(user):
@@ -250,3 +263,116 @@ class WikiPageViewSet(BaseViewSet):
         # 同 create：QuerySet.update() 绕过 auto_now，updated_at 要显式传。
         Page.objects.filter(id=page.id).update(is_global=False, collection=None, updated_at=timezone.now())
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+def _mirror_wiki_page(page, description_html):
+    """Mirror a wiki page's body to a local ``.md``; skip if it has no project.
+
+    ``_write_page_mirror`` is project-scoped by construction: it resolves a
+    directory name through ``Project.objects.filter(pk=project_id)``, and
+    ``MARKDOWN_STORAGE_PATH`` points at the projects folder itself
+    (``…/ObsidianVault/2-项目``). A page with no live ``ProjectPage`` link
+    therefore has **no directory to be written into** — not "we have not
+    written it yet", but "there is nowhere to put it". Guessing a location
+    would put a file somewhere the user did not ask for.
+
+    Such pages are reachable: ``WikiPageViewSet.create`` only excludes private
+    and archived pages from inclusion, so a public page belonging to no project
+    can be included in the wiki. The ruling (design §2.3c, 2026-09-27) is to
+    skip and log — the failure direction is "no file", never "a file in the
+    wrong place".
+
+    Multi-project pages: a page may belong to several projects. ``.first()``
+    picks an arbitrary one, which is fine while the data is 1:1 (it is today:
+    3 pages, 1 project) but is a real decision the day it is not. Noted here
+    rather than solved, because Phase 1B has nothing to base the choice on.
+    """
+    project_id = (
+        ProjectPage.objects.filter(page_id=page.id, deleted_at__isnull=True)
+        .values_list("project_id", flat=True)
+        .first()
+    )
+
+    if project_id is None:
+        logger.warning(
+            "Skipping markdown mirror for wiki page %s: no live ProjectPage link. "
+            "MARKDOWN_STORAGE_PATH points at the projects directory, so a page with no "
+            "project has no folder to mirror into.",
+            page.id,
+        )
+        return
+
+    _write_page_mirror(
+        project_id,
+        page.id,
+        page.name,
+        _page_ancestors(page.parent_id),
+        description_html,
+    )
+
+
+class WikiPageDescriptionViewSet(BaseViewSet):
+    """Wiki 页面的正文二进制端点 —— 协同编辑器（``apps/live``）的数据源。
+
+    ``GET``   → ``application/octet-stream``，回 ``description_binary``
+    ``PATCH`` → 收 ``TDocumentPayload``，走 ``WikiPageUpdateSerializer`` 的正文校验
+
+    这是 ``PagesDescriptionViewSet``（``views/page/base.py``）的 wiki 姊妹端点，
+    但**不是它的逐行复制** —— 副作用被收窄了。项目页那个端点存盘后做三件事：
+    ``_write_page_mirror`` / ``page_transaction.delay`` / ``track_page_version.delay``；
+    这里**只做镜像**。裁定见 ``罗盘-Wiki编辑器-Phase1B-设计.md`` §4：本阶段不攒
+    版本历史与事务记录，通过 Wiki 产生的编辑**不进版本历史，也无法回填**。
+
+    将来若有人来补 wiki 的版本功能，别以为这里漏抄了 —— 是有意不抄的，
+    并且上面那条「不产生版本行」的测试正是为此存在的。
+    """
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    def retrieve(self, request, slug, page_id):
+        page = get_object_or_404(_wiki_page_queryset(request, slug), pk=page_id)
+        binary_data = page.description_binary
+
+        def stream_data():
+            if binary_data:
+                yield binary_data
+            else:
+                yield b""
+
+        response = StreamingHttpResponse(stream_data(), content_type="application/octet-stream")
+        response["Content-Disposition"] = 'attachment; filename="page_description.bin"'
+        return response
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
+    def partial_update(self, request, slug, page_id):
+        page = get_object_or_404(_wiki_page_queryset(request, slug), pk=page_id)
+
+        if page.is_locked:
+            return Response(
+                {
+                    "error_code": ERROR_CODES["PAGE_LOCKED"],
+                    "error_message": "PAGE_LOCKED",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if page.archived_at:
+            return Response(
+                {
+                    "error_code": ERROR_CODES["PAGE_ARCHIVED"],
+                    "error_message": "PAGE_ARCHIVED",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = WikiPageUpdateSerializer(page, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        serializer.save()
+
+        # Mirror the page body as a local Markdown file (best-effort, skips
+        # pages with no project — see _mirror_wiki_page).
+        if request.data.get("description_html"):
+            _mirror_wiki_page(page, request.data.get("description_html"))
+
+        return Response({"message": "Updated successfully"})

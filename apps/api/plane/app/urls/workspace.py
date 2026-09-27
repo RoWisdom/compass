@@ -37,6 +37,7 @@ from plane.app.views import (
     WorkspaceStickyViewSet,
     WorkspaceUserPreferenceViewSet,
     PageCollectionViewSet,
+    WikiPageDescriptionViewSet,
     WikiPageViewSet,
 )
 
@@ -275,5 +276,10 @@ urlpatterns = [
         "workspaces/<str:slug>/wiki-pages/<uuid:page_id>/",
         WikiPageViewSet.as_view({"get": "retrieve", "patch": "partial_update", "delete": "destroy"}),
         name="workspace-wiki-pages",
+    ),
+    path(
+        "workspaces/<str:slug>/wiki-pages/<uuid:page_id>/description/",
+        WikiPageDescriptionViewSet.as_view({"get": "retrieve", "patch": "partial_update"}),
+        name="workspace-wiki-page-description",
     ),
 ]
