@@ -40,7 +40,7 @@ type TPageRootProps = {
   config: TPageRootConfig;
   handlers: TPageRootHandlers;
   page: TPageInstance;
-  storeType: EPageStoreType.PROJECT;
+  storeType: EPageStoreType;
   webhookConnectionParams: TWebhookConnectionQueryParams;
   projectId?: string;
   workspaceSlug: string;

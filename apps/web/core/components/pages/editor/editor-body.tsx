@@ -67,7 +67,7 @@ type Props = {
   webhookConnectionParams: TWebhookConnectionQueryParams;
   projectId?: string;
   workspaceSlug: string;
-  storeType: EPageStoreType.PROJECT;
+  storeType: EPageStoreType;
   customRealtimeEventHandlers?: TCustomEventHandlers;
   extendedEditorProps: TExtendedEditorExtensionsConfig;
   isFetchingFallbackBinary?: boolean;

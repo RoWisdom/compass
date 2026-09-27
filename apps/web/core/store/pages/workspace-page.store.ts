@@ -57,6 +57,7 @@ export interface IWorkspacePageStore {
   ) => Promise<TPageIncludeResponse>;
   moveToCollection: (workspaceSlug: string, pageId: string, collectionId: string | null) => Promise<void>;
   removeFromWiki: (workspaceSlug: string, pageId: string) => Promise<void>;
+  removePage: (params: { pageId: string; shouldSync?: boolean }) => void;
 }
 
 export class WorkspacePageStore implements IWorkspacePageStore {
@@ -97,6 +98,7 @@ export class WorkspacePageStore implements IWorkspacePageStore {
       includePages: action,
       moveToCollection: action,
       removeFromWiki: action,
+      removePage: action,
     });
     this.rootStore = store;
     this.service = new WorkspacePageService();
@@ -325,5 +327,31 @@ export class WorkspacePageStore implements IWorkspacePageStore {
       });
       throw error;
     }
+  };
+
+  /**
+   * 从本地状态摘除一个页面 —— **不发请求**。
+   *
+   * 调用方是 realtime 的 `deleted` 事件（`use-realtime-page-events.tsx:51,118`）：
+   * 服务端已经把页面删了，这里再打一次 DELETE 是错的。这正是它与上面
+   * `removeFromWiki` 的分界 —— 那个是「取消收录 + 调 DELETE 端点」，**页面还在**。
+   * 两者语义不同，不能互相顶替。
+   *
+   * 补这个方法是因为 `useRealtimePageEvents` 无条件解构 `removePage`，而工作区
+   * store 一直没有它：解构得到 `undefined`，`deleted` 事件一到就 TypeError。
+   * 协同服务器是活的，这个事件真会到达 —— 不是假想。
+   *
+   * 顺带说明：`delete-page-modal.tsx:34` 也解构 `removePage`，是同一形状的第二处。
+   * wiki 路径目前够不到它（`dropdowns/actions.tsx:187` 那条
+   * `storeType === EPageStoreType.PROJECT &&` 把项目专属项挡住了），补上只是消除隐患，
+   * **不代表** wiki 的删除流程被验收过。
+   */
+  removePage = ({ pageId }: { pageId: string; shouldSync?: boolean }) => {
+    runInAction(() => {
+      unset(this.data, [pageId]);
+      for (const key of Object.keys(this.collectionPageIds)) {
+        this.collectionPageIds[key] = this.collectionPageIds[key].filter((id) => id !== pageId);
+      }
+    });
   };
 }
