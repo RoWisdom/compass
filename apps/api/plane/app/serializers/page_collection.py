@@ -6,7 +6,7 @@
 from rest_framework import serializers
 
 # Module imports
-from plane.db.models import Page, PageCollection
+from plane.db.models import Page, PageCollection, ProjectPage
 
 from .base import BaseSerializer
 from .page import PageBinaryUpdateSerializer
@@ -185,12 +185,17 @@ class WikiPageCreateSerializer(serializers.Serializer):
     # 传 7 会被 DRF 拒成 400 并列出合法值，不需要自己拼错误信息。
     access = serializers.ChoiceField(choices=Page.ACCESS_CHOICES, required=False, default=Page.PUBLIC_ACCESS)
     collection_id = serializers.UUIDField(required=False, allow_null=True)
+    # 可选。给了就挂到该项目下，并因此**获得一个 vault 落点** —— 镜像路径的第一段
+    # 永远是项目目录。不给就是"无项目页"，永远不会出现在 vault 里（设计 §4 裁定 #1
+    # 的代价，不是缺陷）。归属校验（必须是本工作区的项目）由视图前置查，见
+    # ``WikiPageViewSet.create_page``。
+    project_id = serializers.UUIDField(required=False, allow_null=True)
 
     def create(self, validated_data):
         workspace = self.context["workspace"]
         owned_by = self.context["owned_by"]
 
-        return Page.objects.create(
+        page = Page.objects.create(
             name=validated_data.get("name", ""),
             # 建出来就是空正文。``Page.description_html`` 的列默认值也是 ``"<p></p>"``，
             # 这里显式给一次，好让"建的页是什么样"在这一个地方看得全。
@@ -203,3 +208,20 @@ class WikiPageCreateSerializer(serializers.Serializer):
             access=validated_data.get("access", Page.PUBLIC_ACCESS),
             collection_id=validated_data.get("collection_id"),
         )
+
+        # 挂到项目下 —— 照 ``serializers/page.py:99-105`` 的写法逐字段对齐。
+        # `created_by` / `updated_by` 从 page 上读，不从天真的 `request.user` 读：
+        # `BaseModel.save()` 在插入时把 `created_by` 设成当前用户、`updated_by` **留空**，
+        # 所以这里的 `updated_by_id` 是 None —— 与项目页那条既有路径**逐字一致**，
+        # 不是漏写。
+        project_id = validated_data.get("project_id")
+        if project_id is not None:
+            ProjectPage.objects.create(
+                workspace_id=page.workspace_id,
+                project_id=project_id,
+                page_id=page.id,
+                created_by_id=page.created_by_id,
+                updated_by_id=page.updated_by_id,
+            )
+
+        return page

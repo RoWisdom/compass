@@ -26,7 +26,7 @@ import pytest
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from plane.db.models import Page, PageCollection, User, WorkspaceMember
+from plane.db.models import Page, PageCollection, Project, ProjectPage, User, Workspace, WorkspaceMember
 
 
 @pytest.fixture
@@ -187,4 +187,106 @@ class TestWikiPageCreateWithoutAProject:
         response = guest_client.post(f"/api/workspaces/{workspace.slug}/wiki-pages/create/", {}, format="json")
 
         assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert Page.objects.count() == 0
+
+
+@pytest.fixture
+def project(workspace, create_user):
+    """本工作区的一个项目 —— 可镜像的靶子。"""
+    return Project.objects.create(name="镜像项目", identifier="MIR", workspace=workspace, created_by=create_user)
+
+
+@pytest.fixture
+def other_workspace(db, create_user):
+    """另一个工作区。
+
+    slug 必须与 ``workspace``（``conftest.py:158-162`` 固定为 ``"test-workspace"``）不同。
+
+    **``create_user`` 同时是两个工作区的成员** —— 这是刻意的：``@allow_permission``
+    只在 `workspace` 上放行，所以下面那两条 404 **只可能**来自本端点的归属守卫，
+    不可能来自权限层。少了这一条，测试会通过而其实测的是别的东西。
+    """
+    other = Workspace.objects.create(name="别的工作区", owner=create_user, slug="other-workspace")
+    WorkspaceMember.objects.create(workspace=other, member=create_user, role=20)
+    return other
+
+
+@pytest.fixture
+def other_project(other_workspace, create_user):
+    return Project.objects.create(
+        name="别家的项目", identifier="OTH", workspace=other_workspace, created_by=create_user
+    )
+
+
+@pytest.fixture
+def other_collection(other_workspace, create_user):
+    return PageCollection.objects.create(workspace=other_workspace, name="别家的集合", owned_by=create_user)
+
+
+@pytest.mark.contract
+class TestWikiPageCreateWithAProject:
+    """``project_id`` 可选。给了就挂到项目下，并**第一次真的写出 vault 镜像**。"""
+
+    @pytest.mark.django_db
+    def test_creates_a_page_with_a_project_and_mirrors_it(
+        self, session_client, workspace, project, isolate_markdown_mirror
+    ):
+        response = session_client.post(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/create/",
+            {"name": "有项目的页", "project_id": str(project.id)},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        page = Page.objects.get(pk=response.data["id"])
+
+        # 关联行照 serializers/page.py:99-105 的写法建的。
+        assert ProjectPage.objects.filter(page_id=page.id).count() == 1
+        assert page.projects.count() == 1
+
+        # 镜像根指向「项目」那一层，所以有项目的页面**一定**有落点 ——
+        # 与无项目页那条 skip 正好互为对照。
+        mirrored = list(isolate_markdown_mirror.rglob("*.md"))
+        assert len(mirrored) == 1, f"有项目的页面应当写出恰好一份镜像：{mirrored!r}"
+        # 目录名是**项目名**，不是 id —— 这一行证明它落在了正确的那一层。
+        assert mirrored[0].parent.name == "镜像项目"
+        assert mirrored[0].name == "有项目的页.md"
+        # frontmatter 里的 id 是页面的身份，改名搬移与去重都靠它。
+        assert f"id: {page.id}" in mirrored[0].read_text(encoding="utf-8")
+
+    @pytest.mark.django_db
+    def test_rejects_a_project_from_another_workspace(
+        self, session_client, workspace, other_project, isolate_markdown_mirror
+    ):
+        """别的工作区的项目 id → 404，且**一页都不建**。
+
+        少了这个守卫，别家的项目 id 会被写进 ``ProjectPage``，而镜像路径是项目名派生的
+        —— 等于把正文写到别的工作区的目录里。
+        """
+        response = session_client.post(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/create/",
+            {"project_id": str(other_project.id)},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert Page.objects.count() == 0
+        assert ProjectPage.objects.count() == 0
+        assert list(isolate_markdown_mirror.rglob("*")) == []
+
+    @pytest.mark.django_db
+    def test_rejects_a_collection_from_another_workspace(self, session_client, workspace, other_collection):
+        """别的工作区的集合 id → 404，且**一页都不建**。
+
+        与 ``WikiPageViewSet.create`` / ``partial_update`` 对 ``collection_id`` 的
+        前置查同一条纪律、同一个状态码。守卫排在 ``save()`` 之前，所以 404 路径下
+        一个字段都不会动。
+        """
+        response = session_client.post(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/create/",
+            {"collection_id": str(other_collection.id)},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
         assert Page.objects.count() == 0

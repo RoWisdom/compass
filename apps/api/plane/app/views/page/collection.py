@@ -25,7 +25,7 @@ from plane.app.serializers import (
     WikiPageSerializer,
     WikiPageUpdateSerializer,
 )
-from plane.db.models import Page, PageCollection, ProjectPage, Workspace
+from plane.db.models import Page, PageCollection, Project, ProjectPage, Workspace
 from plane.utils.error_codes import ERROR_CODES
 from plane.utils.markdown_storage import move_page_markdown
 from plane.utils.wiki_collections import GENERAL, PREDEFINED_KEYS, resolve_collection_key
@@ -300,6 +300,27 @@ class WikiPageViewSet(BaseViewSet):
         )
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        # 两个外键都必须属于路径上的那个工作区，否则 404 且**一页都不建**。
+        # 校验排在 save() 之前：404 路径下一个字段都不会动。
+        #
+        # 这里的纪律与 `create` / `partial_update` 对 collection_id 的前置查是同一条
+        # （同一个 404、同一个 body），但**机制不同**，所以本端点的注释自己写一遍，
+        # 不照抄那边关于 deferrable 外键 / autocommit 的长说明 —— 那段解释的是
+        # "字段写入触发了延迟约束"的结局，而这里做的是"建页之前先校验归属"，
+        # 抄过来会变成一份与实际不符的副本。
+        project_id = serializer.validated_data.get("project_id")
+        if project_id is not None:
+            # `Project.objects` 是 `SoftDeletionManager`，已经滤掉 `deleted_at` 非空的行
+            # （`db/mixins.py:56-58`），所以已删除的项目在这里同样落 404。
+            if not Project.objects.filter(id=project_id, workspace=workspace).exists():
+                return Response({"error": "Project not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        collection_id = serializer.validated_data.get("collection_id")
+        if collection_id is not None:
+            target = PageCollection.objects.filter(id=collection_id, workspace__slug=slug).first()
+            if target is None:
+                return Response({"error": "Collection not found."}, status=status.HTTP_404_NOT_FOUND)
 
         page = serializer.save()
 
