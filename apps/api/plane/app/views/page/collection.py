@@ -120,13 +120,24 @@ class WikiPageViewSet(BaseViewSet):
                 # `Page.archived_at` 是 DateField，`isnull=True` 即「没归档」。
                 .filter(archived_at__isnull=True)
                 # 候选只列「我参与的项目」的页面（+ 不属于任何项目的页面）——
-                # 与上游读取路径一致（`views/page/base.py:151-155`）。列表分支不这样收窄：
-                # 已收录页面对全工作区可见是工作区级 Wiki 的设计意图。
-                .filter(Q(projects__project_projectmember__member=request.user) | Q(projects__isnull=True))
+                # 三个条件与上游读取路径逐条一致（`views/page/base.py:151-157`），且写在
+                # **同一条 Q 内**，这样它们绑定到**同一行** join 记录。拆成两次 `.filter()`
+                # 会各自生成一个 join，于是「我参与的 A 项目」与「已停用的 B 项目成员行」
+                # 能分别满足条件、页面被误判为可见 —— 等于没修。
+                # 列表分支不这样收窄：已收录页面对全工作区可见是工作区级 Wiki 的设计意图。
+                .filter(
+                    Q(projects__isnull=True)
+                    | Q(
+                        projects__project_projectmember__member=request.user,
+                        projects__project_projectmember__is_active=True,
+                        projects__archived_at__isnull=True,
+                    )
+                )
                 # 上面那条 join 是多对多的：一个页面经 ProjectPage 属于多个项目、
                 # 而我参与其中两个 ⇒ join 出两行 ⇒ 候选里出现两次。候选在 UI 上是一条
-                # 一条渲染的，重复看得见（上游 views/page/base.py 的同类 join 没去重，
-                # 靠前端按 id 去重掩盖了）。这条 distinct() 是修复的一部分，不是可选项。
+                # 一条渲染的，重复看得见。上游带同一个 join 的那条 queryset 末尾也用了
+                # `.distinct()`（`views/page/base.py:189`），同理 —— 这条去重是修复的
+                # 一部分，不是可选项。
                 .distinct()
                 .select_related("workspace")
                 .select_related("owned_by")
@@ -169,11 +180,9 @@ class WikiPageViewSet(BaseViewSet):
         # 别人的私有页面被 is_global=True 发布进共享的私有分区。别人的私有页面
         # 与别的工作区的页面一样：静默跳过，不进 included 计数，不报 403
         pages = Page.objects.filter(id__in=page_ids, workspace__slug=slug).filter(_visible_page_q(request.user))
-        # QuerySet.update() 绕过 auto_now / auto_now_add：不显式给 updated_at，
-        # 列表的默认排序键（-updated_at）不会刷新，审计字段也是空的。
-        updated = pages.update(
-            is_global=True, collection=collection, updated_at=timezone.now(), updated_by=request.user
-        )
+        # QuerySet.update() 绕过 auto_now：不显式给 updated_at，列表的默认排序键
+        # （-updated_at）不会刷新。
+        updated = pages.update(is_global=True, collection=collection, updated_at=timezone.now())
         return Response({"included": updated}, status=status.HTTP_200_OK)
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
@@ -213,8 +222,6 @@ class WikiPageViewSet(BaseViewSet):
             return Response({"error": "Page not found in this wiki."}, status=status.HTTP_404_NOT_FOUND)
 
         # 移出 Wiki 只是取消收录，绝不删除页面本身 —— 页面承载版本历史与评论。
-        # 同 create：QuerySet.update() 绕过 auto_now，updated_at/updated_by 要显式传。
-        Page.objects.filter(id=page.id).update(
-            is_global=False, collection=None, updated_at=timezone.now(), updated_by=request.user
-        )
+        # 同 create：QuerySet.update() 绕过 auto_now，updated_at 要显式传。
+        Page.objects.filter(id=page.id).update(is_global=False, collection=None, updated_at=timezone.now())
         return Response(status=status.HTTP_204_NO_CONTENT)

@@ -2,10 +2,11 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-from datetime import date
+from datetime import date, timedelta
 from uuid import uuid4
 
 import pytest
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -430,6 +431,40 @@ class TestWikiPageUpdateAndRemove:
         assert response.status_code == status.HTTP_404_NOT_FOUND
         private_page.refresh_from_db()
         assert private_page.is_global is True
+
+    @pytest.mark.django_db
+    def test_including_and_removing_refresh_updated_at(self, session_client, workspace, create_user):
+        """收录/移出必须刷新 updated_at（QuerySet.update() 绕过 auto_now），
+        否则列表默认排序键 -updated_at 不动。
+
+        `Page.updated_at` 是 `auto_now=True`（`db/mixins.py:20`），而收录与移出都走
+        `QuerySet.update()` —— 它**绕过** auto_now，不显式传 updated_at 就一动不动。
+        两条路径各钉一次：`create` 与 `destroy` 各有一处 update()，少传哪一处，
+        对应那半条断言就红。
+
+        先把 updated_at 按到 30 天前（同一条绕过 auto_now 的 update()），
+        这样断言 `>` 有确定的比较基准，不依赖两次调用之间的挂钟差。
+        """
+        page = Page.objects.create(
+            workspace=workspace, name="页", owned_by=create_user, access=Page.PUBLIC_ACCESS, is_global=False
+        )
+        stale = timezone.now() - timedelta(days=30)
+
+        Page.objects.filter(id=page.id).update(updated_at=stale)
+        session_client.post(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/",
+            {"page_ids": [str(page.id)]},
+            format="json",
+        )
+        page.refresh_from_db()
+        assert page.is_global is True
+        assert page.updated_at > stale
+
+        Page.objects.filter(id=page.id).update(updated_at=stale)
+        session_client.delete(f"/api/workspaces/{workspace.slug}/wiki-pages/{page.id}/")
+        page.refresh_from_db()
+        assert page.is_global is False
+        assert page.updated_at > stale
 
 
 @pytest.mark.contract
@@ -869,6 +904,85 @@ class TestWikiPageCandidates:
         assert response.status_code == status.HTTP_200_OK
         ids = [item["id"] for item in response.data]
         assert ids.count(str(page.id)) == 1, f"候选里出现了 {ids.count(str(page.id))} 次：{ids!r}"
+
+    @pytest.mark.django_db
+    def test_candidates_exclude_pages_of_deactivated_project_members(
+        self, session_client, workspace, create_user, project_page
+    ):
+        """被**移出**项目的人，不该再看到那个项目里的候选页。
+
+        把成员移出项目**不会删 `ProjectMember` 行**，只是把 `is_active` 置 False
+        （`views/project/member.py:319` 移除、`:347` 主动退出；批量路径
+        `views/workspace/member.py:146,200`）。所以上游读取路径显式带了
+        `projects__project_projectmember__is_active=True`（`views/page/base.py:157`）——
+        少了它，「我参与的 A 项目」这个条件会被一行**已停用**的成员记录满足，被移出
+        项目的人仍能在「添加页面」弹窗里看到该项目未收录页的标题，正是候选收窄要堵的
+        那类泄漏。
+
+        去掉 `is_active=True` 后这条必然失败：`member=create_user` 单条件就会匹配到
+        那行 `is_active=False` 的成员记录。
+
+        `project_page`（不属于任何项目）是正向对照，保证下面那句 `not in` 不空洞。
+        """
+        project = Project.objects.create(
+            name="我已不在的项目", identifier="LEFT", workspace=workspace, created_by=create_user
+        )
+        # 被移出的人：行还在，只是 is_active=False
+        ProjectMember.objects.create(project=project, member=create_user, workspace=workspace, role=20, is_active=False)
+        stranded = Page.objects.create(
+            workspace=workspace,
+            name="被移出项目里的未收录页",
+            owned_by=create_user,
+            access=Page.PUBLIC_ACCESS,
+            is_global=False,
+        )
+        ProjectPage.objects.create(project=project, page=stranded, workspace=workspace)
+
+        response = session_client.get(f"/api/workspaces/{workspace.slug}/wiki-pages/?include_candidates=true")
+
+        assert response.status_code == status.HTTP_200_OK
+        ids = [item["id"] for item in response.data]
+        assert str(project_page.id) in ids
+        assert str(stranded.id) not in ids
+
+    @pytest.mark.django_db
+    def test_candidates_exclude_pages_from_archived_projects(
+        self, session_client, workspace, create_user, project_page
+    ):
+        """归档项目下的页面也不做候选 —— 上游读取路径显式排除归档项目。
+
+        归档不会把项目从 M2M join 里摘掉（`db/models/project.py` 对 `Project` 没有自定义
+        manager），所以上游才显式带了 `projects__archived_at__isnull=True`
+        （`views/page/base.py:158`）。少了它，一个**完全正常在册**的成员照样能在候选里
+        看到已归档项目下未收录页的标题。
+
+        `Project.archived_at` 是 **DateTimeField**（`db/models/project.py:114`），
+        与 `Page.archived_at`（DateField）不同，给 datetime 不是 date。
+        """
+        archived_project = Project.objects.create(
+            name="已归档的项目",
+            identifier="ARCH",
+            workspace=workspace,
+            created_by=create_user,
+            archived_at=timezone.now(),
+        )
+        # 成员关系本身完全正常 —— 这条测试钉的是**项目**归档，不是成员被停用
+        ProjectMember.objects.create(project=archived_project, member=create_user, workspace=workspace, role=20)
+        archived_child = Page.objects.create(
+            workspace=workspace,
+            name="归档项目里的未收录页",
+            owned_by=create_user,
+            access=Page.PUBLIC_ACCESS,
+            is_global=False,
+        )
+        ProjectPage.objects.create(project=archived_project, page=archived_child, workspace=workspace)
+
+        response = session_client.get(f"/api/workspaces/{workspace.slug}/wiki-pages/?include_candidates=true")
+
+        assert response.status_code == status.HTTP_200_OK
+        ids = [item["id"] for item in response.data]
+        assert str(project_page.id) in ids
+        assert str(archived_child.id) not in ids
 
 
 @pytest.mark.contract
