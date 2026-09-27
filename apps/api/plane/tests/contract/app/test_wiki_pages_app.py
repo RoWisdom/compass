@@ -433,9 +433,9 @@ class TestWikiPageUpdateAndRemove:
         assert private_page.is_global is True
 
     @pytest.mark.django_db
-    def test_including_and_removing_refresh_updated_at(self, session_client, workspace, create_user):
+    def test_including_and_removing_refresh_updated_at(self, session_client, workspace, create_user, other_user):
         """收录/移出必须刷新 updated_at（QuerySet.update() 绕过 auto_now），
-        否则列表默认排序键 -updated_at 不动。
+        否则列表默认排序键 -updated_at 不动；同时**不得**把收录者盖到 updated_by 上。
 
         `Page.updated_at` 是 `auto_now=True`（`db/mixins.py:20`），而收录与移出都走
         `QuerySet.update()` —— 它**绕过** auto_now，不显式传 updated_at 就一动不动。
@@ -444,13 +444,28 @@ class TestWikiPageUpdateAndRemove:
 
         先把 updated_at 按到 30 天前（同一条绕过 auto_now 的 update()），
         这样断言 `>` 有确定的比较基准，不依赖两次调用之间的挂钟差。
+
+        另一半是 `updated_by`：收录只是把页面**标记**进 Wiki，不是一次内容编辑，
+        所以审计位必须保持不动（用户裁定：只写 updated_at，不改「最后编辑者」）。
+        `QuerySet.update()` 同样绕过 auto_now，但**不会**自己写 updated_by ——
+        除非显式传 `updated_by=request.user`。
+
+        基线刻意取**非空且不是 create_user** 的 `other_user`：加回
+        `updated_by=request.user` 会让它变成 create_user，与 `None` 基线相比更结实
+        （None 基线只是「不变」与「变成 create_user」之别，非空基线还排除了
+        「顺带写成 None」这种改法）。
+
+        基线本身必须走 `QuerySet.update()`：`BaseModel.save()` 在没有 request 的线程里
+        会把 created_by/updated_by 一律置 None（`db/models/base.py:31-33`），
+        所以 `Page.objects.create(updated_by=...)` 是**存不下来**的（实测 in-memory 就是
+        None），只有 update() 这条路能立起非空基线。
         """
         page = Page.objects.create(
             workspace=workspace, name="页", owned_by=create_user, access=Page.PUBLIC_ACCESS, is_global=False
         )
         stale = timezone.now() - timedelta(days=30)
 
-        Page.objects.filter(id=page.id).update(updated_at=stale)
+        Page.objects.filter(id=page.id).update(updated_at=stale, updated_by=other_user)
         session_client.post(
             f"/api/workspaces/{workspace.slug}/wiki-pages/",
             {"page_ids": [str(page.id)]},
@@ -459,12 +474,14 @@ class TestWikiPageUpdateAndRemove:
         page.refresh_from_db()
         assert page.is_global is True
         assert page.updated_at > stale
+        assert page.updated_by_id == other_user.id
 
         Page.objects.filter(id=page.id).update(updated_at=stale)
         session_client.delete(f"/api/workspaces/{workspace.slug}/wiki-pages/{page.id}/")
         page.refresh_from_db()
         assert page.is_global is False
         assert page.updated_at > stale
+        assert page.updated_by_id == other_user.id
 
 
 @pytest.mark.contract
@@ -983,6 +1000,61 @@ class TestWikiPageCandidates:
         ids = [item["id"] for item in response.data]
         assert str(project_page.id) in ids
         assert str(archived_child.id) not in ids
+
+    @pytest.mark.django_db
+    def test_candidates_need_one_member_row_to_satisfy_every_condition(
+        self, session_client, workspace, create_user, other_user, project_page
+    ):
+        """三个条件必须落在**同一行** join 记录上 —— 这条测试是唯一钉住「同一条 Q」的形状。
+
+        `projects__project_projectmember__*` 是多对多 join：Django 只在**同一个**
+        `Q`/`.filter()` 调用里复用 join，拆成两次 `.filter()` 会各生成一个 join，
+        于是不同行可以分别满足不同条件。
+
+        波 D 的两条同主题测试（`..._only_include_pages_from_projects_i_joined`、
+        `..._exclude_pages_of_deactivated_project_members`）各自只建**一行**成员记录，
+        拆分形式下每条 `.filter()` 都能在同一行上分别满足 —— 拆分与合并结果相同，
+        两条测试照样全绿。**只有两行**能把两种实现分开。
+
+        这里项目下有两行成员记录：
+          - (member=create_user, is_active=False)  ← 被移出项目的人
+          - (member=other_user,  is_active=True)   ← 同事仍在册
+        合并形式：要放行，得有一行**同时**满足 member=create_user 与 is_active=True ——
+        不存在 ⇒ 该页被排除（绿）。拆分形式：join1 命中第一行、join2 命中第二行，
+        而两行**同属同一个项目** ⇒ 页面被放行（红，正是这次修复要堵的泄漏）。
+
+        `project_page`（不属于任何项目）是正向对照，保证下面那句 `not in` 不空洞。
+        """
+        # create_user 与 other_user 都是工作区成员（两个 fixture 都不提供这层关系）。
+        WorkspaceMember.objects.create(workspace=workspace, member=other_user, role=20)
+
+        project = Project.objects.create(
+            name="有两行成员记录的项目", identifier="TWOROW", workspace=workspace, created_by=other_user
+        )
+        # 被移出的我：行还在，只是 is_active=False
+        ProjectMember.objects.create(project=project, member=create_user, workspace=workspace, role=20, is_active=False)
+        # 仍在册的同事
+        ProjectMember.objects.create(project=project, member=other_user, workspace=workspace, role=20)
+
+        leak = Page.objects.create(
+            workspace=workspace,
+            name="两行成员项目里的未收录页",
+            owned_by=other_user,
+            access=Page.PUBLIC_ACCESS,
+            is_global=False,
+        )
+        ProjectPage.objects.create(project=project, page=leak, workspace=workspace)
+
+        response = session_client.get(f"/api/workspaces/{workspace.slug}/wiki-pages/?include_candidates=true")
+
+        assert response.status_code == status.HTTP_200_OK
+        ids = [item["id"] for item in response.data]
+        assert str(project_page.id) in ids
+        assert str(leak.id) not in ids, (
+            "能同时满足 member=create_user 与 is_active=True 的**同一行**成员记录并不存在"
+            "（我那一行 is_active=False，在册那一行属于同事），该页不该出现在候选里。"
+            "它出现了 ⇒ 三个条件被拆到了各自的 join 行上，多对多 join 的绑定已经失效。"
+        )
 
 
 @pytest.mark.contract
