@@ -185,6 +185,20 @@ export class WorkspacePageService extends APIService {
       });
   }
 
+  /** 拉正文的二进制（Yjs 快照）。端点由 Task 3 提供。 */
+  async fetchDescriptionBinary(workspaceSlug: string, pageId: string): Promise<any> {
+    return this.get(`/api/workspaces/${workspaceSlug}/wiki-pages/${pageId}/description/`, {
+      headers: {
+        "Content-Type": "application/octet-stream",
+      },
+      responseType: "arraybuffer",
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
+
   /** 移出 Wiki。只取消收录，**不删页面**。 */
   async removeFromWiki(workspaceSlug: string, pageId: string): Promise<void> {
     return this.delete(`/api/workspaces/${workspaceSlug}/wiki-pages/${pageId}/`)
