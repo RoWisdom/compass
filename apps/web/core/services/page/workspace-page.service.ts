@@ -118,8 +118,15 @@ export class WorkspacePageService extends APIService {
    *
    * 返回体**不带** `page_count`（后端只回裸集合）：那个计数是 `list` 现算给侧栏用的，
    * 这里的调用方只拿它判成功，随后由 store 重拉整个集合列表补齐计数。
+   *
+   * 返回类型省掉 `page_count`，正是因为服务端也省掉了它 —— 这不是笔误，别改回
+   * `TPageCollection`；需要计数的调用方，请在 store 重拉集合列表之后从 `store.collections` 读。
    */
-  async updateCollection(workspaceSlug: string, collectionId: string, name: string): Promise<TPageCollection> {
+  async updateCollection(
+    workspaceSlug: string,
+    collectionId: string,
+    name: string
+  ): Promise<Omit<TPageCollection, "page_count">> {
     return this.patch(`/api/workspaces/${workspaceSlug}/page-collections/${collectionId}/`, { name })
       .then((response) => response?.data)
       .catch((error) => {

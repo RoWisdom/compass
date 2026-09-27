@@ -48,7 +48,11 @@ export interface IWorkspacePageStore {
   // actions
   fetchCollections: (workspaceSlug: string) => Promise<TPageCollectionListResponse | undefined>;
   createCollection: (workspaceSlug: string, name: string) => Promise<TPageCollection>;
-  updateCollection: (workspaceSlug: string, collectionId: string, name: string) => Promise<TPageCollection>;
+  updateCollection: (
+    workspaceSlug: string,
+    collectionId: string,
+    name: string
+  ) => Promise<Omit<TPageCollection, "page_count">>;
   fetchPagesList: (workspaceSlug: string, collection: TCollectionFilter) => Promise<TPage[] | undefined>;
   fetchPageDetails: (workspaceSlug: string, pageId: string) => Promise<TPage | undefined>;
   fetchCandidates: (workspaceSlug: string) => Promise<TPage[]>;
