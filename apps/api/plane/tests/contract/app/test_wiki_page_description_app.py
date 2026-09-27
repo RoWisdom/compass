@@ -285,10 +285,13 @@ class TestWikiPageDescriptionEndpoint:
 
         before = PageVersion.objects.filter(page=linked_wiki_page).count()
 
-        session_client.patch(
+        response = session_client.patch(
             f"/api/workspaces/{workspace.slug}/wiki-pages/{linked_wiki_page.id}/description/",
             {"description_html": "<p>不进版本历史</p>"},
             format="json",
         )
 
+        # 先断言写成功：404、或请求根本没进 handler 时，下面的计数同样相等。
+        # 计数这条只有在这个 PATCH 被证明发生过之后才有意义。
+        assert response.status_code == status.HTTP_200_OK
         assert PageVersion.objects.filter(page=linked_wiki_page).count() == before
