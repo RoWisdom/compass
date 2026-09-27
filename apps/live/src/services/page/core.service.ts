@@ -19,7 +19,9 @@ export type TUserMention = {
 export abstract class PageCoreService extends APIService {
   protected abstract basePath: string;
 
-  
+  constructor() {
+    super();
+  }
 
   /**
    * The URL of a page resource, before any sub-resource suffix.
