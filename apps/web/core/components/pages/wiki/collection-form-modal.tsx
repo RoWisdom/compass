@@ -136,7 +136,13 @@ export const CollectionFormModal = observer(function CollectionFormModal(props: 
             {t("common.cancel")}
           </Button>
           <Button variant="primary" size="lg" onClick={handleSubmit} loading={isSubmitting} disabled={!isValid}>
-            {isEdit ? t("common.save") : t("wiki_collections.create_modal.submit")}
+            {/* 编辑态用 `common.update` 而不是 `common.save`：本仓 `common.json` 里
+                `save` 只存在于**根**对象，查找走的是 `common.*` 前缀（`keySeparator: "."`
+                ⇒ 解析成嵌套 `common` 对象下的 `save`，那里没有），会原样渲染出
+                `common.save` 这个 key。嵌套 `common.update` 则 19/19 份 locale 齐全
+                （en "Update" / zh「更新」），且编辑态主按钮用它是本仓既有惯例 ——
+                同款三元形状见 `core/components/modules/form.tsx:111`。*/}
+            {isEdit ? t("common.update") : t("wiki_collections.create_modal.submit")}
           </Button>
         </div>
       </div>
