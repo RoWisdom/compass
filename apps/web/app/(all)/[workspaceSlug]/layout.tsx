@@ -18,7 +18,10 @@ export default function WorkspaceLayout(props: Route.ComponentProps) {
   return (
     <AuthenticationWrapper>
       <WorkspaceAuthWrapper>
-        <AppRailVisibilityProvider>
+        {/* Compass: the App Rail ships disabled in this OSS build (the provider defaults
+            to isEnabled=false), so pass isEnabled to render the left icon rail. Pass
+            isEnabled={false} to restore upstream behaviour. */}
+        <AppRailVisibilityProvider isEnabled>
           <WorkspaceContentWrapper>
             <GlobalModals workspaceSlug={workspaceSlug} />
             <Outlet />
