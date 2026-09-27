@@ -173,40 +173,53 @@ export const WikiSidebar = observer(function WikiSidebar() {
           代价是这个键会同时承担两个用途（「集合没有名字时的称呼」与「组标题」）；
           日后要区分，再补 `wiki_collections.title` 并把这里换过去。
         */}
-        <div className="flex w-full items-center justify-between gap-2 px-2 pt-1">
-          <span className="text-11 text-tertiary">{t("wiki_collections.fallback_name")}</span>
-          {/* 对 GUEST **隐藏**而不是 disabled —— 与既有口径一致，理由见
-              wiki-list-main-content.tsx 的同一谓词。 */}
-          {canManageCollections && (
-            <button
-              type="button"
-              onClick={openCreate}
-              aria-label={t("wiki_collections.create_modal.title")}
-              className="rounded-sm p-0.5 text-tertiary hover:bg-layer-1 hover:text-secondary"
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </button>
+        {/*
+          组容器（`bg-layer-1/50` + 圆角）是**语义的一部分，不只是装饰**：
+          组标题「集合」横跨下面四行，而 `PARTITION_ROWS`（Private/Archived）渲染在
+          容器**之外**。没有这层容器，四行看上去同属一组 —— 「集合只含 General +
+          自建集合、Private/Archived 不在其中」这层意思就完全看不出来
+          （设计 §3.2d 修订单：Private/Archived 保持普通行，本轮「集合」是唯一的分组）。
+
+          用 `/50` 而不是实色：行自己的 hover 是 `bg-layer-1/50`、选中是 `bg-layer-1`，
+          叠在这层之上正好形成 容器 50% < hover 75% < 选中 100% 的层次。
+          若容器用实色 `bg-layer-1`，选中行会与容器同色而消失。
+        */}
+        <div className="flex w-full flex-col gap-1 rounded-md bg-layer-1/50 p-1">
+          <div className="flex w-full items-center justify-between gap-2 px-2 pt-1">
+            <span className="text-11 text-tertiary">{t("wiki_collections.fallback_name")}</span>
+            {/* 对 GUEST **隐藏**而不是 disabled —— 与既有口径一致，理由见
+                wiki-list-main-content.tsx 的同一谓词。 */}
+            {canManageCollections && (
+              <button
+                type="button"
+                onClick={openCreate}
+                aria-label={t("wiki_collections.create_modal.title")}
+                className="rounded-sm p-0.5 text-tertiary hover:bg-layer-1 hover:text-secondary"
+              >
+                <Plus className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+          {renderRow("general", t("wiki_collections.predefined.general"), predefinedCount("general"))}
+          {collections.map((collection) =>
+            renderRow(
+              collection.id,
+              collection.name,
+              collection.page_count,
+              canManageCollections ? (
+                <CustomMenu
+                  customButton={<IconButton icon={MoreHorizontal} variant="ghost" size="sm" />}
+                  ariaLabel={t("wiki_collections.menu.collection_options")}
+                  closeOnSelect
+                >
+                  <CustomMenu.MenuItem onClick={() => openEdit(collection)}>
+                    {t("wiki_collections.menu.edit_collection")}
+                  </CustomMenu.MenuItem>
+                </CustomMenu>
+              ) : undefined
+            )
           )}
         </div>
-        {renderRow("general", t("wiki_collections.predefined.general"), predefinedCount("general"))}
-        {collections.map((collection) =>
-          renderRow(
-            collection.id,
-            collection.name,
-            collection.page_count,
-            canManageCollections ? (
-              <CustomMenu
-                customButton={<IconButton icon={MoreHorizontal} variant="ghost" size="sm" />}
-                ariaLabel={t("wiki_collections.menu.collection_options")}
-                closeOnSelect
-              >
-                <CustomMenu.MenuItem onClick={() => openEdit(collection)}>
-                  {t("wiki_collections.menu.edit_collection")}
-                </CustomMenu.MenuItem>
-              </CustomMenu>
-            ) : undefined
-          )
-        )}
 
         {PARTITION_ROWS.map((key) => renderRow(key, t(`wiki_collections.predefined.${key}`), predefinedCount(key)))}
       </div>
