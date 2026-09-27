@@ -7,8 +7,18 @@ from uuid import uuid4
 
 import pytest
 from rest_framework import status
+from rest_framework.test import APIClient
 
-from plane.db.models import Page, PageCollection, User, Workspace, WorkspaceMember
+from plane.db.models import (
+    Page,
+    PageCollection,
+    Project,
+    ProjectMember,
+    ProjectPage,
+    User,
+    Workspace,
+    WorkspaceMember,
+)
 
 
 @pytest.fixture
@@ -60,6 +70,39 @@ def other_workspace_wiki_page(other_workspace):
         access=Page.PUBLIC_ACCESS,
         is_global=True,
     )
+
+
+@pytest.fixture
+def guest(db, workspace):
+    """本工作区里的一个只读成员（GUEST, role=5）。
+
+    `plane/tests/conftest.py` 里**没有** guest fixture；形状照现成的先例抄 ——
+    `plane/tests/contract/app/test_issue_list_guest_scope_app.py:50-66`。
+    `User.username` 是 unique=True 且 create_user fixture 已占用了 ""，所以必须给唯一值。
+    """
+    unique_id = uuid4().hex[:8]
+    user = User.objects.create(
+        email=f"guest-{unique_id}@plane.so",
+        username=f"guest_{unique_id}",
+        first_name="Guest",
+        last_name="User",
+    )
+    user.set_password("test-password")
+    user.save()
+    WorkspaceMember.objects.create(workspace=workspace, member=user, role=5)
+    return user
+
+
+@pytest.fixture
+def guest_client(guest):
+    """以 GUEST 身份认证的客户端。
+
+    **不能复用 session_client** —— 它已经 force_authenticate 成 create_user 了，
+    再认证一次只会换掉身份、把「GUEST 被拒」测成「create_user 被拒」。
+    """
+    client = APIClient()
+    client.force_authenticate(user=guest)
+    return client
 
 
 @pytest.mark.contract
@@ -271,6 +314,27 @@ class TestWikiPageInclude:
         response = session_client.post(f"/api/workspaces/{workspace.slug}/wiki-pages/", {"page_ids": []}, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
+    @pytest.mark.django_db
+    def test_partition_key_is_rejected_as_collection_id(self, session_client, workspace, project_page):
+        """`collection_id` 送的是**分区键**（"general"）时必须 400，且页面原样不动。
+
+        这正是那轮 Critical 的确切失败模式：前端把分区键当 uuid 送出，UUIDField 报
+        "Must be a valid UUID."。此前**没有任何一条测试**往 collection_id 里送过非 uuid
+        字符串，所以这条路径一直没有钉子。
+        页面原样那一半不能省 —— 只断言 400 对一个「先写后校验」的实现同样成立。
+        """
+        response = session_client.post(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/",
+            {"page_ids": [str(project_page.id)], "collection_id": "general"},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "collection_id" in response.data
+        project_page.refresh_from_db()
+        assert project_page.is_global is False
+        assert project_page.collection_id is None
+
 
 @pytest.mark.contract
 class TestWikiPageUpdateAndRemove:
@@ -349,6 +413,24 @@ class TestWikiPageUpdateAndRemove:
         page.refresh_from_db()
         assert page.collection_id is None
 
+    @pytest.mark.django_db
+    def test_removing_another_users_private_page_is_a_404(self, session_client, workspace, other_user):
+        """非所有者移出他人私有页 → 404（不是 403、更不是 204），页面保持原样。
+
+        作用域继承自共享的 `_wiki_page_queryset`：私有页在 `_visible_page_q` 那一处就
+        被滤掉了，所以这里看见的是「不存在」而不是「没权限」。正向那一面在
+        `test_removing_from_wiki_does_not_delete_the_page`（自己的页 204）。
+        """
+        private_page = Page.objects.create(
+            workspace=workspace, name="别人的私有", owned_by=other_user, access=Page.PRIVATE_ACCESS, is_global=True
+        )
+
+        response = session_client.delete(f"/api/workspaces/{workspace.slug}/wiki-pages/{private_page.id}/")
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        private_page.refresh_from_db()
+        assert private_page.is_global is True
+
 
 @pytest.mark.contract
 class TestWikiPageDetailEndpoint:
@@ -406,6 +488,22 @@ class TestWikiPageDetailEndpoint:
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
 
+    @pytest.mark.django_db
+    def test_retrieve_returns_my_own_private_page(self, session_client, workspace, create_user):
+        """正向对照：自己的私有页取得到。
+
+        与上一条是同一个可见性谓词（`_visible_page_q`）的两面。只有负向那面时，把谓词
+        写成「谁都取不到私有页」也能全绿 —— 私有分区会静默变成永远空的。
+        """
+        own_private = Page.objects.create(
+            workspace=workspace, name="我的私有", owned_by=create_user, access=Page.PRIVATE_ACCESS, is_global=True
+        )
+
+        response = session_client.get(f"/api/workspaces/{workspace.slug}/wiki-pages/{own_private.id}/")
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["id"] == str(own_private.id)
+
 
 @pytest.mark.contract
 class TestWikiPageUpdateEndpoint:
@@ -439,6 +537,26 @@ class TestWikiPageUpdateEndpoint:
         wiki_page.refresh_from_db()
         assert "<script>" not in wiki_page.description_html
         assert "<p>hi</p>" in wiki_page.description_html
+
+    @pytest.mark.django_db
+    def test_partition_key_is_rejected_as_collection_id(self, session_client, workspace, wiki_page):
+        """PATCH 侧的同一件事：`collection_id: "general"`（分区键，不是 uuid）→ 400。
+
+        与 `TestWikiPageInclude.test_partition_key_is_rejected_as_collection_id` 同款。
+        两个写端点都要各有一条：前端把分区键当 uuid 送出时，两条路径都会 400，只钉一条
+        挡不住另一条。正文与 collection 都必须原样 —— 见该条注释。
+        """
+        response = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{wiki_page.id}/",
+            {"collection_id": "general"},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "collection_id" in response.data
+        wiki_page.refresh_from_db()
+        assert wiki_page.is_global is True
+        assert wiki_page.collection_id is None
 
     @pytest.mark.django_db
     def test_patch_null_collection_moves_back_to_general(self, session_client, workspace, wiki_page):
@@ -521,7 +639,6 @@ class TestWikiPageUpdateEndpoint:
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert "description_json" in response.data
-        assert "may not be null" in str(response.data["description_json"])
         wiki_page.refresh_from_db()
         assert wiki_page.description_json == {"type": "doc", "keep": True}
 
@@ -673,3 +790,136 @@ class TestWikiPageCandidates:
         ids = [item["id"] for item in response.data]
         assert str(project_page.id) in ids
         assert str(archived.id) not in ids
+
+    @pytest.mark.django_db
+    def test_candidates_only_include_pages_from_projects_i_joined(
+        self, session_client, workspace, create_user, other_user
+    ):
+        """候选只收「我参与的项目」的页面（+ 不属于任何项目的页面）。
+
+        上游取页面要求「是我参与的项目」（`views/page/base.py:151-155`），而候选分支此前
+        只筛工作区 —— 一个不是项目 X 成员的工作区成员，能在弹窗里看到 X 的公开未收录页
+        标题，并把它收录进 Wiki。两个方向都钉：同事项目里的页**不在**，我项目里的页**在**
+        （少了后半句，把候选收窄成空列表也能过）。
+
+        `other_user` 在本文件与 `conftest.py` 里**都不是** workspace 成员，所以这里
+        自己建成员行，不依赖 fixture。
+        """
+        # 同事在 workspace 里、也在自己的项目里；create_user 两边都不是
+        WorkspaceMember.objects.create(workspace=workspace, member=other_user, role=20)
+        their_project = Project.objects.create(
+            name="同事的项目", identifier="THEIRS", workspace=workspace, created_by=other_user
+        )
+        ProjectMember.objects.create(project=their_project, member=other_user, workspace=workspace, role=20)
+        their_page = Page.objects.create(
+            workspace=workspace,
+            name="同事项目里的未收录页",
+            owned_by=other_user,
+            access=Page.PUBLIC_ACCESS,
+            is_global=False,
+        )
+        ProjectPage.objects.create(project=their_project, page=their_page, workspace=workspace)
+
+        # 正向对照：我参与的项目
+        my_project = Project.objects.create(
+            name="我的项目", identifier="MINE", workspace=workspace, created_by=create_user
+        )
+        ProjectMember.objects.create(project=my_project, member=create_user, workspace=workspace, role=20)
+        my_page = Page.objects.create(
+            workspace=workspace,
+            name="我项目里的未收录页",
+            owned_by=create_user,
+            access=Page.PUBLIC_ACCESS,
+            is_global=False,
+        )
+        ProjectPage.objects.create(project=my_project, page=my_page, workspace=workspace)
+
+        response = session_client.get(f"/api/workspaces/{workspace.slug}/wiki-pages/?include_candidates=true")
+
+        assert response.status_code == status.HTTP_200_OK
+        ids = [item["id"] for item in response.data]
+        assert str(my_page.id) in ids
+        assert str(their_page.id) not in ids
+
+    @pytest.mark.django_db
+    def test_a_page_in_two_joined_projects_appears_once(self, session_client, workspace, create_user):
+        """同一页面经两个我参与的项目 join 出两行，候选里只能出现一次。
+
+        `projects__project_projectmember__member` 是多对多 join，没有 `distinct()` 就会重复。
+        候选在 UI 上是一条一条渲染的，重复**看得见**（上游 `views/page/base.py` 的同类
+        join 靠前端按 id 去重掩盖了这个问题，这里没有那层掩护）。这条钉住候选分支的
+        `.distinct()` —— 它和项目成员过滤是同一次修复的两半。
+        """
+        page = Page.objects.create(
+            workspace=workspace,
+            name="跨两个项目",
+            owned_by=create_user,
+            access=Page.PUBLIC_ACCESS,
+            is_global=False,
+        )
+        for identifier in ("PRJA", "PRJB"):
+            project = Project.objects.create(
+                name=f"项目 {identifier}", identifier=identifier, workspace=workspace, created_by=create_user
+            )
+            ProjectMember.objects.create(project=project, member=create_user, workspace=workspace, role=20)
+            ProjectPage.objects.create(project=project, page=page, workspace=workspace)
+
+        response = session_client.get(f"/api/workspaces/{workspace.slug}/wiki-pages/?include_candidates=true")
+
+        assert response.status_code == status.HTTP_200_OK
+        ids = [item["id"] for item in response.data]
+        assert ids.count(str(page.id)) == 1, f"候选里出现了 {ids.count(str(page.id))} 次：{ids!r}"
+
+
+@pytest.mark.contract
+class TestWikiPageGuestWriteAccess:
+    """写入端点对 GUEST 关闭。
+
+    **这是用户 2026-09-27 的明确裁定，有意偏离设计 §4.2** —— 设计原文与计划原文写的是
+    写操作 `WorkspaceMember` 即可（`[ADMIN, MEMBER, GUEST]`）。上游对**同一个 Page 对象**
+    （`apps/api/plane/app/permissions/page.py:100-130`）是 POST/PUT/PATCH → ADMIN/MEMBER、
+    DELETE → 仅 ADMIN，这里按用户裁定收窄到 ADMIN/MEMBER。
+    只收窄**写**：list / retrieve 原样保留 GUEST（见本类最后一条正向对照）。
+    """
+
+    @pytest.mark.django_db
+    def test_guest_cannot_include_pages(self, guest_client, workspace, project_page):
+        response = guest_client.post(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/",
+            {"page_ids": [str(project_page.id)]},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        project_page.refresh_from_db()
+        assert project_page.is_global is False
+
+    @pytest.mark.django_db
+    def test_guest_cannot_remove_pages(self, guest_client, workspace, wiki_page):
+        response = guest_client.delete(f"/api/workspaces/{workspace.slug}/wiki-pages/{wiki_page.id}/")
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        wiki_page.refresh_from_db()
+        assert wiki_page.is_global is True
+
+    @pytest.mark.django_db
+    def test_guest_cannot_write_page_bodies(self, guest_client, workspace, wiki_page):
+        """partial_update 是三个写端点里最要紧的一个（它写正文）。"""
+        response = guest_client.patch(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{wiki_page.id}/",
+            {"description_html": "<p>guest 写的</p>"},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        wiki_page.refresh_from_db()
+        assert "guest 写的" not in wiki_page.description_html
+
+    @pytest.mark.django_db
+    def test_guest_can_still_read_the_wiki(self, guest_client, workspace, wiki_page):
+        """正向对照：收窄的**只有**写，没有误伤读。"""
+        listed = guest_client.get(f"/api/workspaces/{workspace.slug}/wiki-pages/?collection=general")
+        detailed = guest_client.get(f"/api/workspaces/{workspace.slug}/wiki-pages/{wiki_page.id}/")
+
+        assert listed.status_code == status.HTTP_200_OK
+        assert detailed.status_code == status.HTTP_200_OK

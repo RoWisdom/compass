@@ -9,6 +9,7 @@ import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 import { FileOutput, X } from "lucide-react";
 // plane imports
+import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TContextMenuItem } from "@plane/ui";
@@ -19,6 +20,7 @@ import { PageListBlock } from "@/components/pages/list/block";
 import { MoveToCollectionModal } from "@/components/pages/wiki/move-to-collection-modal";
 // hooks
 import { EPageStoreType, usePageStore } from "@/hooks/store";
+import { useUserPermissions } from "@/hooks/store/user";
 
 type Props = {
   collection: string;
@@ -34,8 +36,18 @@ export const WikiListRoot = observer(function WikiListRoot(props: Props) {
   const [pageIdToMove, setPageIdToMove] = useState<string | null>(null);
   // store hooks
   const { getFilteredPageIdsByCollection, fetchPagesList, removeFromWiki } = usePageStore(EPageStoreType.WORKSPACE);
+  const { allowPermissions } = useUserPermissions();
   // derived values
   const filteredPageIds = getFilteredPageIdsByCollection(collection);
+  // 写权限：行菜单里的两个动作都是**写**（PATCH 换集合 / DELETE 移出），后端只给
+  // ADMIN/MEMBER（`apps/api/plane/app/views/page/collection.py` 的 partial_update/destroy）——
+  // 这是**用户 2026-09-27 的裁定**，有意收窄设计与计划原文里的 `[ADMIN, MEMBER, GUEST]`。
+  // 前端不收窄的话，GUEST 会看见一个点下去必然 403 的菜单项。
+  // 与顶栏按钮、空态 CTA 用的是同一个谓词（工作区级 ADMIN/MEMBER）。
+  const canWriteWiki = allowPermissions(
+    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
+    EUserPermissionsLevel.WORKSPACE
+  );
 
   /**
    * 移出 Wiki（只取消收录，不删页面）。
@@ -63,8 +75,11 @@ export const WikiListRoot = observer(function WikiListRoot(props: Props) {
    * 项目页没有对应物，所以由 wiki 侧构建、而不是在共享的 `PageListBlock` 里按 `storeType` 分支。
    * 放在这里而不是 `MoveToCollectionModal` 里，是因为「移到集合」需要把被点的**行**记下来。
    *
-   * 权限：不额外门控。后端 `wiki-pages/{id}/` 的 DELETE/PATCH 允许 `[ADMIN, MEMBER, GUEST]`，
-   * 前端再藏一层只会把 GUEST 做得了的动作挡掉。
+   * 权限：**只在 ADMIN/MEMBER 时传给行菜单**（调用处 `canWriteWiki ? … : undefined`）。
+   * 两个动作都是写操作，后端在 2026-09-27 按用户裁定收窄到 `[ADMIN, MEMBER]`
+   * （`apps/api/plane/app/views/page/collection.py` 的 partial_update/destroy）——
+   * 这里不跟着收窄就会留下「看得见、点得动、一点就 403」的入口。
+   * 同样用**隐藏**表达，而不是渲染成 disabled。
    */
   const buildRowActions = (pageId: string): (TContextMenuItem & { key: TPageActions })[] => [
     {
@@ -92,7 +107,7 @@ export const WikiListRoot = observer(function WikiListRoot(props: Props) {
             key={pageId}
             pageId={pageId}
             storeType={EPageStoreType.WORKSPACE}
-            extraActions={buildRowActions(pageId)}
+            extraActions={canWriteWiki ? buildRowActions(pageId) : undefined}
           />
         ))}
       </ListLayout>

@@ -105,6 +105,24 @@ class TestPageCollectionEndpoint:
         assert by_key["private"] == 1
 
     @pytest.mark.django_db
+    def test_public_pages_of_other_users_are_still_counted(self, session_client, workspace, other_user):
+        """别人的**公开**页面照旧计数 —— 可见性只对私有页收窄。
+
+        `test_private_count_hides_other_users_pages` 只钉了收窄那一面：把 `_visible_page_q`
+        写成 `Q(owned_by=request.user)`（只看自己的）它照样绿，而整个 Wiki 的计数会只剩
+        自己的页面。这条是那半边唯一的钉子，与 `test_wiki_pages_app.py` 的
+        `test_public_pages_of_other_users_are_still_visible` 同款、同口径。
+        """
+        Page.objects.create(
+            workspace=workspace, name="同事的公开", owned_by=other_user, access=Page.PUBLIC_ACCESS, is_global=True
+        )
+
+        response = session_client.get(f"/api/workspaces/{workspace.slug}/page-collections/")
+
+        general = next(item for item in response.data["predefined"] if item["key"] == "general")
+        assert general["page_count"] == 1
+
+    @pytest.mark.django_db
     def test_shared_is_always_empty_in_oss(self, session_client, workspace, wiki_page):
         response = session_client.get(f"/api/workspaces/{workspace.slug}/page-collections/")
 

@@ -5,6 +5,7 @@
 # Django imports
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 
 # Third party imports
 from rest_framework import status
@@ -118,6 +119,15 @@ class WikiPageViewSet(BaseViewSet):
                 # 归档页的归属由 archived_at 决定，从 general 收录它必落「归档」分区。
                 # `Page.archived_at` 是 DateField，`isnull=True` 即「没归档」。
                 .filter(archived_at__isnull=True)
+                # 候选只列「我参与的项目」的页面（+ 不属于任何项目的页面）——
+                # 与上游读取路径一致（`views/page/base.py:151-155`）。列表分支不这样收窄：
+                # 已收录页面对全工作区可见是工作区级 Wiki 的设计意图。
+                .filter(Q(projects__project_projectmember__member=request.user) | Q(projects__isnull=True))
+                # 上面那条 join 是多对多的：一个页面经 ProjectPage 属于多个项目、
+                # 而我参与其中两个 ⇒ join 出两行 ⇒ 候选里出现两次。候选在 UI 上是一条
+                # 一条渲染的，重复看得见（上游 views/page/base.py 的同类 join 没去重，
+                # 靠前端按 id 去重掩盖了）。这条 distinct() 是修复的一部分，不是可选项。
+                .distinct()
                 .select_related("workspace")
                 .select_related("owned_by")
                 .order_by("-updated_at")
@@ -137,7 +147,7 @@ class WikiPageViewSet(BaseViewSet):
         serializer = WikiPageSerializer(pages, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
     def create(self, request, slug):
         serializer = WikiPageIncludeSerializer(data=request.data)
         if not serializer.is_valid():
@@ -159,7 +169,11 @@ class WikiPageViewSet(BaseViewSet):
         # 别人的私有页面被 is_global=True 发布进共享的私有分区。别人的私有页面
         # 与别的工作区的页面一样：静默跳过，不进 included 计数，不报 403
         pages = Page.objects.filter(id__in=page_ids, workspace__slug=slug).filter(_visible_page_q(request.user))
-        updated = pages.update(is_global=True, collection=collection)
+        # QuerySet.update() 绕过 auto_now / auto_now_add：不显式给 updated_at，
+        # 列表的默认排序键（-updated_at）不会刷新，审计字段也是空的。
+        updated = pages.update(
+            is_global=True, collection=collection, updated_at=timezone.now(), updated_by=request.user
+        )
         return Response({"included": updated}, status=status.HTTP_200_OK)
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
@@ -172,7 +186,7 @@ class WikiPageViewSet(BaseViewSet):
         page = get_object_or_404(_wiki_page_queryset(request, slug), pk=page_id)
         return Response(WikiPageDetailSerializer(page).data, status=status.HTTP_200_OK)
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
     def partial_update(self, request, slug, page_id):
         """换集合（collection_id）与/或写正文（description_*），两组可同时给。"""
         page = get_object_or_404(_wiki_page_queryset(request, slug), pk=page_id)
@@ -192,12 +206,15 @@ class WikiPageViewSet(BaseViewSet):
         page = serializer.save()
         return Response(WikiPageDetailSerializer(page).data, status=status.HTTP_200_OK)
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
     def destroy(self, request, slug, page_id):
         page = _wiki_page_queryset(request, slug).filter(id=page_id).first()
         if page is None:
             return Response({"error": "Page not found in this wiki."}, status=status.HTTP_404_NOT_FOUND)
 
-        # 移出 Wiki 只是取消收录，绝不删除页面本身 —— 页面承载版本历史与评论
-        Page.objects.filter(id=page.id).update(is_global=False, collection=None)
+        # 移出 Wiki 只是取消收录，绝不删除页面本身 —— 页面承载版本历史与评论。
+        # 同 create：QuerySet.update() 绕过 auto_now，updated_at/updated_by 要显式传。
+        Page.objects.filter(id=page.id).update(
+            is_global=False, collection=None, updated_at=timezone.now(), updated_by=request.user
+        )
         return Response(status=status.HTTP_204_NO_CONTENT)
