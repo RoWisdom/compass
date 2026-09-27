@@ -69,10 +69,18 @@ class PageSerializer(BaseSerializer):
         # `description_html` arrives via context, not as a serializer field, so a
         # `validate_description_html` method would never run for this path.
         # Sanitize it here — see the note on PageDetailSerializer for why.
+        #
+        # Reject when the sanitizer fails rather than falling through to the raw
+        # value: `validate_html_content` signals failure with
+        # `sanitized_html is None`, so a "use it only if it isn't None" guard
+        # would store the *unsanitized* payload — the one outcome this whole path
+        # exists to prevent. PageDetailSerializer, PageBinaryUpdateSerializer and
+        # the issue/draft/project/workspace serializers all raise the same way.
         if description_html:
-            _, _, sanitized_html = validate_html_content(description_html)
-            if sanitized_html is not None:
-                description_html = sanitized_html
+            is_valid, error_message, sanitized_html = validate_html_content(description_html)
+            if not is_valid:
+                raise serializers.ValidationError(error_message)
+            description_html = sanitized_html if sanitized_html is not None else description_html
 
         # Get the workspace id from the project
         project = Project.objects.get(pk=project_id)

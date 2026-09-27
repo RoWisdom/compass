@@ -123,6 +123,38 @@ class TestPageHtmlSanitization:
         assert "正文" in page.description_html
 
     @pytest.mark.django_db
+    def test_create_rejects_when_sanitization_fails(self, session_client, workspace, project, monkeypatch):
+        """Path 3, failure branch — a sanitizer that cannot sanitize must **not**
+        fall through to storing the raw value.
+
+        ``validate_html_content`` signals failure as
+        ``(False, message, None)`` — the sanitized value and the verdict arrive
+        together, so a "use it only if it isn't None" guard silently keeps the
+        *unsanitized* input. That is strictly worse than rejecting: it is the
+        exact stored-XSS outcome path 3 exists to prevent.
+
+        The three tests above cannot reach this branch over HTTP: it takes
+        either >10MB of HTML (``DATA_UPLOAD_MAX_MEMORY_SIZE`` is 5MB, so Django
+        400s before the view runs) or ``nh3`` itself raising. The validator is
+        patched to force it, which is why this is a unit-level contract rather
+        than an end-to-end one.
+        """
+        monkeypatch.setattr(
+            "plane.app.serializers.page.validate_html_content",
+            lambda _value: (False, "Failed to sanitize HTML", None),
+        )
+
+        response = session_client.post(
+            f"/api/workspaces/{workspace.slug}/projects/{project.id}/pages/",
+            {"name": "消毒失败", "description_html": XSS_PAYLOAD},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        # Rejecting means nothing was written — not "the page exists but is empty".
+        assert not Page.objects.filter(name="消毒失败").exists()
+
+    @pytest.mark.django_db
     def test_partial_update_sanitizes_description_html(self, session_client, workspace, project, project_page):
         """Path 2 — ``PageDetailSerializer`` / ``PageViewSet.partial_update``.
 
