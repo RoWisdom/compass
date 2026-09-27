@@ -175,7 +175,7 @@ export class WorkspacePageStore implements IWorkspacePageStore {
    * `loader` 驱动的是整个主面板的加载骨架，而新建集合只是往侧栏多插一行；
    * 把整页打回骨架是过度反应。调用方（弹窗）自己有 submitting 态。
    *
-   * 成功后按本文件既有惯例重拉集合（`:273` / `:302` / `:323` 三处都这么做）。
+   * 成功后按本文件既有惯例重拉集合（`includePages` / `moveToCollection` / `removeFromWiki` 三处都这么做）。
    * 返回值**透传 service 的新集合** —— 调用方要拿它的 id 跳转。
    */
   createCollection = async (workspaceSlug: string, name: string) => {
