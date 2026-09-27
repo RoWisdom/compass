@@ -16,6 +16,32 @@ def django_db_setup(django_db_setup):  # noqa: F811
     pass
 
 
+@pytest.fixture(autouse=True)
+def isolate_markdown_mirror(tmp_path, monkeypatch):
+    """Point the page-Markdown mirror at a throwaway directory, for every test.
+
+    Several write paths mirror a page to a local ``.md`` file — see
+    ``apps/api/plane/app/views/page/base.py`` (``_write_page_mirror``, called from
+    ``PageViewSet.create`` and ``PagesDescriptionViewSet.partial_update``). That
+    mirror honours ``MARKDOWN_STORAGE_PATH``, which in ``apps/api/.env`` points at
+    a developer's **real Obsidian vault**.
+
+    Left unset, a test that creates or updates a page writes a file into that
+    vault. The trap is that the test which does this is the one whose assertion
+    *fails*: the mirror is written only after the page is actually created, so a
+    passing "this must be rejected" test writes nothing while a failing one
+    writes a stray page into the user's notes. Relying on each test to remember
+    ``monkeypatch.setenv`` makes that failure mode silent by construction.
+
+    Autouse rather than opt-in, so no individual test has to know the mirror
+    exists. ``markdown_storage.get_markdown_root`` reads the variable at call
+    time, so ``monkeypatch`` is enough — no settings reload needed.
+    """
+    mirror_root = tmp_path / "markdown-mirror"
+    monkeypatch.setenv("MARKDOWN_STORAGE_PATH", str(mirror_root))
+    return mirror_root
+
+
 @pytest.fixture
 def api_client():
     """Return an unauthenticated API client"""

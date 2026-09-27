@@ -98,7 +98,7 @@ def wiki_page(db, workspace, create_user):
 @pytest.mark.contract
 class TestPageHtmlSanitization:
     @pytest.mark.django_db
-    def test_create_sanitizes_description_html(self, session_client, workspace, project, monkeypatch, tmp_path):
+    def test_create_sanitizes_description_html(self, session_client, workspace, project):
         """Path 3 — ``PageSerializer.create``.
 
         ``description_html`` is read straight out of ``request.data`` by the view
@@ -106,9 +106,6 @@ class TestPageHtmlSanitization:
         page must still be created (the sanitizer strips, it does not reject),
         and what lands in the column must be clean.
         """
-        # Keep the Markdown mirror's side effect out of the real vault.
-        monkeypatch.setenv("MARKDOWN_STORAGE_PATH", str(tmp_path))
-
         response = session_client.post(
             f"/api/workspaces/{workspace.slug}/projects/{project.id}/pages/",
             {"name": "XSS create", "description_html": XSS_PAYLOAD},
@@ -173,14 +170,12 @@ class TestPageHtmlSanitization:
         assert "正文" in project_page.description_html
 
     @pytest.mark.django_db
-    def test_normal_content_survives_sanitization(self, session_client, workspace, project, monkeypatch, tmp_path):
+    def test_normal_content_survives_sanitization(self, session_client, workspace, project):
         """Positive control — the sanitizer must not be a delete-everything.
 
         Without this, both XSS tests above would go green on a
         ``validate_html_content`` that returned ``""``.
         """
-        monkeypatch.setenv("MARKDOWN_STORAGE_PATH", str(tmp_path))
-
         response = session_client.post(
             f"/api/workspaces/{workspace.slug}/projects/{project.id}/pages/",
             {"name": "正常内容", "description_html": SAFE_PAYLOAD},
