@@ -11,6 +11,8 @@ import useSWR from "swr";
 import { useTranslation } from "@plane/i18n";
 import { PageIcon } from "@plane/propel/icons";
 import { cn } from "@plane/utils";
+// components
+import { SidebarWrapper } from "@/components/sidebar/sidebar-wrapper";
 // hooks
 import { EPageStoreType, usePageStore } from "@/hooks/store";
 import { useAppRouter } from "@/hooks/use-app-router";
@@ -53,20 +55,27 @@ export const WikiSidebar = observer(function WikiSidebar() {
   );
 
   return (
-    <div className="flex h-full w-full flex-col gap-1 overflow-y-auto p-2">
-      {predefined
-        .filter((item) => item.key !== "shared" || item.page_count > 0)
-        .map((item) =>
+    <SidebarWrapper title="Wiki">
+      <div className="flex w-full flex-col gap-1">
+        {predefined
+          .filter((item) => item.key !== "shared" || item.page_count > 0)
+          .map((item) =>
+            renderRow(
+              item.key,
+              t(`wiki_collections.predefined.${item.key}`),
+              item.page_count,
+              <PageIcon className="h-4 w-4 text-tertiary" />
+            )
+          )}
+        {collections.map((collection) =>
           renderRow(
-            item.key,
-            t(`wiki_collections.predefined.${item.key}`),
-            item.page_count,
+            collection.id,
+            collection.name,
+            collection.page_count,
             <PageIcon className="h-4 w-4 text-tertiary" />
           )
         )}
-      {collections.map((collection) =>
-        renderRow(collection.id, collection.name, collection.page_count, <PageIcon className="h-4 w-4 text-tertiary" />)
-      )}
-    </div>
+      </div>
+    </SidebarWrapper>
   );
 });
