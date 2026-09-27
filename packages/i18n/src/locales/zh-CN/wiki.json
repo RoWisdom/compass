@@ -39,7 +39,9 @@
       "create_new_page": "创建新页面",
       "add_existing_page": "添加现有页面",
       "edit_collection": "编辑集合",
-      "collection_options": "集合选项"
+      "collection_options": "集合选项",
+      "move_to_collection": "移动到集合",
+      "remove_from_wiki": "从 Wiki 中移出"
     },
     "add_existing_page_modal": {
       "search_placeholder": "搜索页面",

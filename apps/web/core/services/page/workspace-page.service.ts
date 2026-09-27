@@ -59,7 +59,14 @@ export type TPageCollectionListResponse = {
   collections: TPageCollection[];
 };
 
-/** `POST wiki-pages/` 的响应：实际收录成功的页面数。 */
+/**
+ * `POST wiki-pages/` 的响应。
+ *
+ * `included` 是**匹配行数**（`QuerySet.update()` 的语义），不是**改变行数**：
+ * 已经在 Wiki 里、且已经在目标集合里的页面也会被计入。所以
+ * `included === page_ids.length` 不等于「全是新增」，反过来 `included < page_ids.length`
+ * 也不等于「有页面被跳过了」。
+ */
 export type TPageIncludeResponse = {
   included: number;
 };
@@ -67,6 +74,16 @@ export type TPageIncludeResponse = {
 /** 侧栏选中的分区：预置分区的 key，或某个集合的 uuid。 */
 export type TCollectionFilter = TPredefinedCollectionKey | string;
 
+/**
+ * 工作区级 Wiki 页面的 HTTP 客户端。
+ *
+ * 所有方法的 `.catch` 都是 `throw error?.response?.data ?? error`，**不是**
+ * `throw error?.response?.data`：**没有 HTTP 响应**时（离线 / DNS 失败 / CORS 被拦）
+ * `error.response` 是 undefined，原来抛出去的就是 `undefined` —— 调用方那个
+ * `catch (error)` 会把「undefined」当成「没出错」，用户停在 spinner 上永远转
+ * （`wiki/[pageId]/page.tsx` 的 `pageDetailsError` 就是这么读的）。退回原始 error 对象，
+ * 至少是个真值。
+ */
 export class WorkspacePageService extends APIService {
   constructor() {
     super(API_BASE_URL);
@@ -77,7 +94,7 @@ export class WorkspacePageService extends APIService {
     return this.get(`/api/workspaces/${workspaceSlug}/page-collections/`)
       .then((response) => response?.data)
       .catch((error) => {
-        throw error?.response?.data;
+        throw error?.response?.data ?? error;
       });
   }
 
@@ -88,7 +105,7 @@ export class WorkspacePageService extends APIService {
     })
       .then((response) => response?.data)
       .catch((error) => {
-        throw error?.response?.data;
+        throw error?.response?.data ?? error;
       });
   }
 
@@ -99,7 +116,7 @@ export class WorkspacePageService extends APIService {
     })
       .then((response) => response?.data)
       .catch((error) => {
-        throw error?.response?.data;
+        throw error?.response?.data ?? error;
       });
   }
 
@@ -108,7 +125,7 @@ export class WorkspacePageService extends APIService {
     return this.get(`/api/workspaces/${workspaceSlug}/wiki-pages/${pageId}/`)
       .then((response) => response?.data)
       .catch((error) => {
-        throw error?.response?.data;
+        throw error?.response?.data ?? error;
       });
   }
 
@@ -133,11 +150,16 @@ export class WorkspacePageService extends APIService {
     })
       .then((response) => response?.data)
       .catch((error) => {
-        throw error?.response?.data;
+        throw error?.response?.data ?? error;
       });
   }
 
-  /** 换集合。`collectionId = null` 表示移回 general。也用于改标题等元数据。 */
+  /**
+   * 换集合。`collectionId = null` 表示移回 general。
+   *
+   * **只做换集合**，不能用它改标题等元数据：`WikiPageUpdateSerializer` 没有 `name` 字段，
+   * DRF 会静默忽略未知键 —— 一次「改标题」会返回 200 而什么都没变。
+   */
   async update(
     workspaceSlug: string,
     pageId: string,
@@ -146,7 +168,7 @@ export class WorkspacePageService extends APIService {
     return this.patch(`/api/workspaces/${workspaceSlug}/wiki-pages/${pageId}/`, data)
       .then((response) => response?.data)
       .catch((error) => {
-        throw error?.response?.data;
+        throw error?.response?.data ?? error;
       });
   }
 
@@ -155,7 +177,7 @@ export class WorkspacePageService extends APIService {
     return this.patch(`/api/workspaces/${workspaceSlug}/wiki-pages/${pageId}/`, data)
       .then((response) => response?.data)
       .catch((error) => {
-        throw error?.response?.data;
+        throw error?.response?.data ?? error;
       });
   }
 
@@ -164,7 +186,7 @@ export class WorkspacePageService extends APIService {
     return this.delete(`/api/workspaces/${workspaceSlug}/wiki-pages/${pageId}/`)
       .then((response) => response?.data)
       .catch((error) => {
-        throw error?.response?.data;
+        throw error?.response?.data ?? error;
       });
   }
 }

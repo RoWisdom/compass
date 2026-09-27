@@ -39,7 +39,11 @@ export type TPageActions =
   | "delete"
   | "version-history"
   | "export"
-  | "move";
+  | "move"
+  // 工作区（Wiki）行专属：由 `PageListBlock` 的 `extraActions` 传进来（见 `WikiListRoot`），
+  // 项目页不会用到 —— 它们需要的是工作区 store 的分区概念，项目页没有。
+  | "remove-from-wiki"
+  | "move-to-collection";
 
 type Props = {
   extraOptions?: (TContextMenuItem & { key: TPageActions })[];
@@ -53,7 +57,9 @@ export const PageActions = observer(function PageActions(props: Props) {
   const { extraOptions, optionsOrder, page, parentRef, storeType } = props;
   // states
   const [deletePageModal, setDeletePageModal] = useState(false);
-  const [movePageModal, setMovePageModal] = useState(false);
+  // 值本身自 fork 起就没人读（上游的 Move 弹窗在这个 fork 里不存在），
+  // 只留 setter 以保持行为不变；右侧绑定会触发 lint 的 no-unused-vars。
+  const [, setMovePageModal] = useState(false);
   // params
   const { workspaceSlug } = useParams();
   // page flag

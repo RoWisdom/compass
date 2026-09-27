@@ -4,7 +4,6 @@
  * See the LICENSE file for details.
  */
 
-import { useState } from "react";
 import { observer } from "mobx-react";
 // plane imports
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
@@ -13,7 +12,7 @@ import { EmptyStateDetailed } from "@plane/propel/empty-state";
 import type { ActionButton } from "@plane/propel/empty-state";
 // components
 import { PageLoader } from "@/components/pages/loaders/page-loader";
-import { AddExistingPageModal } from "@/components/pages/wiki/add-existing-page-modal";
+import { useWikiIncludeModal } from "@/components/pages/wiki/wiki-include-modal-context";
 // hooks
 import { EPageStoreType, usePageStore } from "@/hooks/store";
 import { useUserPermissions } from "@/hooks/store/user";
@@ -27,10 +26,11 @@ type Props = {
 
 export const WikiListMainContent = observer(function WikiListMainContent(props: Props) {
   const { collection, children } = props;
-  // states
-  const [isAddExistingModalOpen, setIsAddExistingModalOpen] = useState(false);
   // plane hooks
   const { t } = useTranslation();
+  // 弹窗归 `WikiIncludeModalProvider` 所有（挂在 `wiki/layout.tsx`，顶栏按钮也在用它）。
+  // 这里只借 `open()` —— 不再自己挂弹窗、也不再自己存 state，否则就是两份实例。
+  const { open: openIncludeModal } = useWikiIncludeModal();
   // store hooks
   const { isAnyPageAvailable, getFilteredPageIdsByCollection, loader } = usePageStore(EPageStoreType.WORKSPACE);
   const { allowPermissions } = useUserPermissions();
@@ -46,60 +46,47 @@ export const WikiListMainContent = observer(function WikiListMainContent(props: 
   const canIncludeHere = canIncludeIntoCollection(collection);
   // 两种空态里的收录入口长得完全一样（两处差的只是 title/description），抽成常量，
   // 免得同一段 20 行在两个分支里各留一份逐字副本。
+  // 空态 CTA 保留：顶栏按钮常驻，这里的 CTA 是**引导**（用户明确要求保留）。
   const includeActions: ActionButton[] | undefined = canIncludeHere
     ? [
         {
           label: t("wiki_collections.menu.add_existing_page"),
-          onClick: () => setIsAddExistingModalOpen(true),
+          onClick: openIncludeModal,
           variant: "primary",
           disabled: !canIncludePages,
         },
       ]
     : undefined;
-  // 弹窗挂载也门控 `canIncludeHere`：换分区时本组件不重建，`isAddExistingModalOpen` 这个 state
-  // 会留着 —— 只门控按钮的话，在 general 打开弹窗再切到 private，弹窗会挂在那儿继续可选页。
-  const includeModal = canIncludeHere ? (
-    <AddExistingPageModal
-      isOpen={isAddExistingModalOpen}
-      collection={collection}
-      handleClose={() => setIsAddExistingModalOpen(false)}
-    />
-  ) : null;
 
   if (loader === "init-loader") return <PageLoader />;
 
   if (!isAnyPageAvailable)
     return (
-      <>
-        <EmptyStateDetailed
-          assetKey="page"
-          title={t("project_empty_state.pages.title")}
-          description={t("project_empty_state.pages.description")}
-          actions={includeActions}
-        />
-        {includeModal}
-      </>
+      <EmptyStateDetailed
+        assetKey="page"
+        title={t("project_empty_state.pages.title")}
+        description={t("project_empty_state.pages.description")}
+        actions={includeActions}
+      />
     );
 
   // 空分区也必须给收录入口。`isAnyPageAvailable` 是 `Object.keys(this.data).length > 0`
-  // （`workspace-page.store.ts:102-105`），而 `data` 只增不减 —— 工作区一旦加载出任何一页，
-  // 上面那个分支就再也进不去了。渲染空分区而不给 CTA，等于「收录」这个动作在整个 UI 里不可达。
-  // fork 源 `pages-list-main-content.tsx:98-133` 在空 tab 时是有 CTA 的，这里照它的形状补上。
+  // （`workspace-page.store.ts:107-110`），而 `data` 只增不减 —— 工作区一旦加载出任何一页，
+  // 上面那个分支就再也进不去了。fork 源 `pages-list-main-content.tsx:98-133` 在空 tab 时是有
+  // CTA 的，这里照它的形状补上。
+  // 注意：**CTA 不是这个动作唯一的入口**（顶栏按钮常驻，且本组件非空分支不渲染 CTA）。
   if (filteredPageIds?.length === 0)
     return (
-      <>
-        <EmptyStateDetailed
-          assetKey="page"
-          // 用 `list.no_pages_*` 而不是 `common_empty_state.search.*`：wiki 里没有任何 UI 会写
-          // `filters.searchQuery`，所以这个分支的真实触发条件就是「分区为空」，不是「搜不到」。
-          // 这两个键在 en 与 zh-CN 都已存在（「还没有页面」/「此集合当前没有任何页面。」），
-          // 且全 apps/web 无人消费 —— 不新增文案。
-          title={t("wiki_collections.list.no_pages_title")}
-          description={t("wiki_collections.list.no_pages_description")}
-          actions={includeActions}
-        />
-        {includeModal}
-      </>
+      <EmptyStateDetailed
+        assetKey="page"
+        // 用 `list.no_pages_*` 而不是 `common_empty_state.search.*`：wiki 里没有任何 UI 会写
+        // `filters.searchQuery`，所以这个分支的真实触发条件就是「分区为空」，不是「搜不到」。
+        // 这两个键在 en 与 zh-CN 都已存在（「还没有页面」/「此集合当前没有任何页面。」），
+        // 且全 apps/web 无人消费 —— 不新增文案。
+        title={t("wiki_collections.list.no_pages_title")}
+        description={t("wiki_collections.list.no_pages_description")}
+        actions={includeActions}
+      />
     );
 
   return <div className="h-full w-full overflow-hidden">{children}</div>;
