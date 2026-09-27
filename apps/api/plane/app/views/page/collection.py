@@ -430,7 +430,15 @@ class WikiPageDescriptionViewSet(BaseViewSet):
         # 集合必须是本工作区的 —— 与 metadata 路由（WikiPageViewSet.partial_update）同一个校验、
         # 同一个 404、同一个 body。复用 WikiPageUpdateSerializer 就是连带接受它声明的每个字段，
         # 所以这里欠着这条前置检查：缺了它，别的工作区的 collection_id 会被直接写成本页的 FK，
-        # 而不存在的 UUID 会一路落到 DB、以 500 收场。
+        # 而不存在的 UUID 会一路落到 DB。
+        #
+        # 缺守卫时**不会**给你一个 500 —— 别照直觉猜（这条注释原先就写错成 500，已按实测改正）：
+        #   · FK 约束是 deferrable 的，所以请求会以 **200** 正常返回，违规直到事务收尾
+        #     （测试里是 teardown 的 SET CONSTRAINTS ALL IMMEDIATE）才炸出来；
+        #   · 生产走 autocommit 时则由 BaseViewSet.handle_exception 把 IntegrityError 兜成
+        #     **400** {"error": "The payload is not valid"}（views/base.py:70-84）。
+        # 两条路都不告诉调用方是哪个字段错了，而测试那条**看起来像写入成功了** —— 比 500 更难发现。
+        #
         # 校验排在 save() 之前：404 路径下正文一个字段都不会动。
         collection_id = serializer.validated_data.get("collection_id")
         if collection_id is not None:
