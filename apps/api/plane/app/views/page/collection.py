@@ -114,6 +114,10 @@ class WikiPageViewSet(BaseViewSet):
                 # archived > private > 用户集合 > general）—— 收录后它必落 private 分区，
                 # 不是用户当时所在的那个。摆出来只会让人以为「收录到这里」。
                 .exclude(access=Page.PRIVATE_ACCESS)
+                # 归档页同理，而且理由更强：archived 是 resolve_collection_key 的**第一**优先级。
+                # 归档页的归属由 archived_at 决定，从 general 收录它必落「归档」分区。
+                # `Page.archived_at` 是 DateField，`isnull=True` 即「没归档」。
+                .filter(archived_at__isnull=True)
                 .select_related("workspace")
                 .select_related("owned_by")
                 .order_by("-updated_at")

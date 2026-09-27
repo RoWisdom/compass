@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
+from datetime import date
 from uuid import uuid4
 
 import pytest
@@ -648,3 +649,27 @@ class TestWikiPageCandidates:
         ids = [item["id"] for item in response.data]
         assert str(project_page.id) in ids
         assert str(own_private.id) not in ids
+
+    @pytest.mark.django_db
+    def test_candidates_exclude_archived_pages(self, session_client, workspace, create_user, project_page):
+        """归档页也不做候选 —— 与私有页同一类误导。
+
+        `resolve_collection_key` 的**第一**优先级就是 archived：归档页的归属由 `archived_at`
+        决定，从 general 收录它，它会落到「归档」分区而不是当前分区 —— 刷新后列表里看不到，
+        可 toast 却说加了一条。与私有页是同一个问题，所以同一条处置。
+        """
+        archived = Page.objects.create(
+            workspace=workspace,
+            name="已归档的未收录页",
+            owned_by=create_user,
+            access=Page.PUBLIC_ACCESS,
+            is_global=False,
+            # `Page.archived_at` 是 **DateField**（`db/models/page.py:47`），给 date 不是 datetime。
+            archived_at=date(2026, 1, 1),
+        )
+
+        response = session_client.get(f"/api/workspaces/{workspace.slug}/wiki-pages/?include_candidates=true")
+
+        ids = [item["id"] for item in response.data]
+        assert str(project_page.id) in ids
+        assert str(archived.id) not in ids

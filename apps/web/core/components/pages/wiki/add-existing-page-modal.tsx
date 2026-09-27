@@ -50,7 +50,11 @@ export const AddExistingPageModal = observer(function AddExistingPageModal(props
   // 拒掉、整个请求 400（`apps/api/plane/app/serializers/page_collection.py:61`：
   // `collection_id = serializers.UUIDField(required=False, allow_null=True)`）。
   // 传 null 即「落回 general」—— 正是 general 分区的语义。其余预置分区走不到这里
-  // （父组件已关掉它们的收录入口），但这个映射本身是全的：任何取值都拼不出非法请求。
+  // （父组件已关掉它们的收录入口）。
+  // **这个映射对「四个预置键 + 真 uuid」是全的，对任意字符串不是**：`?collection=<既非预置键、
+  // 又非 uuid 的串>` 会原样送出去、被同一个 UUIDField 400。从 UI 走不到这种取值
+  // （侧栏的 key 只来自预置键与已取回的集合 id），所以不做额外校验 —— 但别把这段注释读成
+  // 「任何输入都安全」。
   const collectionId = isPredefinedCollectionKey(collection) ? null : collection;
 
   const query = searchQuery.trim().toLowerCase();

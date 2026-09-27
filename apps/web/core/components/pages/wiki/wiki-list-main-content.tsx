@@ -10,6 +10,7 @@ import { observer } from "mobx-react";
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { EmptyStateDetailed } from "@plane/propel/empty-state";
+import type { ActionButton } from "@plane/propel/empty-state";
 // components
 import { PageLoader } from "@/components/pages/loaders/page-loader";
 import { AddExistingPageModal } from "@/components/pages/wiki/add-existing-page-modal";
@@ -43,6 +44,27 @@ export const WikiListMainContent = observer(function WikiListMainContent(props: 
   // 页面落在哪儿由 access/archived_at 决定，不由 collection_id 决定（见
   // `canIncludeIntoCollection` 的注释）。在那三个分区里给收录入口，用户选中的页面会跑到别处去。
   const canIncludeHere = canIncludeIntoCollection(collection);
+  // 两种空态里的收录入口长得完全一样（两处差的只是 title/description），抽成常量，
+  // 免得同一段 20 行在两个分支里各留一份逐字副本。
+  const includeActions: ActionButton[] | undefined = canIncludeHere
+    ? [
+        {
+          label: t("wiki_collections.menu.add_existing_page"),
+          onClick: () => setIsAddExistingModalOpen(true),
+          variant: "primary",
+          disabled: !canIncludePages,
+        },
+      ]
+    : undefined;
+  // 弹窗挂载也门控 `canIncludeHere`：换分区时本组件不重建，`isAddExistingModalOpen` 这个 state
+  // 会留着 —— 只门控按钮的话，在 general 打开弹窗再切到 private，弹窗会挂在那儿继续可选页。
+  const includeModal = canIncludeHere ? (
+    <AddExistingPageModal
+      isOpen={isAddExistingModalOpen}
+      collection={collection}
+      handleClose={() => setIsAddExistingModalOpen(false)}
+    />
+  ) : null;
 
   if (loader === "init-loader") return <PageLoader />;
 
@@ -53,26 +75,9 @@ export const WikiListMainContent = observer(function WikiListMainContent(props: 
           assetKey="page"
           title={t("project_empty_state.pages.title")}
           description={t("project_empty_state.pages.description")}
-          actions={
-            canIncludeHere
-              ? [
-                  {
-                    label: t("wiki_collections.menu.add_existing_page"),
-                    onClick: () => setIsAddExistingModalOpen(true),
-                    variant: "primary",
-                    disabled: !canIncludePages,
-                  },
-                ]
-              : undefined
-          }
+          actions={includeActions}
         />
-        {canIncludeHere && (
-          <AddExistingPageModal
-            isOpen={isAddExistingModalOpen}
-            collection={collection}
-            handleClose={() => setIsAddExistingModalOpen(false)}
-          />
-        )}
+        {includeModal}
       </>
     );
 
@@ -91,26 +96,9 @@ export const WikiListMainContent = observer(function WikiListMainContent(props: 
           // 且全 apps/web 无人消费 —— 不新增文案。
           title={t("wiki_collections.list.no_pages_title")}
           description={t("wiki_collections.list.no_pages_description")}
-          actions={
-            canIncludeHere
-              ? [
-                  {
-                    label: t("wiki_collections.menu.add_existing_page"),
-                    onClick: () => setIsAddExistingModalOpen(true),
-                    variant: "primary",
-                    disabled: !canIncludePages,
-                  },
-                ]
-              : undefined
-          }
+          actions={includeActions}
         />
-        {canIncludeHere && (
-          <AddExistingPageModal
-            isOpen={isAddExistingModalOpen}
-            collection={collection}
-            handleClose={() => setIsAddExistingModalOpen(false)}
-          />
-        )}
+        {includeModal}
       </>
     );
 
