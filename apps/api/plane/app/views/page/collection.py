@@ -25,6 +25,10 @@ from plane.app.serializers import (
     WikiPageSerializer,
     WikiPageUpdateSerializer,
 )
+
+# 直接取自子模块：`WikiPageTreeSerializer` 只服务于本文件的 `scope=all` 分支，
+# 不进 serializers 包的公共出口（那会把它变成整个 app 都能 import 的名字）。
+from plane.app.serializers.page_collection import WikiPageTreeSerializer
 from plane.db.models import Page, PageCollection, Project, ProjectPage, Workspace
 from plane.utils.error_codes import ERROR_CODES
 from plane.utils.markdown_storage import move_page_markdown
@@ -210,7 +214,17 @@ class WikiPageViewSet(BaseViewSet):
             )
             return Response(WikiPageSerializer(candidates, many=True).data, status=status.HTTP_200_OK)
 
+        # `scope=all`：侧栏建树要一次拿到**所有**分区的页面（设计 B-5）。
+        #
+        # 独立参数，**不复用** `collection=all` —— `collection` 的值域是「预置键或
+        # UUID」，往里塞一个哨兵值等于在一个已有的值域里开洞；独立参数不产生二义。
+        #
+        # 不带 `scope` 时行为逐字不变（`collection` 仍默认 GENERAL）：本改动对既有
+        # 调用方是**完全向后兼容**的，`wiki-list-root.tsx` 那条按集合取数的路径
+        # 不能被这次改动碰到。
+        scope_all = request.GET.get("scope") == "all"
         collection_key = request.GET.get("collection", GENERAL)
+
         # 列表行不需要正文，但 `_wiki_page_queryset` 是**整行**取出来的 —— 其中
         # `description_binary` 是 Yjs 协同文档的全量二进制、`description_json` 是
         # jsonb 正文（`db/models/page.py:33-35`）。整行取出来只为在 Python 里读三个
@@ -225,15 +239,30 @@ class WikiPageViewSet(BaseViewSet):
             .select_related("owned_by")
             .defer("description_json", "description_binary", "description_html", "description_stripped")
         )
-        pages = [
-            page
-            for page in pages
-            if resolve_collection_key(
-                archived_at=page.archived_at, access=page.access, collection_id=page.collection_id
+
+        # 分区键**只算一次**：`resolve_collection_key` 是有优先级的业务规则，全仓只有
+        # 这一处实现。`scope=all` 时把它随行发给前端（B-6），否则拿它做过滤。
+        resolved = [
+            (
+                page,
+                resolve_collection_key(
+                    archived_at=page.archived_at, access=page.access, collection_id=page.collection_id
+                ),
             )
-            == collection_key
+            for page in pages
         ]
-        serializer = WikiPageSerializer(pages, many=True)
+
+        if scope_all:
+            serializer = WikiPageTreeSerializer(
+                [page for page, _ in resolved],
+                many=True,
+                context={"collection_keys": {page.id: key for page, key in resolved}},
+            )
+        else:
+            serializer = WikiPageSerializer(
+                [page for page, key in resolved if key == collection_key], many=True
+            )
+
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")

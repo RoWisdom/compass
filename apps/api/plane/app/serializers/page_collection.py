@@ -72,6 +72,29 @@ class WikiPageSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class WikiPageTreeSerializer(WikiPageSerializer):
+    """``?scope=all`` 的行：在列表字段之上附一个**服务端算好的**分区键（设计 B-6）。
+
+    为什么不让前端用 ``archived_at`` / ``access`` / ``collection_id`` 自己再判一遍：
+    分区规则（archived > private > 集合 > general）是**一条有优先级的业务规则**。
+    前端复刻一遍就有了第二个真相源，将来改优先级必然两边不一致。**一处算，一处用。**
+
+    单独一个类而不是给 ``WikiPageSerializer`` 加字段：默认（不带 ``scope``）那条路径
+    必须逐字不变 —— 多出来的键会顺着前端 ``mutateProperties`` 被写成没人认识的属性。
+    """
+
+    collection_key = serializers.SerializerMethodField()
+
+    class Meta(WikiPageSerializer.Meta):
+        fields = [*WikiPageSerializer.Meta.fields, "collection_key"]
+        read_only_fields = fields
+
+    def get_collection_key(self, obj):
+        # 键由调用方（`WikiPageViewSet.list`）算好放进 context —— 它**必须**算，
+        # 因为不带 `scope` 的那个分支要用同一个键做过滤。这里只查表，不重算。
+        return self.context["collection_keys"][obj.id]
+
+
 class WikiPageIncludeSerializer(serializers.Serializer):
     """POST /wiki-pages/ 的请求体 —— 把已有页面收录进 Wiki。"""
 
