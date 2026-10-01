@@ -17,9 +17,8 @@ from uuid import uuid4
 
 import pytest
 from rest_framework import status
-from rest_framework.test import APIClient
 
-from plane.db.models import Page, PageCollection, User, Workspace, WorkspaceMember
+from plane.db.models import Page, PageCollection, User
 
 
 @pytest.fixture
