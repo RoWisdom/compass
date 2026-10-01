@@ -323,3 +323,218 @@ class TestWikiPageCreateWithAProject:
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
         assert Page.objects.count() == 0
+
+
+@pytest.fixture
+def visible_parent(workspace, create_user):
+    """本工作区里一个**已收录**的公开页面 —— 合法的父页。"""
+    return Page.objects.create(
+        name="父页",
+        workspace=workspace,
+        owned_by=create_user,
+        is_global=True,
+        description_html="<p></p>",
+        description_json={},
+    )
+
+
+@pytest.fixture
+def other_user(db):
+    """第二个用户。用来造「别人的私有页」这个不可见的父页。"""
+    unique_id = uuid4().hex[:8]
+    user = User.objects.create(
+        email=f"other-{unique_id}@plane.so",
+        username=f"other_{unique_id}",
+        first_name="Other",
+        last_name="User",
+    )
+    user.set_password("test-password")
+    user.save()
+    return user
+
+
+@pytest.mark.contract
+class TestWikiPageCreateWithAParent:
+    """子页面（设计 §3）—— ``parent`` 可选，且要过三条前置校验。
+
+    三条缺一条都是洞：跨工作区（把子页挂到别家）、不可见（挂到别人的私有页底下）、
+    未收录（子页挂在一个永远不会出现在树里的父页下面，变成看不见的孤儿）。
+    """
+
+    @pytest.mark.django_db
+    def test_creates_a_child_under_a_parent(self, session_client, workspace, visible_parent):
+        response = session_client.post(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/create/",
+            {"name": "子页", "parent": str(visible_parent.id)},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        child = Page.objects.get(pk=response.data["id"])
+        assert child.parent_id == visible_parent.id
+        # 子页照样是**已收录**的 —— 不然它不进树，等于白建。
+        assert child.is_global is True
+
+        listed = session_client.get(f"/api/workspaces/{workspace.slug}/wiki-pages/", {"collection": "general"})
+        assert {str(row["id"]) for row in listed.data} == {str(visible_parent.id), str(child.id)}
+        # 列表响应必须带 `parent` —— 前端建树**只**靠它（Task 4 的 `pageParentIds`）。
+        row = next(item for item in listed.data if str(item["id"]) == str(child.id))
+        assert str(row["parent"]) == str(visible_parent.id)
+
+    @pytest.mark.django_db
+    def test_child_inherits_the_parents_collection(self, session_client, workspace, create_user, visible_parent):
+        collection = PageCollection.objects.create(workspace=workspace, name="父页的集合", owned_by=create_user)
+        visible_parent.collection = collection
+        visible_parent.save(update_fields=["collection"])
+
+        response = session_client.post(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/create/",
+            {"parent": str(visible_parent.id)},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert Page.objects.get(pk=response.data["id"]).collection_id == collection.id
+
+    @pytest.mark.django_db
+    def test_child_inherits_the_parents_private_access(self, session_client, workspace, visible_parent):
+        """父页是私有的 ⇒ 子页也私有，落 private 分区。
+
+        私有父页**自己的属主**当然看得见它（`_visible_page_q` 是
+        `~Q(access=1) | Q(owned_by=user)`），所以这里不会撞上 B-2 的可见性校验。
+        """
+        visible_parent.access = Page.PRIVATE_ACCESS
+        visible_parent.save(update_fields=["access"])
+
+        response = session_client.post(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/create/",
+            {"parent": str(visible_parent.id)},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        child = Page.objects.get(pk=response.data["id"])
+        assert child.access == Page.PRIVATE_ACCESS
+
+        private = session_client.get(f"/api/workspaces/{workspace.slug}/wiki-pages/", {"collection": "private"})
+        assert {str(row["id"]) for row in private.data} == {str(visible_parent.id), str(child.id)}
+
+    @pytest.mark.django_db
+    def test_explicit_values_win_over_inheritance(self, session_client, workspace, visible_parent):
+        """显式给了 `access` 就以显式为准 —— 继承是默认值，不是强制（设计 B-3）。"""
+        visible_parent.access = Page.PRIVATE_ACCESS
+        visible_parent.save(update_fields=["access"])
+
+        response = session_client.post(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/create/",
+            {"parent": str(visible_parent.id), "access": 0},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert Page.objects.get(pk=response.data["id"]).access == Page.PUBLIC_ACCESS
+
+    @pytest.mark.django_db
+    def test_explicit_null_collection_is_not_overridden(
+        self, session_client, workspace, create_user, visible_parent
+    ):
+        """显式 `collection_id: null` 是「落 general」的表态，不该被父页的集合覆盖。
+
+        判据必须是**原始请求体里有没有这个键**，不是 `validated_data` 里有没有值。
+        """
+        collection = PageCollection.objects.create(workspace=workspace, name="父页的集合", owned_by=create_user)
+        visible_parent.collection = collection
+        visible_parent.save(update_fields=["collection"])
+
+        response = session_client.post(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/create/",
+            {"parent": str(visible_parent.id), "collection_id": None},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert Page.objects.get(pk=response.data["id"]).collection_id is None
+
+    @pytest.mark.django_db
+    def test_rejects_a_parent_from_another_workspace(
+        self, session_client, workspace, other_workspace, create_user
+    ):
+        """别的工作区的页面当父页 → 404，且**一页都不建**。"""
+        foreign = Page.objects.create(
+            name="别家的页",
+            workspace=other_workspace,
+            owned_by=create_user,
+            is_global=True,
+            description_html="<p></p>",
+            description_json={},
+        )
+
+        response = session_client.post(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/create/",
+            {"parent": str(foreign.id)},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert Page.objects.count() == 1  # 只有上面那个 foreign 页
+
+    @pytest.mark.django_db
+    def test_rejects_an_invisible_parent(self, session_client, workspace, other_user):
+        """别人的私有页当父页 → 404。
+
+        少了这条可见性校验，直接调 API 就能把子页挂到**别人的私有页**底下 ——
+        与「私有页不进收录候选」是同一类纪律。
+        """
+        hidden = Page.objects.create(
+            name="别人的私密页",
+            workspace=workspace,
+            owned_by=other_user,
+            access=Page.PRIVATE_ACCESS,
+            is_global=True,
+            description_html="<p></p>",
+            description_json={},
+        )
+
+        response = session_client.post(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/create/",
+            {"parent": str(hidden.id)},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert Page.objects.count() == 1
+
+    @pytest.mark.django_db
+    def test_rejects_a_parent_that_is_not_included_in_the_wiki(self, session_client, workspace, create_user):
+        """未收录（`is_global=False`）的页面当父页 → 404。
+
+        树只列已收录页，所以挂在它下面的子页会是一个**永远看不见的孤儿**。
+        界面上点不出来（`＋` 只长在树的行上），但 API 能调出来。
+        """
+        unlisted = Page.objects.create(
+            name="未收录页",
+            workspace=workspace,
+            owned_by=create_user,
+            is_global=False,
+            description_html="<p></p>",
+            description_json={},
+        )
+
+        response = session_client.post(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/create/",
+            {"parent": str(unlisted.id)},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert Page.objects.count() == 1
+
+    @pytest.mark.django_db
+    def test_explicit_null_parent_is_accepted(self, session_client, workspace):
+        """显式 `parent: null` 与「压根不传」是两条输入，都合法。"""
+        response = session_client.post(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/create/", {"parent": None}, format="json"
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert Page.objects.get(pk=response.data["id"]).parent_id is None

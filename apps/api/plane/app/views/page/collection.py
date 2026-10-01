@@ -316,6 +316,43 @@ class WikiPageViewSet(BaseViewSet):
             if not Project.objects.filter(id=project_id, workspace=workspace).exists():
                 return Response({"error": "Project not found."}, status=status.HTTP_404_NOT_FOUND)
 
+        # 父页要同时满足**三条**，少一条都是洞（设计 B-2）：
+        #   1. 属于本工作区 —— 与另外两个外键同一条；
+        #   2. 对调用者**可见**（复用 `_visible_page_q`）—— 否则直接调 API 就能把子页挂到
+        #      **别人的私有页**底下。这与「私有页不进收录候选」（本文件 `list` 分支）是
+        #      **同一类纪律**：凡是「由调用者指定一个已存在的页面」的入口，都要过可见性；
+        #   3. 本身**已收录**（`is_global=True`）—— 树只列已收录页，所以挂在未收录父页下面的
+        #      子页会是一个**永远看不见的孤儿**。界面上点不出来（`＋` 只长在树的行上），
+        #      但 API 能调出来。
+        # 三条合成**一条** queryset 查：拆成三次 `.filter()` 是三个独立的 `EXISTS`，
+        # 语义上等价但读起来像三个条件各管各的，容易以为可以分别放宽。
+        # 校验排在 `save()` 之前：404 路径下**一页都不建**。
+        parent = None
+        parent_id = serializer.validated_data.get("parent")
+        if parent_id is not None:
+            parent = (
+                Page.objects.filter(id=parent_id, workspace__slug=slug, is_global=True)
+                .filter(_visible_page_q(request.user))
+                .first()
+            )
+            if parent is None:
+                return Response({"error": "Parent page not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # 建时继承（设计 B-3）：**没显式给**才继承。
+        #
+        # 判据是**原始请求体里有没有这个键**，不是 `validated_data` 里有没有值 ——
+        # `access` 在序列化器上带 `default=`，缺键时 DRF 也会往 `validated_data` 里填，
+        # 那里分不出「没传」与「传了 0」；`collection_id` 显式传 `null` 同理，
+        # 那是「落 general」的表态，不该被父页的集合覆盖。
+        #
+        # 写回 `validated_data` 之后再 `save()`，于是**下面那条**集合归属校验
+        # 顺带把继承来的值也验了 —— 不需要为继承的集合再写第二遍校验。
+        if parent is not None:
+            if "access" not in request.data:
+                serializer.validated_data["access"] = parent.access
+            if "collection_id" not in request.data:
+                serializer.validated_data["collection_id"] = parent.collection_id
+
         collection_id = serializer.validated_data.get("collection_id")
         if collection_id is not None:
             target = PageCollection.objects.filter(id=collection_id, workspace__slug=slug).first()

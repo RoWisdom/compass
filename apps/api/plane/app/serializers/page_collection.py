@@ -190,6 +190,13 @@ class WikiPageCreateSerializer(serializers.Serializer):
     # 的代价，不是缺陷）。归属校验（必须是本工作区的项目）由视图前置查，见
     # ``WikiPageViewSet.create_page``。
     project_id = serializers.UUIDField(required=False, allow_null=True)
+    # 可选。给了就把这一页挂到它下面，形成一个子页面。
+    #
+    # 这里**只做语法校验**：父页是否属于本工作区 / 对调用者可见 / 已收录，
+    # 三条都由视图前置查并落 404（见 ``WikiPageViewSet.create_page``）——
+    # 与 ``project_id`` / ``collection_id`` 完全同一条纪律，原因也一样：
+    # 归属是**跨表**的事实，序列化器拿不到 request，判不了。
+    parent = serializers.UUIDField(required=False, allow_null=True)
 
     def create(self, validated_data):
         workspace = self.context["workspace"]
@@ -207,6 +214,9 @@ class WikiPageCreateSerializer(serializers.Serializer):
             workspace=workspace,
             access=validated_data.get("access", Page.PUBLIC_ACCESS),
             collection_id=validated_data.get("collection_id"),
+            # `parent_id` 而不是 `parent`：给 FK 赋 id 是 Django 的原生写法，
+            # 不必为了拿一个实例再查一次库。
+            parent_id=validated_data.get("parent"),
         )
 
         # 挂到项目下 —— 照 ``serializers/page.py:99-105`` 的写法逐字段对齐。
