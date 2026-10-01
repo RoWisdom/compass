@@ -87,6 +87,10 @@
       "collection_link_copied": "コレクションリンクをクリップボードにコピーしました。"
     }
   },
+  "wiki_home": {
+    "title": "ホーム",
+    "recent_title": "最近の編集"
+  },
   "wiki": {
     "upgrade_flow": {
       "title": "アップグレードしてWikiを利用",

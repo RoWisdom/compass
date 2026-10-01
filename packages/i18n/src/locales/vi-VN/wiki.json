@@ -87,6 +87,10 @@
       "collection_link_copied": "Đã sao chép liên kết bộ sưu tập vào bộ nhớ tạm."
     }
   },
+  "wiki_home": {
+    "title": "Trang chủ",
+    "recent_title": "Mới chỉnh sửa"
+  },
   "wiki": {
     "upgrade_flow": {
       "title": "Nâng cấp để mở khóa Wiki",

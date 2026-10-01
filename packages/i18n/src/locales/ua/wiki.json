@@ -87,6 +87,10 @@
       "collection_link_copied": "Посилання на колекцію скопійовано в буфер обміну."
     }
   },
+  "wiki_home": {
+    "title": "Головна",
+    "recent_title": "Нещодавно змінені"
+  },
   "wiki": {
     "upgrade_flow": {
       "title": "Оновіться, щоб розблокувати Wiki",

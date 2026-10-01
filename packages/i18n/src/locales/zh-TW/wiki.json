@@ -87,6 +87,10 @@
       "collection_link_copied": "集合連結已複製到剪貼簿。"
     }
   },
+  "wiki_home": {
+    "title": "首頁",
+    "recent_title": "最近編輯"
+  },
   "wiki": {
     "upgrade_flow": {
       "title": "升級以解鎖 Wiki",

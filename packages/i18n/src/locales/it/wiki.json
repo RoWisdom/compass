@@ -87,6 +87,10 @@
       "collection_link_copied": "Link della raccolta copiato negli appunti."
     }
   },
+  "wiki_home": {
+    "title": "Home",
+    "recent_title": "Modificato di recente"
+  },
   "wiki": {
     "upgrade_flow": {
       "title": "Aggiorna per sbloccare il Wiki",

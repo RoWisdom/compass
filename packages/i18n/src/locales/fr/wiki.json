@@ -87,6 +87,10 @@
       "collection_link_copied": "Lien de la collection copié dans le presse-papiers."
     }
   },
+  "wiki_home": {
+    "title": "Accueil",
+    "recent_title": "Modifié récemment"
+  },
   "wiki": {
     "upgrade_flow": {
       "title": "Mettez à niveau pour débloquer le Wiki",

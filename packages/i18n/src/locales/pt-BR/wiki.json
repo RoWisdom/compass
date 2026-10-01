@@ -87,6 +87,10 @@
       "collection_link_copied": "Link da coleção copiado para a área de transferência."
     }
   },
+  "wiki_home": {
+    "title": "Home",
+    "recent_title": "Editado recentemente"
+  },
   "wiki": {
     "upgrade_flow": {
       "title": "Faça upgrade para desbloquear o Wiki",

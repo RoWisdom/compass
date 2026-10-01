@@ -87,6 +87,10 @@
       "collection_link_copied": "Sammlungslink in die Zwischenablage kopiert."
     }
   },
+  "wiki_home": {
+    "title": "Startseite",
+    "recent_title": "Zuletzt bearbeitet"
+  },
   "wiki": {
     "upgrade_flow": {
       "title": "Upgrade zum Freischalten von Wiki",

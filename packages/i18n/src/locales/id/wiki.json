@@ -87,6 +87,10 @@
       "collection_link_copied": "Tautan koleksi disalin ke clipboard."
     }
   },
+  "wiki_home": {
+    "title": "Beranda",
+    "recent_title": "Baru saja diedit"
+  },
   "wiki": {
     "upgrade_flow": {
       "title": "Tingkatkan untuk membuka Wiki",

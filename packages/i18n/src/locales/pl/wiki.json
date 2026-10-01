@@ -87,6 +87,10 @@
       "collection_link_copied": "Link do kolekcji skopiowano do schowka."
     }
   },
+  "wiki_home": {
+    "title": "Strona główna",
+    "recent_title": "Ostatnio edytowane"
+  },
   "wiki": {
     "upgrade_flow": {
       "title": "Uaktualnij, aby odblokować Wiki",

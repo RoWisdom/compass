@@ -87,6 +87,10 @@
       "collection_link_copied": "Collection link copied to clipboard."
     }
   },
+  "wiki_home": {
+    "title": "Home",
+    "recent_title": "Recently edited"
+  },
   "wiki": {
     "upgrade_flow": {
       "title": "Upgrade to unlock Wiki",

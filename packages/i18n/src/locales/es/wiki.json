@@ -87,6 +87,10 @@
       "collection_link_copied": "Enlace de la colección copiado al portapapeles."
     }
   },
+  "wiki_home": {
+    "title": "Inicio",
+    "recent_title": "Editado recientemente"
+  },
   "wiki": {
     "upgrade_flow": {
       "title": "Mejora para desbloquear Wiki",

@@ -87,6 +87,10 @@
       "collection_link_copied": "컬렉션 링크가 클립보드에 복사되었습니다."
     }
   },
+  "wiki_home": {
+    "title": "홈",
+    "recent_title": "최근 편집됨"
+  },
   "wiki": {
     "upgrade_flow": {
       "title": "업그레이드하여 위키 잠금 해제",

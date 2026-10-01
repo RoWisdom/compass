@@ -87,6 +87,10 @@
       "collection_link_copied": "Linkul colecției a fost copiat în clipboard."
     }
   },
+  "wiki_home": {
+    "title": "Acasă",
+    "recent_title": "Modificat recent"
+  },
   "wiki": {
     "upgrade_flow": {
       "title": "Actualizează pentru a debloca Wiki",

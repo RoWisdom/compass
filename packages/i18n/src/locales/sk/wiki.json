@@ -87,6 +87,10 @@
       "collection_link_copied": "Odkaz na kolekciu bol skopírovaný do schránky."
     }
   },
+  "wiki_home": {
+    "title": "Domov",
+    "recent_title": "Nedávno upravené"
+  },
   "wiki": {
     "upgrade_flow": {
       "title": "Upgradujte a odomknite Wiki",

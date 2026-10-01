@@ -87,6 +87,10 @@
       "collection_link_copied": "Koleksiyon bağlantısı panoya kopyalandı."
     }
   },
+  "wiki_home": {
+    "title": "Ana Sayfa",
+    "recent_title": "Son düzenlenenler"
+  },
   "wiki": {
     "upgrade_flow": {
       "title": "Wiki'yi açmak için yükseltin",
