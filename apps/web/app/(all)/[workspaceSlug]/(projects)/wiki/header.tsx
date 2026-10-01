@@ -25,7 +25,13 @@ export const WikiHeader = observer(function WikiHeader() {
   // router
   const { workspaceSlug } = useParams();
   const searchParams = useSearchParams();
-  const activeCollection = searchParams.get("collection") ?? "general";
+  // 与侧栏、与 `wiki/page.tsx` 用同一条分界：**`?collection` 缺省 = 首页**。
+  // `explicitCollection` 单独留一份，因为下面两处（面包屑、右上按钮）判的是
+  // 「在不在首页」；`activeCollection` 则继续给分区语义用（预置键判定、能否收录），
+  // 它在首页上兜底成 `general` 只是为了让类型与既有分支不变，**不再代表用户在哪儿**。
+  const explicitCollection = searchParams.get("collection");
+  const activeCollection = explicitCollection ?? "general";
+  const isHome = explicitCollection === null;
   // plane hooks
   const { t } = useTranslation();
   // store hooks
@@ -68,7 +74,7 @@ export const WikiHeader = observer(function WikiHeader() {
     <Header>
       <Header.LeftItem>
         <BreadcrumbLink
-          label={`${currentWorkspace?.name ?? ""} / ${collectionLabel}`}
+          label={`${currentWorkspace?.name ?? ""} / ${isHome ? t("wiki_home.title") : collectionLabel}`}
           href={`/${workspaceSlug}/wiki/`}
           icon={<PageIcon className="h-4 w-4 text-tertiary" />}
           isLast
@@ -76,8 +82,15 @@ export const WikiHeader = observer(function WikiHeader() {
       </Header.LeftItem>
 
       <Header.RightItem>
+        {/*
+          **首页上不渲染这颗按钮。** 它做的事是「把已有页面收录进当前分区」，
+          而首页**没有当前分区** —— `activeCollection` 在这里只是 `general` 的兜底，
+          点下去会把页面收录进「常规」，与用户以为所在的「首页」不是一回事。
+          不渲染（而不是 disabled）与下面 `canIncludeHere` 那条的既有理由一致：
+          一个不解释原因的灰按钮和没有入口一样糟。
+        */}
         {/* 文案复用 `header.add_page`（弹窗标题用的同一个键，本来就是给顶栏准备的） */}
-        {canIncludeHere && canIncludePages && (
+        {!isHome && canIncludeHere && canIncludePages && (
           <Button variant="primary" size="lg" onClick={openIncludeModal}>
             {t("wiki_collections.header.add_page")}
           </Button>

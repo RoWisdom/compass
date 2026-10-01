@@ -7,13 +7,14 @@
 import { Fragment, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { observer } from "mobx-react";
-import { useParams, useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { useParams, usePathname, useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import { ChevronRight, MoreHorizontal, Plus } from "lucide-react";
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { IconButton } from "@plane/propel/icon-button";
-import { PageIcon } from "@plane/propel/icons";
+import { ChevronRightIcon, HomeIcon, PageIcon, PlusIcon } from "@plane/propel/icons";
 import { CustomMenu } from "@plane/ui";
 import { cn, getPageName } from "@plane/utils";
 // components
@@ -26,6 +27,7 @@ import {
   wikiTreeIndentClass,
 } from "@/components/pages/wiki/wiki-tree";
 import type { TWikiTreeLine } from "@/components/pages/wiki/wiki-tree";
+import { SidebarNavItem } from "@/components/sidebar/sidebar-navigation";
 import { SidebarWrapper } from "@/components/sidebar/sidebar-wrapper";
 // hooks
 import { EPageStoreType, usePageStore } from "@/hooks/store";
@@ -38,20 +40,132 @@ import type { TPageCollection, TPageCreateTarget, TPredefinedCollectionKey } fro
 /**
  * 「集合」组之外的预置分区，按官方侧栏的顺序排在集合组下面。
  *
- * `shared` **不在这里** —— `resolve_collection_key` 永不返回它
- * （`apps/api/plane/utils/wiki_collections.py:37`：开源版没有「发布」字段，
- * 该分区恒空）。渲染一个永远空的分区只是噪音，这是本页对「完整对齐官方分组」
- * 唯一一处有意偏离。旧版侧栏本来就把它过滤掉了
- * （`item.key !== "shared" || item.page_count > 0`），所以这里不是行为变化。
+ * **渲染成「分组标题」而不是可点行**（2026-10-01 用户裁定「「集合」与「已归档」是同一层级」）。
+ * 两者都走 `renderGroupHeader`，同级关系由**共用实现**保证。
+ *
+ * **代价记账**：它因此失去图标与计数（原来 `renderRow` 给的），点击的含义也变了 ——
+ * 标题上的点击是**折叠这一组**，不再是「跳到归档分区的列表页」。也就是说归档分区的
+ * **列表页从此没有导航入口**（只能手敲 `?collection=archived`）。这与「私密」摘掉
+ * 那一行是**同一类有意的不对称**，不是漏做。计数：`predefinedCount("archived")`
+ * 仍有值，只是不再渲染。想恢复成行：把下面 `PARTITION_ROWS.map` 里的
+ * `renderGroupHeader` 换回 `renderRow`。
+ * 「已归档」也没有右侧动作位 —— 归档由 `archived_at` 决定，没有「新建一个归档页」
+ * 这回事，与 `canCreateIn` 排除它的理由同源。
+ *
+ * **`private` 不在这里** —— 2026-10-01 用户裁定摘掉（「现阶段用不上」）。
+ * 只摘**导航入口**，后端分区**原样保留**：`resolve_collection_key` 仍把 `access=1`
+ * 解成 `private`，`page-collections/` 仍统计它。这么做是为了**不重新解释任何已有
+ * 数据**（删后端那条分支会让已有的 `access=1` 页面落到别的分区去）。
+ * 代价是一条**有意保留**的不对称：界面上没有入口，但手敲 `?collection=private`
+ * 仍进得去（后果见 `pageTarget` 的注释）。想恢复只要把这个数组改回去。
+ * （当时全库只有 1 个 `access=1` 的页面，且是验收夹具 `7e9fba3f`。）
+ *
+ * `shared` **也不在这里**，但性质不同 —— 是 `resolve_collection_key` **永不返回**它
+ * （`apps/api/plane/utils/wiki_collections.py`：开源版没有「发布」字段，该分区恒空）。
+ * 渲染一个永远空的分区只是噪音，旧版侧栏本来就把它过滤掉了
+ * （`item.key !== "shared" || item.page_count > 0`），所以那不是行为变化。
  */
-const PARTITION_ROWS: TPredefinedCollectionKey[] = ["private", "archived"];
+const PARTITION_ROWS: TPredefinedCollectionKey[] = ["archived"];
+
+/**
+ * 集合组的折叠键。**独立成一个常量**而不是在渲染处写字面量：它和 `PARTITION_ROWS`
+ * 的值同处 `collapsedGroupKeys` 一个数组里，写成两处字面量迟早会漂。
+ * 取 `"collections"` 而不是 `"general"` —— 这个组包含 General **和**全部自建集合，
+ * 用 `"general"` 会读成"只是 General 那一个分区"。
+ */
+const COLLECTIONS_GROUP_KEY = "collections";
+
+/**
+ * 分组标题。**「集合」与「已归档」共用这一个实现** —— 「同一层级」这件事靠**共用**
+ * 保证，不是靠两处各写一遍相同的类名（那正是日后会漂移的地方）。
+ *
+ * 放在**模块作用域**而不是组件内，正是为了让「共用」是结构上的：它拿不到任何
+ * props / state / store（连 `t` 都拿不到），两个调用方唯一的差别只能从参数进来。
+ * （顺带：放组件内会被 oxlint 的 `unicorn/consistent-function-scoping` 点名
+ * 「does not capture any variables from its parent scope」—— 那条警告在说的
+ * 就是同一件事。）
+ *
+ * **样式逐字对齐「项目」那一组**（`workspace/sidebar/projects-list.tsx:161-186` 的
+ * 组标题 + 折叠箭头），两边同为 `rounded-sm px-2 py-1.5` + `text-13 font-semibold
+ * text-placeholder`，悬停 `bg-layer-transparent-hover`。注意这套配色与行**相反**：
+ * 标题字号更大更粗、颜色却更浅（`placeholder` = neutral-900 亮度 0.616，行的
+ * `secondary` = neutral-1100 亮度 0.438）—— 这是上游既有的层级语言，照抄。
+ *
+ * **与参考实现的一处有意分歧**：`「项目」` 用 HeadlessUI `Disclosure` + `Transition`
+ * 做淡入淡出，这里用**普通条件渲染**。理由是本文件的折叠状态本来就统一在组件本地的
+ * `useState` 数组里（页面折叠 `collapsedPageIds` 是同一套），不引入第二个折叠机制；
+ * 代价是没有过渡动画。
+ *
+ * `action` 是标题右侧的动作位，排在折叠箭头**左边**，目前只有「集合」用它挂建集合的
+ * `＋`。「已归档」没有对应动作：归档由 `archived_at` 决定，不存在"新建一个归档页"
+ * 这回事 —— 与 `canCreateIn` 排除它的理由同源。
+ */
+const renderGroupHeader = (props: { label: string; isOpen: boolean; onToggle: () => void; action?: ReactNode }) => {
+  const { label, isOpen, onToggle, action } = props;
+  return (
+    <div className="flex w-full items-center justify-between rounded-sm px-2 py-1.5 text-placeholder hover:bg-layer-transparent-hover">
+      {/* 点标题本身也折叠 —— 与「项目」一致（那边两个 Disclosure.Button 都绑同一动作）。 */}
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={isOpen}
+        className="flex w-full items-center gap-1 text-left text-13 font-semibold whitespace-nowrap text-placeholder"
+      >
+        <span>{label}</span>
+      </button>
+      <div className="flex items-center gap-1">
+        {action}
+        <IconButton
+          variant="ghost"
+          size="sm"
+          icon={ChevronRightIcon}
+          onClick={onToggle}
+          className="text-placeholder"
+          iconClassName={cn("transition-transform", { "rotate-90": isOpen })}
+          aria-label={label}
+        />
+      </div>
+    </div>
+  );
+};
 
 export const WikiSidebar = observer(function WikiSidebar() {
   // router
   const router = useAppRouter();
   const { workspaceSlug } = useParams();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
-  const activeCollection = searchParams.get("collection") ?? "general";
+  /**
+   * URL 上**显式写出来**的集合。`null` = 没写 —— 也就是落在 wiki 索引页
+   * （`/926/wiki/`，即侧栏那颗「主页」）。
+   *
+   * 它单独存在（而不是直接 `?? "general"`）是为了**只在用户真点了某一集合时**
+   * 才给那一行加选中态。用户 2026-10-01 的要求：点 wiki 默认落到「主页」，
+   * 不要再落到「常规」—— 在此之前 `activeCollection` 一旦兜底成 `"general"`，
+   * 裸 URL 下「常规」行会亮起，看着像被选中了。
+   */
+  const explicitCollection = searchParams.get("collection");
+  /**
+   * 当前**在看**的集合。没显式指定时按 `general` 算 —— 与 `wiki/page.tsx:23`
+   * 的 `?? "general"` 逐字一致，所以侧栏与主列表看的是同一份数据。
+   *
+   * 它决定「新建页面落到哪」（`pageTarget`）与「顶栏那颗 ＋ 出不出现」
+   * （`newPageAction`），**不再**决定哪一行高亮 —— 高亮用 `explicitCollection`。
+   */
+  const activeCollection = explicitCollection ?? "general";
+
+  /**
+   * 当前打开的页面 id，用来给侧栏那一行加选中态。**取不到就是 `undefined`**
+   * （索引路由 `/926/wiki/`、或还没进任何页面）⇒ 没有行高亮，正是想要的。
+   *
+   * **不能改用 `useParams()`**：本组件挂在 `(projects)/_sidebar.tsx`（祖先路由）下，
+   * React Router 的 `useParams` 只返回**本路由层级**匹配到的参数，`[pageId]` 是更深的
+   * 一段，拿不到（而 `workspaceSlug` 拿得到，因为 `(projects)` 自己就匹配它）。
+   * `usePathname()` 读的是位置本身，在任何层级都对 —— 同 `_sidebar.tsx:37` 判
+   * `isWikiPath` 的用法。`push` 会补尾斜杠（`compat/next/navigation.ts:17`），
+   * 两种形状这里都取得到。
+   */
+  const activePageId = pathname.split(`/${workspaceSlug}/wiki/`)[1]?.split("/")[0] || undefined;
   // plane hooks
   const { t } = useTranslation();
   // store hooks
@@ -65,6 +179,14 @@ export const WikiSidebar = observer(function WikiSidebar() {
   const [isPageFormOpen, setIsPageFormOpen] = useState(false);
   /** 折叠着的页面 id。存组件本地、不落库 —— 全库 8 个页面，持久化不划算（设计 §1.5）。 */
   const [collapsedPageIds, setCollapsedPageIds] = useState<string[]>([]);
+  /**
+   * 折叠着的**分组**。键是 `"collections"`（那个集合组）或某个预置分区键（目前只有
+   * `"archived"`）。与 `collapsedPageIds` 同一套口径：组件本地、不落库。
+   *
+   * 不复用 `collapsedPageIds`：两者值域会撞车（预置分区键是字符串，页面 id 是 uuid，
+   * 虽然实际不会重名，但把它们混在一个数组里，日后任何一个 `includes` 都读不出意图）。
+   */
+  const [collapsedGroupKeys, setCollapsedGroupKeys] = useState<string[]>([]);
   /** 建子页时记下父页 id；为 `null` 时走「建在当前分区」的老路。 */
   const [pageParentId, setPageParentId] = useState<string | null>(null);
 
@@ -85,34 +207,44 @@ export const WikiSidebar = observer(function WikiSidebar() {
    * 「用户没有路径在归档父页下面点 ＋」就不成立了。一个谓词加一个参数，不新增第二个。
    *
    * **与顶栏收录按钮的 gating 有意分叉**：顶栏用 `canIncludeIntoCollection` 把
-   * `private` / `archived` 都排除（`wiki/header.tsx:52`），因为把一个**已存在**的页面
-   * "收录"进 Private 没有意义；而**新建**一个私有页在 Private 视图下是自然动作。
-   * 这条差异是有意的，别"修"成一致。
+   * `private` / `archived` 都排除（`wiki/header.tsx`），因为把一个**已存在**的页面
+   * "收录"进一个由 `access` 派生的分区没有意义；而**新建**页面落在当前查看的分区
+   * 是自然动作。这条差异是有意的，别"修"成一致。
+   *
+   * 判据本身没随侧栏入口的增删调整过：`archived` 至今是**唯一**被排除的分区，
+   * 因为它是唯一一个"新建出来的页面不可能属于"的分区（`archived_at` 不可能在
+   * 新建时就非空）。`private` 则从来可以新建，只是 2026-10-01 起没有 UI 入口了。
    */
   const canCreateIn = (partitionKey: string) => canManageCollections && partitionKey !== "archived";
 
   /**
    * 新页面的落点（设计 §3.2d + B-3）。推导只在这里做一次，弹窗只负责把结果发出去。
    *
-   * 三种形状，**建子页时只给 `parent`** —— `access` / `collection_id` 由后端从父页继承。
+   * **建子页时只给 `parent`** —— `access` / `collection_id` 由后端从父页继承。
    * 前端抄一遍父页的值就是第二个真相源。
    *
-   * `private` 只能靠 `access=1` 表达：「私有」是 `resolve_collection_key` 里优先级高于
-   * `collection_id` 的**派生**分区，库里根本没有一行叫 private 的集合可传。
-   * 另外两个预置分区到不了这里：`archived` 已把按钮藏掉，`shared` 在
-   * `resolve_collection_key` 里**永不返回**。
+   * **原有的一支 `activeCollection === "private"` → `{ access: 1 }`，随侧栏入口
+   * 一起摘掉了**（见 `PARTITION_ROWS`）。当时它存在的理由：「私有」是
+   * `resolve_collection_key` 里优先级高于 `collection_id` 的**派生**分区，库里没有
+   * 一行叫 private 的集合可传，要新建私有页只能显式给 `access: 1`。
+   *
+   * 摘掉后**唯一**的副作用：手敲 `?collection=private` 进来时，顶栏仍会渲染
+   * `＋ New page`（`canCreateIn` 只排除 `archived`），此时新建的页面走下面这支
+   * 落进 `general`，不再进私密分区。没有 UI 路径能走到那个状态，所以没有为它加
+   * 特判 —— 但它是**已知**的，不是没想到。
+   *
+   * `archived` 到不了这里（按钮已藏），`shared` 在 `resolve_collection_key` 里
+   * **永不返回**。
    */
   const pageTarget: TPageCreateTarget = pageParentId
     ? { parent: pageParentId }
-    : activeCollection === "private"
-      ? { collection_id: null, access: 1 }
-      : {
-          // `general`（以及任何预置键）→ 不指定集合；自建集合 → 传它自己的 uuid。
-          // 用现成的 `isPredefinedCollectionKey` 而不是手写 `=== "general"`：
-          // 预置键的定义只有一处，加第五个分区时这里不用改。
-          collection_id: isPredefinedCollectionKey(activeCollection) ? null : activeCollection,
-          access: 0,
-        };
+    : {
+        // `general`（以及任何预置键）→ 不指定集合；自建集合 → 传它自己的 uuid。
+        // 用现成的 `isPredefinedCollectionKey` 而不是手写 `=== "general"`：
+        // 预置键的定义只有一处，加第五个分区时这里不用改。
+        collection_id: isPredefinedCollectionKey(activeCollection) ? null : activeCollection,
+        access: 0,
+      };
 
   // 集合列表（含计数）
   useSWR(
@@ -190,6 +322,11 @@ export const WikiSidebar = observer(function WikiSidebar() {
       current.includes(pageId) ? current.filter((id) => id !== pageId) : [...current, pageId]
     );
 
+  const toggleGroupCollapsed = (groupKey: string) =>
+    setCollapsedGroupKeys((current) =>
+      current.includes(groupKey) ? current.filter((key) => key !== groupKey) : [...current, groupKey]
+    );
+
   const openEdit = (collection: TPageCollection) => {
     setEditingCollection(collection);
     setIsFormOpen(true);
@@ -220,9 +357,16 @@ export const WikiSidebar = observer(function WikiSidebar() {
   ) : undefined;
 
   /**
+   * 集合组里的一行：`general` 或一个用户自建集合。**分区不再走这里** ——
+   * `archived` 自 2026-10-01 起渲染成分组标题（见 `renderGroupHeader`），
+   * 因为用户要求它与「集合」同级。代价见 `PARTITION_ROWS` 的注释。
+   *
    * `options` 只给用户自建集合传 —— `General` 是**派生**分区（`collection_id IS NULL`），
    * 重命名它没有落点；官方那张图里 General 是真实行所以有 `⋯`，罗盘结构不同。
-   * `Private` / `Archived` 同理：它们是 `access` / `archived_at` 推导出来的，不是一个可改名的对象。
+   *
+   * 高亮判据是 **`explicitCollection` 而不是 `activeCollection`**：裸 URL（`/926/wiki/`）
+   * 下 `activeCollection` 会兜底成 `"general"`，用它判会让「常规」行在「主页」上亮起。
+   * 只有用户真点了某一集合（URL 里带了 `?collection=`）才高亮那一行。
    */
   const renderRow = (key: string, label: string, count: number, options?: ReactNode) => (
     <div key={key} className="flex w-full items-center gap-1">
@@ -231,7 +375,9 @@ export const WikiSidebar = observer(function WikiSidebar() {
         onClick={() => goTo(key)}
         className={cn(
           "flex min-w-0 flex-1 items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-13",
-          activeCollection === key ? "bg-layer-1 text-primary" : "text-secondary hover:bg-layer-1/50"
+          explicitCollection === key
+            ? "bg-layer-transparent-selected text-primary"
+            : "text-secondary hover:bg-layer-transparent-hover"
         )}
       >
         <span className="flex items-center gap-2 truncate">
@@ -260,6 +406,7 @@ export const WikiSidebar = observer(function WikiSidebar() {
       candidate.ancestorIds.includes(line.pageId)
     );
     const isCollapsed = collapsedSet.has(line.pageId);
+    const isActive = line.pageId === activePageId;
 
     return (
       <div key={line.pageId} className="group flex w-full items-center gap-1">
@@ -283,7 +430,19 @@ export const WikiSidebar = observer(function WikiSidebar() {
           className={cn(
             "flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1 text-left text-13",
             wikiTreeIndentClass(line.depth),
-            "text-secondary hover:bg-layer-1/50"
+            // 选中态与集合行（上面的 renderRow）**用同一对类**，而且用的就是
+            // **全站侧栏的既有约定**（`core/components/sidebar/sidebar-item.tsx:59-60`
+            // 的 `iconActive` / `iconInactive`、`settings/sidebar/item.tsx:31`）。
+            //
+            // **为什么不用 `bg-layer-1` 那一档**：`--neutral-200`（layer-1）的
+            // oklch 亮度是 0.9696、侧栏底色 `--neutral-white` 是 1.000 —— 只差 0.030，
+            // 肉眼基本分不出（这正是当初"看不出选中了哪一页"的成因之一；当时页面行
+            // 还坐在集合组容器的 `bg-layer-1/50` 上，那一档只剩 0.015。容器底色
+            // 2026-10-01 已去掉，但**不要因此把选中态降回 layer-1** —— 0.030 依然太弱）。
+            // `--bg-layer-transparent-selected` 是 15% 黑，有效亮度约 0.872 ⇒ **差 0.13**，
+            // 强 4 倍以上；而且它是**半透明**的，将来容器若真加了底色也叠得对，
+            // 不需要原先那套"容器 50% < hover 75% < 选中 100%"的调色推理。
+            isActive ? "bg-layer-transparent-selected text-primary" : "text-secondary hover:bg-layer-transparent-hover"
           )}
         >
           <PageIcon className="h-3.5 w-3.5 shrink-0 text-tertiary" />
@@ -316,6 +475,39 @@ export const WikiSidebar = observer(function WikiSidebar() {
     <SidebarWrapper title="Wiki" quickActions={newPageAction}>
       <div className="flex w-full flex-col gap-1">
         {/*
+          「首页」行 —— 对齐「项目」侧栏顶部那颗：条目定义见
+          `workspace/sidebar/user-menu.tsx:26-33`，渲染见
+          `workspace/sidebar/user-menu-item.tsx:58-65`（两颗都是 `HomeIcon`）。
+          这里复用**同一个** `SidebarNavItem`，不另写一套类名，
+          所以行高/悬停/选中态与「项目」那边同源。
+
+          **标签用 `wiki_home.title`，不共用那颗的 `sidebar.home`** —— 用户 2026-10-01 裁定。
+          两个键在 17 个语言里同值，只有 zh-CN 分叉：Wiki 这颗要「首页」，
+          而 `sidebar.home`（「项目」那颗 + 工作区首页）仍是「主页」。
+          分叉只此一处，改 `sidebar.home` 会连带改掉「项目」侧栏 —— 那是另一个决定。
+
+          **指向 `/{slug}/wiki/`（wiki 索引页），与参考那颗不同** —— 参考指向
+          `/{slug}/`（工作区首页）。这是**有意分叉**，用户 2026-10-01 裁定：本侧栏只在
+          wiki 路径下渲染（`(projects)/_sidebar.tsx:71`），这里给的是「wiki 自己的首页」，
+          点了留在 wiki；参考那颗点了会离开 wiki、整个侧栏切回 AppSidebar。
+
+          选中判据是 **`!activePageId && !explicitCollection`**，两半都不能少：
+          - `!activePageId` —— 本侧栏只在 wiki 路径下渲染，所以「没有 pageId」就等价于
+            「在索引页」，`/926/wiki` 与 `/926/wiki/` 两种尾斜杠写法都覆盖得到
+            （`activePageId` 的推导见上方注释）；
+          - `!explicitCollection` —— 用户真点了 `?collection=xxx` 时，亮的是**那一行**
+            （见 `renderRow`），「首页」必须让位，否则两行同时亮。
+        */}
+        <Link href={`/${workspaceSlug}/wiki/`}>
+          <SidebarNavItem isActive={!activePageId && !explicitCollection}>
+            <div className="flex items-center gap-1.5 py-[1px]">
+              <HomeIcon className="size-4 flex-shrink-0" />
+              <p className="text-13 leading-5 font-medium">{t("wiki_home.title")}</p>
+            </div>
+          </SidebarNavItem>
+        </Link>
+
+        {/*
           「集合」组 = `general` 预置分区 + 全部用户自建集合。官方把 General 摆在
           集合组下，这里对齐。
 
@@ -325,63 +517,76 @@ export const WikiSidebar = observer(function WikiSidebar() {
           日后要区分，再补 `wiki_collections.title` 并把这里换过去。
         */}
         {/*
-          组容器（`bg-layer-1/50` + 圆角）是**语义的一部分，不只是装饰**：
-          组标题「集合」横跨下面四行，而 `PARTITION_ROWS`（Private/Archived）渲染在
-          容器**之外**。没有这层容器，四行看上去同属一组 —— 「集合只含 General +
-          自建集合、Private/Archived 不在其中」这层意思就完全看不出来
-          （设计 §3.2d 修订单：Private/Archived 保持普通行，本轮「集合」是唯一的分组）。
+          集合组容器。**已无底色** —— 2026-10-01 用户裁定去掉（原为
+          `bg-layer-1/50 rounded-md p-1`，那层淡底与选中行只差 0.015，选哪行看不出来）。
+          `p-1` 必须跟着一起去：没有背景之后，它只会让集合区比下面的
+          已归档区多缩进 4px，看着像排版错了。
 
-          用 `/50` 而不是实色：行自己的 hover 是 `bg-layer-1/50`、选中是 `bg-layer-1`，
-          叠在这层之上正好形成 容器 50% < hover 75% < 选中 100% 的层次。
-          若容器用实色 `bg-layer-1`，选中行会与容器同色而消失。
+          现在这层容器的作用是**折叠面板的边界**：标题收在它里面，折叠时整块内容一起
+          消失。「集合」与「已归档」的标题都由 `renderGroupHeader` 出，两者因此
+          **结构上严格同级**（用户 2026-10-01 的要求）—— 不是靠两处各写一遍类名维持的。
+          **不要顺手把底色加回来** —— 那会把选中态的对比度重新吃掉。
         */}
-        <div className="flex w-full flex-col gap-1 rounded-md bg-layer-1/50 p-1">
-          <div className="flex w-full items-center justify-between gap-2 px-2 pt-1">
-            <span className="text-11 text-tertiary">{t("wiki_collections.fallback_name")}</span>
-            {/* 对 GUEST **隐藏**而不是 disabled —— 与既有口径一致，理由见
-                wiki-list-main-content.tsx 的同一谓词。 */}
-            {canManageCollections && (
-              <button
-                type="button"
+        <div className="flex w-full flex-col gap-1">
+          {renderGroupHeader({
+            label: t("wiki_collections.fallback_name"),
+            isOpen: !collapsedGroupKeys.includes(COLLECTIONS_GROUP_KEY),
+            onToggle: () => toggleGroupCollapsed(COLLECTIONS_GROUP_KEY),
+            // 对 GUEST **隐藏**而不是 disabled —— 与既有口径一致，理由见
+            // wiki-list-main-content.tsx 的同一谓词。
+            action: canManageCollections ? (
+              <IconButton
+                variant="ghost"
+                size="sm"
+                icon={PlusIcon}
                 onClick={openCreateCollection}
+                className="text-placeholder"
                 aria-label={t("wiki_collections.create_modal.title")}
-                className="rounded-sm p-0.5 text-tertiary hover:bg-layer-1 hover:text-secondary"
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-          {/* 每个集合行**紧跟**它自己分区下的页面树 —— 集合 → 父页 → 子页 的形状
-              就是靠这个相邻关系表达的，不是靠缩进。 */}
-          {renderRow("general", t("wiki_collections.predefined.general"), predefinedCount("general"))}
-          {renderTree("general")}
-          {collections.map((collection) => (
-            <Fragment key={collection.id}>
-              {renderRow(
-                collection.id,
-                collection.name,
-                collection.page_count,
-                canManageCollections ? (
-                  <CustomMenu
-                    customButton={<IconButton icon={MoreHorizontal} variant="ghost" size="sm" />}
-                    ariaLabel={t("wiki_collections.menu.collection_options")}
-                    closeOnSelect
-                  >
-                    <CustomMenu.MenuItem onClick={() => openEdit(collection)}>
-                      {t("wiki_collections.menu.edit_collection")}
-                    </CustomMenu.MenuItem>
-                  </CustomMenu>
-                ) : undefined
-              )}
-              {renderTree(collection.id)}
-            </Fragment>
-          ))}
+              />
+            ) : undefined,
+          })}
+          {/* 折叠时整块内容（General + 自建集合 + 它们各自的树）一起消失，标题留着 ——
+              与「项目」的 Disclosure.Panel 同一行为。 */}
+          {!collapsedGroupKeys.includes(COLLECTIONS_GROUP_KEY) && (
+            <>
+              {/* 每个集合行**紧跟**它自己分区下的页面树 —— 集合 → 父页 → 子页 的形状
+                  就是靠这个相邻关系表达的，不是靠缩进。 */}
+              {renderRow("general", t("wiki_collections.predefined.general"), predefinedCount("general"))}
+              {renderTree("general")}
+              {collections.map((collection) => (
+                <Fragment key={collection.id}>
+                  {renderRow(
+                    collection.id,
+                    collection.name,
+                    collection.page_count,
+                    canManageCollections ? (
+                      <CustomMenu
+                        customButton={<IconButton icon={MoreHorizontal} variant="ghost" size="sm" />}
+                        ariaLabel={t("wiki_collections.menu.collection_options")}
+                        closeOnSelect
+                      >
+                        <CustomMenu.MenuItem onClick={() => openEdit(collection)}>
+                          {t("wiki_collections.menu.edit_collection")}
+                        </CustomMenu.MenuItem>
+                      </CustomMenu>
+                    ) : undefined
+                  )}
+                  {renderTree(collection.id)}
+                </Fragment>
+              ))}
+            </>
+          )}
         </div>
 
+        {/* 标题，不是行 —— 见 `PARTITION_ROWS` 的注释（同级关系的由来与代价记账都在那）。 */}
         {PARTITION_ROWS.map((key) => (
           <Fragment key={key}>
-            {renderRow(key, t(`wiki_collections.predefined.${key}`), predefinedCount(key))}
-            {renderTree(key)}
+            {renderGroupHeader({
+              label: t(`wiki_collections.predefined.${key}`),
+              isOpen: !collapsedGroupKeys.includes(key),
+              onToggle: () => toggleGroupCollapsed(key),
+            })}
+            {!collapsedGroupKeys.includes(key) && renderTree(key)}
           </Fragment>
         ))}
       </div>
