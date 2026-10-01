@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 import { FileOutput, X } from "lucide-react";
@@ -18,6 +18,7 @@ import { ListLayout } from "@/components/core/list";
 import type { TPageActions } from "@/components/pages/dropdowns";
 import { PageListBlock } from "@/components/pages/list/block";
 import { MoveToCollectionModal } from "@/components/pages/wiki/move-to-collection-modal";
+import { buildWikiTreeLines, wikiTreeIndentClass } from "@/components/pages/wiki/wiki-tree";
 // hooks
 import { EPageStoreType, usePageStore } from "@/hooks/store";
 import { useUserPermissions } from "@/hooks/store/user";
@@ -35,10 +36,30 @@ export const WikiListRoot = observer(function WikiListRoot(props: Props) {
   // states
   const [pageIdToMove, setPageIdToMove] = useState<string | null>(null);
   // store hooks
-  const { getFilteredPageIdsByCollection, fetchPagesList, removeFromWiki } = usePageStore(EPageStoreType.WORKSPACE);
+  const { getFilteredPageIdsByCollection, fetchPagesList, removeFromWiki, pageParentIds } = usePageStore(
+    EPageStoreType.WORKSPACE
+  );
   const { allowPermissions } = useUserPermissions();
   // derived values
   const filteredPageIds = getFilteredPageIdsByCollection(collection);
+
+  /**
+   * 把当前分区的行排成树，只为拿到**层深**（设计 F-4）。
+   *
+   * 喂进去的是 `filteredPageIds`（已按搜索/排序过滤过的集合），**不是**全部页面 ——
+   * 名次因此保持列表自己的排序，只是子行会紧跟到它父行后面。
+   * 父页被过滤掉时子行按根渲染（`buildWikiTreeLines` 的兜底，设计 R-2）。
+   *
+   * 与侧栏**同一套算法**，不引入第二套层级算法（设计 F-4 的硬要求）。
+   */
+  const treeLines = useMemo(
+    () =>
+      buildWikiTreeLines({
+        pageIds: filteredPageIds ?? [],
+        getParentId: (pageId) => pageParentIds[pageId] ?? null,
+      }),
+    [filteredPageIds, pageParentIds]
+  );
   // 写权限：行菜单里的两个动作都是**写**（PATCH 换集合 / DELETE 移出），后端只给
   // ADMIN/MEMBER（`apps/api/plane/app/views/page/collection.py` 的 partial_update/destroy）——
   // 这是**用户 2026-09-27 的裁定**，有意收窄设计与计划原文里的 `[ADMIN, MEMBER, GUEST]`。
@@ -102,13 +123,16 @@ export const WikiListRoot = observer(function WikiListRoot(props: Props) {
   return (
     <>
       <ListLayout>
-        {filteredPageIds.map((pageId) => (
-          <PageListBlock
-            key={pageId}
-            pageId={pageId}
-            storeType={EPageStoreType.WORKSPACE}
-            extraActions={canWriteWiki ? buildRowActions(pageId) : undefined}
-          />
+        {treeLines.map((line) => (
+          // 缩进加在**外层 div** 上，不改共享的 `PageListBlock` ——
+          // 那个组件被项目页共用，它没有也不该有「层级」这个概念。
+          <div key={line.pageId} className={wikiTreeIndentClass(line.depth)}>
+            <PageListBlock
+              pageId={line.pageId}
+              storeType={EPageStoreType.WORKSPACE}
+              extraActions={canWriteWiki ? buildRowActions(line.pageId) : undefined}
+            />
+          </div>
         ))}
       </ListLayout>
       <MoveToCollectionModal
