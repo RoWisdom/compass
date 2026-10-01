@@ -17,6 +17,7 @@ import type {
   TPageCreatePayload,
   TPageIncludeResponse,
   TPredefinedCollection,
+  TWikiScopedPage,
 } from "@/services/page";
 import { WorkspacePageService } from "@/services/page";
 // store
@@ -28,6 +29,14 @@ type TLoader = "init-loader" | "mutation-loader" | undefined;
 
 type TError = { title: string; description: string };
 
+/**
+ * 侧栏建树的一行。`treeRows` 的**顺序就是响应顺序**，也就是渲染顺序。
+ *
+ * 只存 id 与分区键，不存整个页面 —— 页面数据在 `data` 里（`getPageById` 取），
+ * 存两份必然漂移。
+ */
+export type TWikiTreeRow = { pageId: string; collectionKey: string };
+
 export interface IWorkspacePageStore {
   // observables
   loader: TLoader;
@@ -36,6 +45,10 @@ export interface IWorkspacePageStore {
   collections: TPageCollection[];
   predefined: TPredefinedCollection[];
   candidates: TPage[];
+  /** `?scope=all` 的**有序**行 —— 侧栏按它建树（设计 B-5/B-6）。 */
+  treeRows: TWikiTreeRow[];
+  /** pageId → 父页 id。**旁挂索引**，不进 `TPage`/`BasePage`（理由见 service 层的 `TPageWithParent`）。 */
+  pageParentIds: Record<string, string | null>;
   error: TError | undefined;
   filters: TPageFilters;
   // computed
@@ -56,6 +69,7 @@ export interface IWorkspacePageStore {
   ) => Promise<Omit<TPageCollection, "page_count">>;
   createPage: (workspaceSlug: string, payload: TPageCreatePayload) => Promise<TPage>;
   fetchPagesList: (workspaceSlug: string, collection: TCollectionFilter) => Promise<TPage[] | undefined>;
+  fetchWikiTree: (workspaceSlug: string) => Promise<TWikiScopedPage[] | undefined>;
   fetchPageDetails: (workspaceSlug: string, pageId: string) => Promise<TPage | undefined>;
   fetchCandidates: (workspaceSlug: string) => Promise<TPage[]>;
   includePages: (
@@ -76,6 +90,8 @@ export class WorkspacePageStore implements IWorkspacePageStore {
   collections: TPageCollection[] = [];
   predefined: TPredefinedCollection[] = [];
   candidates: TPage[] = [];
+  treeRows: TWikiTreeRow[] = [];
+  pageParentIds: Record<string, string | null> = {};
   error: TError | undefined = undefined;
   filters: TPageFilters = {
     searchQuery: "",
@@ -94,6 +110,8 @@ export class WorkspacePageStore implements IWorkspacePageStore {
       collections: observable,
       predefined: observable,
       candidates: observable,
+      treeRows: observable,
+      pageParentIds: observable,
       error: observable,
       filters: observable,
       isAnyPageAvailable: computed,
@@ -104,6 +122,7 @@ export class WorkspacePageStore implements IWorkspacePageStore {
       updateCollection: action,
       createPage: action,
       fetchPagesList: action,
+      fetchWikiTree: action,
       fetchPageDetails: action,
       fetchCandidates: action,
       includePages: action,
@@ -256,6 +275,7 @@ export class WorkspacePageStore implements IWorkspacePageStore {
     // 与 createCollection / updateCollection 同一条规矩（Round A 的 I-1a）。
     // 这一步不只是刷计数 —— 新页面此刻已经在库里，重拉之后它才会出现在侧栏那个分区。
     await this.fetchCollections(workspaceSlug).catch(() => {});
+    await this.fetchWikiTree(workspaceSlug).catch(() => {});
 
     return page;
   };
@@ -286,6 +306,10 @@ export class WorkspacePageStore implements IWorkspacePageStore {
             } else {
               set(this.data, [page.id], new WorkspacePage(this.store, page));
             }
+            // 层级也记进旁挂索引：主列表的缩进要按它算（Task 7），而列表走的就是这条线。
+            // 两个取数路径（这里与 `fetchWikiTree`）写的是同一个索引、同一份数据，
+            // 谁先到都对。
+            set(this.pageParentIds, [page.id], page.parent ?? null);
           }
         }
         set(
@@ -301,6 +325,47 @@ export class WorkspacePageStore implements IWorkspacePageStore {
       runInAction(() => {
         this.loader = undefined;
         this.error = { title: "Failed", description: "Failed to fetch the pages, Please try again later." };
+      });
+      throw error;
+    }
+  };
+
+  /**
+   * 拉侧栏那棵树的数据 —— 全部已收录页 + 每行服务端算好的分区键（设计 B-5/B-6）。
+   *
+   * **不设 `loader`**：与 `createCollection` / `createPage` 同一条理由 —— `loader`
+   * 驱动的是整个主面板的加载骨架，而建树只是给侧栏补上页面行，把整页打回骨架是过度反应。
+   */
+  fetchWikiTree = async (workspaceSlug: string) => {
+    try {
+      if (!workspaceSlug) return undefined;
+
+      const rows = await this.service.fetchAllPages(workspaceSlug);
+
+      runInAction(() => {
+        for (const row of rows) {
+          if (!row?.id) continue;
+          const existingPage = this.getPageById(row.id);
+          if (existingPage) {
+            // `collection_key` 是**本端点独有**的字段，不能进 `mutateProperties` ——
+            // 那会往页面实例上写一个没人认识的属性。它只活在 `treeRows` 里。
+            const { name, parent, collection_key: _collectionKey, ...otherFields } = row;
+            existingPage.mutateProperties(otherFields, false);
+          } else {
+            set(this.data, [row.id], new WorkspacePage(this.store, { ...row }));
+          }
+          set(this.pageParentIds, [row.id], row.parent ?? null);
+        }
+
+        this.treeRows = rows
+          .filter((row) => !!row.id)
+          .map((row) => ({ pageId: row.id as string, collectionKey: row.collection_key }));
+      });
+
+      return rows;
+    } catch (error) {
+      runInAction(() => {
+        this.error = { title: "Failed", description: "Failed to fetch the wiki tree, Please try again later." };
       });
       throw error;
     }
@@ -367,6 +432,7 @@ export class WorkspacePageStore implements IWorkspacePageStore {
 
       const response = await this.service.includePages(workspaceSlug, pageIds, collectionId);
       await this.fetchCollections(workspaceSlug);
+      await this.fetchWikiTree(workspaceSlug).catch(() => {});
 
       runInAction(() => {
         this.loader = undefined;
@@ -396,6 +462,7 @@ export class WorkspacePageStore implements IWorkspacePageStore {
       });
 
       await this.fetchCollections(workspaceSlug);
+      await this.fetchWikiTree(workspaceSlug).catch(() => {});
     } catch (error) {
       runInAction(() => {
         this.error = { title: "Failed", description: "Failed to move the page, Please try again later." };
@@ -417,6 +484,7 @@ export class WorkspacePageStore implements IWorkspacePageStore {
       });
 
       await this.fetchCollections(workspaceSlug);
+      await this.fetchWikiTree(workspaceSlug).catch(() => {});
     } catch (error) {
       runInAction(() => {
         this.error = { title: "Failed", description: "Failed to remove the page, Please try again later." };
@@ -445,6 +513,8 @@ export class WorkspacePageStore implements IWorkspacePageStore {
   removePage = ({ pageId }: { pageId: string; shouldSync?: boolean }) => {
     runInAction(() => {
       unset(this.data, [pageId]);
+      unset(this.pageParentIds, [pageId]);
+      this.treeRows = this.treeRows.filter((row) => row.pageId !== pageId);
       for (const key of Object.keys(this.collectionPageIds)) {
         this.collectionPageIds[key] = this.collectionPageIds[key].filter((id) => id !== pageId);
       }

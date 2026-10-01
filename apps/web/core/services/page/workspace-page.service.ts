@@ -106,6 +106,26 @@ export type TPageCreatePayload = {
   access?: 0 | 1;
 };
 
+/**
+ * `wiki-pages/` 列表响应里的**层级**字段。
+ *
+ * `TPage` 刻意**不带** `parent`：`BasePage` 的实例是**逐字段显式赋值**构造的
+ * （`core/store/pages/base-page.ts` 的 :98 声明 / :136 构造 / :162 makeObservable /
+ * :239 asJSON **四处**），加一个字段要同步改四处，而 `BasePage` 被**项目页**共用 ——
+ * wiki 的层级没有理由去动它。所以层级只在这条线上被读一次：读**原始响应**，
+ * 随即落进 store 的旁挂索引，**不进页面模型**。
+ */
+export type TPageWithParent = TPage & { parent?: string | null };
+
+/**
+ * `?scope=all` 的行：在页面字段之上多一个**服务端算好的**分区键（设计 B-6）。
+ *
+ * 前端**不**用 `archived_at` / `access` / `collection_id` 自己判分区 ——
+ * 那是有优先级的业务规则（archived > private > 集合 > general），复刻一遍
+ * 就有了第二个真相源。服务端算什么就是什么。
+ */
+export type TWikiScopedPage = TPageWithParent & { collection_key: string };
+
 /** 侧栏选中的分区：预置分区的 key，或某个集合的 uuid。 */
 export type TCollectionFilter = TPredefinedCollectionKey | string;
 
@@ -186,9 +206,28 @@ export class WorkspacePageService extends APIService {
   }
 
   /** 某个分区下的已收录页面。分区由**服务端**判定优先级，前端不重复一套规则。 */
-  async fetchPages(workspaceSlug: string, collection: TCollectionFilter): Promise<TPage[]> {
+  async fetchPages(workspaceSlug: string, collection: TCollectionFilter): Promise<TPageWithParent[]> {
     return this.get(`/api/workspaces/${workspaceSlug}/wiki-pages/`, {
       params: { collection },
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data ?? error;
+      });
+  }
+
+  /**
+   * **全部**分区的已收录页面 —— 侧栏那棵树的数据源（设计 B-5）。
+   *
+   * 与 `fetchPages` 的分界：那个按**单个**分区取（主列表在用），这个一次取回全部，
+   * 每行带一个**服务端算好的**分区键（设计 B-6）。
+   *
+   * 走独立参数 `scope=all`，**不复用** `collection=all`：`collection` 的值域是
+   * 「预置键或 uuid」，往里塞哨兵值等于在一个已有的值域里开洞。
+   */
+  async fetchAllPages(workspaceSlug: string): Promise<TWikiScopedPage[]> {
+    return this.get(`/api/workspaces/${workspaceSlug}/wiki-pages/`, {
+      params: { scope: "all" },
     })
       .then((response) => response?.data)
       .catch((error) => {
