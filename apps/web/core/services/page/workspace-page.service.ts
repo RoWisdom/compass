@@ -72,38 +72,51 @@ export type TPageIncludeResponse = {
 };
 
 /**
- * 新页面的归属 —— **由侧栏按当前分区推导好**再交给弹窗（设计 §3.2d 的表）。
+ * 新页面的归属 —— **由侧栏按当前上下文推导好**再交给弹窗（设计 §3.2d 的表 + B-3）。
  *
- * 两个字段直接就是请求体的两个字段名，推导规则只有一份、就在 `sidebar.tsx` 里；
- * 弹窗不再自己推一遍，也不接受"传了个集合却又说它是私有的"这种自相矛盾的组合。
+ * 三种形状，由侧栏决定用哪一种：
+ *   - `{ parent }` —— 建**子页**。此时**不传** `access` / `collection_id`，
+ *     让后端按父页继承（设计 B-3）。前端自己把父页的 access/collection 抄一遍
+ *     就是第二个真相源，而且父页在同一瞬间被改动时两边立刻不一致。
+ *   - `{ collection_id, access }` —— 建在某个集合 / 某个预置分区里（既有形状）。
+ *   - 三者都省略 —— 不会发生，但类型上允许。
+ *
+ * 三个键都从「必填」放宽成「可选」是**刻意的**：继承的全部意义就是「不传」。
+ * `undefined` 的键在 JSON 序列化时会被丢掉（axios 用 `JSON.stringify`），
+ * 但弹窗里仍然写成显式分叉，不依赖这条隐含行为。
  *
  * `collection_id` 为 `null` 时页面落 general —— 与 `includePages` 的 `collectionId`
  * 是同一个语义（省略与传 `null` 在后端是同一种处理）。
  */
 export type TPageCreateTarget = {
-  collection_id: string | null;
+  collection_id?: string | null;
   /**
    * `1` = 私有。私有分区**只能**靠它表达 —— 优先级是
    * archived > private > collection_id > general，所以私有页的 `collection` 会被完全忽略，
    * 「建到 Private 视图」不可能是 `collection_id=private`。
    */
-  access: 0 | 1;
+  access?: 0 | 1;
+  /** 父页 id。给了就建在这页下面，并从它继承 `access` / `collection_id`。 */
+  parent?: string;
 };
 
 /**
- * `POST wiki-pages/create/` 的请求体。四个键**全部可选** —— 建一个页面不需要任何参数，
+ * `POST wiki-pages/create/` 的请求体。五个键**全部可选** —— 建一个页面不需要任何参数，
  * 空 `{}` 是合法载荷（后端会建出一个空名、公开、无项目、落 general 的页面）。
  *
  * - `project_id` —— 给了就挂到该项目下，并因此**获得一个 vault 落点**
  *   （`2-项目/<项目名>/`）；不给就是"无项目页"，**永远不会进 vault**。
  * - `collection_id` —— 只对"建到某个自建集合"有意义；`access=1` 时它会被忽略。
  * - `access` —— 0 公开 / 1 私有。省略即 0。
+ * - `parent` —— 给了就建在这页下面，并从它继承 `access` / `collection_id`。
  */
 export type TPageCreatePayload = {
   name?: string;
   project_id?: string | null;
   collection_id?: string | null;
   access?: 0 | 1;
+  /** 父页 id。后端会做三条前置校验（本工作区 / 可见 / 已收录），不合规 404。 */
+  parent?: string;
 };
 
 /**

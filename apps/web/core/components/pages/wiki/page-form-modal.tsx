@@ -20,7 +20,7 @@ import { ProjectDropdown } from "@/components/dropdowns/project/dropdown";
 import { EPageStoreType, usePageStore } from "@/hooks/store";
 import { useAppRouter } from "@/hooks/use-app-router";
 // services
-import type { TPageCreateTarget } from "@/services/page";
+import type { TPageCreatePayload, TPageCreateTarget } from "@/services/page";
 
 type Props = {
   isOpen: boolean;
@@ -80,14 +80,22 @@ export const PageFormModal = observer(function PageFormModal(props: Props) {
 
     let created: TPage;
     try {
-      created = await createPage(workspaceSlug, {
+      // 三个归属键都是「没值就不发」——**展开**而不是赋 `undefined`：语义写在纸面上，
+      // 不依赖 `JSON.stringify` 丢掉 `undefined` 这个隐含行为。
+      //
+      // 建子页时只发 `parent`（设计 B-3）：后端从父页继承 access 与 collection。
+      // 前端把父页的值抄一遍就是第二个真相源。
+      const payload: TPageCreatePayload = {
         // 空名字**照原样传**：后端允许空串，空名页在官方语义里是合法的「未命名」页。
         // 所以这里没有 `isValid` 门禁 —— 提交按钮永远可点。
         name: name.trim(),
         project_id: projectId,
-        collection_id: target.collection_id,
-        access: target.access,
-      });
+      };
+      if (target.parent) payload.parent = target.parent;
+      if (target.collection_id !== undefined) payload.collection_id = target.collection_id;
+      if (target.access !== undefined) payload.access = target.access;
+
+      created = await createPage(workspaceSlug, payload);
     } catch {
       // store 的 `createPage` 不吞异常，所以失败一定落到这里 —— toast 的成败由它分叉。
       // 文案分叉与官方那两个键的语义一致：落集合时失败，要说清「页面或集合归属」都可能没成。
