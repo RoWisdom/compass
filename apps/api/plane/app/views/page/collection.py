@@ -422,11 +422,20 @@ class WikiPageViewSet(BaseViewSet):
             if target is None:
                 return Response({"error": "Collection not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        # 旧名必须在 save() **之前**记下来：serializer.update() 就地改 instance，
-        # save() 之后 page.name 已经是新值，就再也算不出旧路径了。
+        # 旧名与旧集合都必须在 save() **之前**记下来：serializer.update() 就地改
+        # instance，save() 之后 page 上已经是新值，就再也算不出旧的了。
         old_name = page.name
+        old_collection_id = page.collection_id
 
         page = serializer.save()
+
+        # 换了集合 ⇒ 整棵子树跟着走（设计 B-4，裁定 6 明确接受这个代价）。
+        # 只在真的变了时才走这一趟 —— 每次 PATCH 都遍历一遍子树是白烧。
+        #
+        # 顺序说明：这里排在镜像搬移**之前**是任意的，两者互不影响 ——
+        # 镜像路径由「项目 + 祖先链 + 文件名」决定，与 `collection_id` 无关。
+        if page.collection_id != old_collection_id:
+            _move_descendants_to_collection(page, page.collection_id)
 
         # 改名 = 镜像文件换路径，与项目页路径同一条裁定（views/page/base.py:260-269）。
         # 不搬的话：DB 改了名、vault 里留下旧文件，下一次正文写入按新标题再写一份 ——
@@ -542,6 +551,58 @@ def _move_wiki_page_mirror(page, old_name):
         old_name=old_name,
         new_name=page.name,
     )
+
+
+#: 级联下行的深度上限。
+#: `_page_ancestors`（`views/page/base.py`）往上走时用 20 自保，级联是**往下**走，
+#: 同样需要一个界：畸形或成环的 parent 图会让遍历不终止。
+MAX_SUBTREE_DEPTH = 20
+
+
+def _descendant_ids(*, root, max_depth=MAX_SUBTREE_DEPTH):
+    """``root`` 的**全部后代** id，不含它自己。广度优先、有界、去重。
+
+    必须带 ``seen`` 集：``parent`` 是普通外键，**没有任何约束**禁止 A 的父是 B、
+    B 的父是 A。今天 wiki 的路由改不了 ``parent``（``WikiPageUpdateSerializer``
+    没有这个字段），环只能从数据层造出来 —— 但级联是**写**操作，撞上环会写成死循环。
+
+    按 ``workspace_id`` 收窄：正常写入路径下后代必然同工作区（建页时 workspace 与
+    parent 一起给），这一层过滤是给「数据被绕过 API 改过」留的边界 —— 级联是写操作，
+    没有理由去写别的工作区的行。
+    """
+    seen = {root.id}
+    frontier = [root.id]
+    found = []
+
+    for _ in range(max_depth):
+        children = list(
+            Page.objects.filter(workspace_id=root.workspace_id, parent_id__in=frontier).values_list("id", flat=True)
+        )
+        frontier = [child for child in children if child not in seen]
+        if not frontier:
+            break
+        seen.update(frontier)
+        found.extend(frontier)
+
+    return found
+
+
+def _move_descendants_to_collection(page, collection_id):
+    """把 ``page`` 的整棵子树换到同一个集合（设计 B-4）。
+
+    裁定 6 明确接受这条级联的代价：移动一个父页会连带移动用户**没有直接选中**的页面。
+    """
+    descendant_ids = _descendant_ids(root=page)
+    if not descendant_ids:
+        return
+
+    # `QuerySet.update()` 绕过 auto_now：不显式给 `updated_at`，列表的默认排序键
+    # （`Page.Meta.ordering = ("-created_at",)`，`db/models/page.py:71`）不动 ——
+    # 但 `create` / `destroy` 两条既有的 update() 路径都显式刷新了时间戳，这里跟它们
+    # 保持同一条纪律。
+    # `updated_by` **不写**：与 include / remove 两条路径同一裁定 ——
+    # 刷新时间戳，不把执行者盖到「最后编辑人」上。
+    Page.objects.filter(id__in=descendant_ids).update(collection=collection_id, updated_at=timezone.now())
 
 
 class WikiPageDescriptionViewSet(BaseViewSet):
