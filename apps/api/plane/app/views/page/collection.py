@@ -353,17 +353,14 @@ class WikiPageViewSet(BaseViewSet):
         #   3. 本身**已收录**（`is_global=True`）—— 树只列已收录页，所以挂在未收录父页下面的
         #      子页会是一个**永远看不见的孤儿**。界面上点不出来（`＋` 只长在树的行上），
         #      但 API 能调出来。
-        # 三条合成**一条** queryset 查：拆成三次 `.filter()` 是三个独立的 `EXISTS`，
-        # 语义上等价但读起来像三个条件各管各的，容易以为可以分别放宽。
+        # 三条就在 `_wiki_page_queryset` 里 —— 工作区 + 可见 + 已收录，它已经逐条
+        # 表达过（见其定义处的注释），这里只再用 `id` 收窄到**指名的那一页**，不把
+        # 条件抄第二遍：抄一遍就多一处会与它走样的副本。
         # 校验排在 `save()` 之前：404 路径下**一页都不建**。
         parent = None
         parent_id = serializer.validated_data.get("parent")
         if parent_id is not None:
-            parent = (
-                Page.objects.filter(id=parent_id, workspace__slug=slug, is_global=True)
-                .filter(_visible_page_q(request.user))
-                .first()
-            )
+            parent = _wiki_page_queryset(request, slug).filter(id=parent_id).first()
             if parent is None:
                 return Response({"error": "Parent page not found."}, status=status.HTTP_404_NOT_FOUND)
 
