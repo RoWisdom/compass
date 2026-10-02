@@ -99,7 +99,9 @@ class TestMirrorRouting:
 
         _mirror_wiki_page(Page.objects.get(id=wiki_page.id), "<p>正文</p>")
         Page.objects.filter(id=wiki_page.id).update(name="改过名")
-        _move_wiki_page_mirror(Page.objects.get(id=wiki_page.id), "路由测试页")
+        # 第三个参数是 `save()` **之前**的集合 id（见修复 B）：本测试只改名、不换集合，
+        # 所以旧集合就是新集合。
+        _move_wiki_page_mirror(Page.objects.get(id=wiki_page.id), "路由测试页", collection.id)
 
         folder = isolate_markdown_mirror.parent / "3-Wiki" / "Claude Code"
         assert (folder / "改过名.md").is_file()

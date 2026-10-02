@@ -33,8 +33,9 @@ from plane.app.serializers.page_collection import WikiPageTreeSerializer
 from plane.db.models import Page, PageCollection, Project, ProjectPage, Workspace
 from plane.utils.error_codes import ERROR_CODES
 from plane.utils.markdown_storage import (
-    move_page_markdown,
-    move_wiki_page_markdown,
+    move_mirror_file,
+    page_markdown_path,
+    wiki_page_markdown_path,
     write_wiki_page_markdown,
 )
 from plane.utils.wiki_collections import GENERAL, PREDEFINED_KEYS, resolve_collection_key
@@ -442,19 +443,19 @@ class WikiPageViewSet(BaseViewSet):
 
         # 换了集合 ⇒ 整棵子树跟着走（设计 B-4，裁定 6 明确接受这个代价）。
         # 只在真的变了时才走这一趟 —— 每次 PATCH 都遍历一遍子树是白烧。
-        #
-        # 顺序说明：这里排在镜像搬移**之前**是任意的，两者互不影响 ——
-        # 镜像路径由「项目 + 祖先链 + 文件名」决定，与 `collection_id` 无关。
         if page.collection_id != old_collection_id:
             _move_descendants_to_collection(page, page.collection_id)
 
-        # 改名 = 镜像文件换路径，与项目页路径同一条裁定（views/page/base.py:260-269）。
-        # 不搬的话：DB 改了名、vault 里留下旧文件，下一次正文写入按新标题再写一份 ——
+        # 改名**或换集合**都会改变镜像路径（集合是路径的第一段，见 `_wiki_mirror_path`），
+        # 与项目页路径同一条裁定（views/page/base.py:260-269）。两者任一变化都要搬。
+        # 不搬的话：DB 说这页在新家、文件却留在旧家，下一次正文写入按新路径再写一份 ——
         # 同一个 frontmatter.id 出现两份。协同服务器的标题同步会对这个端点做防抖 PATCH，
-        # 所以这是常规路径，不是边角。搬移是尽力而为（move_page_markdown 内部吞 OSError），
-        # 失败方向永远是「文件没搬」而不是「改名失败」。
-        if page.name != old_name:
-            _move_wiki_page_mirror(page, old_name)
+        # 所以这是常规路径，不是边角。
+        # 旧路径必须按 save() **之前**的集合与名字算：用保存后的集合去算旧路径，
+        # 会指向一个不存在的文件，搬移静默失败、旧文件留在原集合文件夹里。
+        # 搬移是尽力而为（镜像搬移内部吞 OSError），失败方向永远是「文件没搬」而不是「改名失败」。
+        if page.name != old_name or page.collection_id != old_collection_id:
+            _move_wiki_page_mirror(page, old_name, old_collection_id)
 
         return Response(WikiPageDetailSerializer(page).data, status=status.HTTP_200_OK)
 
@@ -568,51 +569,82 @@ def _mirror_wiki_page(page, description_html):
     )
 
 
-def _move_wiki_page_mirror(page, old_name):
-    """Move a wiki page's ``.md`` after a rename; skip if it has no home.
+def _wiki_mirror_path(page, *, collection_id, name, ancestors):
+    """Resolve where ``page``'s mirror lives when keyed by ``collection_id``/``name``.
 
-    Same three-way routing as ``_mirror_wiki_page`` — the two must agree, or a
-    rename would move the file into the *other* tree (or fail to find it at all).
-    The wiki metadata route never reparents, so old and new ancestors are the
-    same list; both are passed because that is the callee's contract.
-    Best-effort like every other mirror call.
+    Factored out of ``_mirror_wiki_page``/``_move_wiki_page_mirror`` because the
+    *move* needs this for two different states at once: the old path must be
+    computed from the page's **pre-save** collection and name. Reading them off
+    the saved instance is what made a collection change silently move nothing.
+
+    Routing is the same three-way, collection-first rule as ``_mirror_wiki_page``:
+    collection root, else project root, else ``None`` (no home — see
+    ``_wiki_page_project_id``). Returns ``None`` rather than a guessed path.
     """
-    ancestors = _page_ancestors(page.parent_id)
-
-    if page.collection_id is not None:
-        collection = PageCollection.objects.filter(id=page.collection_id).first()
+    if collection_id is not None:
+        collection = PageCollection.objects.filter(id=collection_id).first()
         if collection is not None:
-            move_wiki_page_markdown(
+            return wiki_page_markdown_path(
                 collection_name=collection.name,
                 collection_id=str(collection.id),
-                old_ancestors=ancestors,
-                new_ancestors=ancestors,
+                ancestors=ancestors,
+                name=name,
                 page_id=str(page.id),
-                old_name=old_name,
-                new_name=page.name,
             )
-            return
+        # collection_id set but the row is gone — fall through to the project
+        # branch, exactly as _mirror_wiki_page does.
 
     project_id = _wiki_page_project_id(page)
-
     if project_id is None:
+        return None
+    return page_markdown_path(
+        project_name=_project_name(project_id),
+        project_id=str(project_id),
+        ancestors=ancestors,
+        name=name,
+        page_id=str(page.id),
+    )
+
+
+def _move_wiki_page_mirror(page, old_name, old_collection_id):
+    """Move a wiki page's mirror after a rename, a collection change, or both.
+
+    Both states are computed explicitly: the old path from ``old_name`` +
+    ``old_collection_id`` (the values before ``save()``), the new path from the
+    saved instance. A move that crosses roots (collection → project, or the
+    reverse) is just two paths in different trees — nothing here cares which.
+
+    When the new state has no home the old file is **left where it is** and a
+    warning is logged: the wiki never deletes vault folders (design §243
+    「删集合不删文件夹」), and a page leaving the wiki for a project-less
+    limbo is not a reason to silently destroy the user's notes.
+    """
+    ancestors = _page_ancestors(page.parent_id)
+    old_path = _wiki_mirror_path(page, collection_id=old_collection_id, name=old_name, ancestors=ancestors)
+    new_path = _wiki_mirror_path(page, collection_id=page.collection_id, name=page.name, ancestors=ancestors)
+
+    if old_path is None:
+        # Nothing on disk to move. Either the page never had a home, or it is
+        # arriving at one for the first time — the next body write creates it.
+        if new_path is None:
+            logger.warning(
+                "Skipping markdown mirror move for wiki page %s: no live ProjectPage link "
+                "and no collection, so the page has no mirror root. The wiki never writes "
+                "a page to a guessed location.",
+                page.id,
+            )
+        return
+
+    if new_path is None:
         logger.warning(
-            "Skipping markdown mirror move for wiki page %s: no live ProjectPage link. "
-            "MARKDOWN_STORAGE_PATH points at the projects directory, so a page with no "
-            "project has no folder to mirror into.",
+            "Orphaning markdown mirror for wiki page %s: the page now has neither a collection "
+            "nor a live ProjectPage link, so it has no mirror root. The old file is left in "
+            "place — the wiki never deletes vault files (design §243 「删集合不删文件夹」).",
             page.id,
         )
         return
 
-    move_page_markdown(
-        project_name=_project_name(project_id),
-        project_id=str(project_id),
-        old_ancestors=ancestors,
-        new_ancestors=ancestors,
-        page_id=str(page.id),
-        old_name=old_name,
-        new_name=page.name,
-    )
+    move_mirror_file(old_path, new_path, old_name, page.name, str(page.id))
 
 
 #: 级联下行的深度上限。
@@ -743,18 +775,20 @@ class WikiPageDescriptionViewSet(BaseViewSet):
             if target is None:
                 return Response({"error": "Collection not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        # 旧名必须在 save() **之前**记下来：serializer.update() 就地改 instance，
-        # save() 之后 page.name 已经是新值，就再也算不出旧路径了。
+        # 旧名与旧集合都必须在 save() **之前**记下来：serializer.update() 就地改
+        # instance，save() 之后 page.name / page.collection_id 已经是新值，
+        # 就再也算不出旧路径了。
         old_name = page.name
+        old_collection_id = page.collection_id
 
         page = serializer.save()
 
-        # 改名 = 镜像换路径。**必须先搬、后写正文**，顺序是载荷：
-        # move_page_markdown 做的是 old_path.replace(new_path)。如果正文镜像先把新路径写好了，
+        # 改名**或换集合** = 镜像换路径。**必须先搬、后写正文**，顺序是载荷：
+        # 镜像搬移做的是 old_path.replace(new_path)。如果正文镜像先把新路径写好了，
         # 这一搬就会拿旧文件把新正文盖掉 —— 内容静默丢失。
-        # 先搬后写的最终状态才两个都对：一个文件、新名字、新正文。
-        if page.name != old_name:
-            _move_wiki_page_mirror(page, old_name)
+        # 先搬后写的最终状态才两个都对：一个文件、新路径、新正文。
+        if page.name != old_name or page.collection_id != old_collection_id:
+            _move_wiki_page_mirror(page, old_name, old_collection_id)
 
         # Mirror the page body as a local Markdown file (best-effort, skips
         # pages with no project — see _mirror_wiki_page).
