@@ -20,6 +20,7 @@ from plane.utils.markdown_storage import (
     WIKI_MARKDOWN_STORAGE_PATH_ENV,
     get_markdown_root,
     get_wiki_markdown_root,
+    write_page_markdown,
     wiki_page_markdown_path,
     write_wiki_page_markdown,
 )
@@ -133,3 +134,32 @@ class TestWriteWikiPageMarkdown:
         assert "source: https://x" in text
         assert text.count("---") == 2
         assert text.endswith("新正文")
+
+
+@pytest.mark.unit
+class TestProjectTreeLeavesAHandwrittenNoteAlone:
+    def test_project_tree_leaves_a_handwritten_note_alone(self, isolate_markdown_mirror):
+        """W2-2 的回归锁：项目树不传 `own_path`，目标名上那篇**没有 `id:`** 的手写笔记
+        不是本页的 ⇒ 正文写到 `-{id8}` 兄弟文件上，原文件一个字节都不动。
+
+        改动前这里的行为是**覆盖**。这条守的就是那次改动 —— 在此之前全仓没有一条
+        项目树测试预置过无 `id:` 的同名文件，改回「覆盖」不会让任何测试变红。
+        """
+        target = get_markdown_root() / "面料交易" / "剪藏.md"
+        target.parent.mkdir(parents=True, exist_ok=True)
+        original = "---\ntags:\n  - 罗盘\nsource: https://x\n---\n\n用户手写的正文\n"
+        target.write_text(original, encoding="utf-8")
+
+        write_page_markdown(
+            project_name="面料交易",
+            project_id="proj-1",
+            ancestors=[],
+            page_id="aaaaaaaa-1111-2222-3333-444444444444",
+            name="剪藏",
+            markdown="Plane 正文",
+        )
+
+        assert target.read_text(encoding="utf-8") == original, "手写笔记必须逐字未动"
+        sibling = target.parent / "剪藏-aaaaaaaa.md"
+        assert sibling.is_file(), "正文要让到 -{id[:8]} 兄弟文件上"
+        assert sibling.read_text(encoding="utf-8").endswith("Plane 正文")

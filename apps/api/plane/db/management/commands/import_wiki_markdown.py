@@ -140,6 +140,7 @@ class Command(BaseCommand):
                 external_id=f"3-Wiki/{folder.name}/{'/'.join(directory_parts)}",
                 defaults={
                     "name": directory_parts[-1],
+                    "parent_id": parent_id,
                     "owned_by": owner,
                     "is_global": True,
                     "collection": collection,

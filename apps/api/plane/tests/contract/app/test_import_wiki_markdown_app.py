@@ -119,6 +119,25 @@ class TestImportWikiMarkdown:
         assert child.parent_id == parent.id
 
     @pytest.mark.django_db
+    def test_two_level_nesting_keeps_each_directory_page_under_its_own_parent(self, vault, workspace, create_user):
+        """两级以上的嵌套：中间那级目录页要挂在**上一级目录页**下，不是挂在根上。
+
+        回归锁（裁定 ②）：`defaults` 曾漏掉 `parent`，于是 `A/B` 的目录页 parent 为空
+        —— 文件挂在 B 下、B 却挂在根上，树被展平。一级嵌套看不出来（那级 parent 本来就是空）。
+        """
+        (vault / "终端工具" / "iTerm" / "配置").mkdir(parents=True)
+        (vault / "终端工具" / "iTerm" / "配置" / "快捷键.md").write_text("正文\n", encoding="utf-8")
+
+        call_command("import_wiki_markdown", workspace_slug=workspace.slug, owner=create_user.email, stdout=_sink())
+
+        outer = Page.objects.get(external_id="3-Wiki/终端工具/iTerm")
+        middle = Page.objects.get(external_id="3-Wiki/终端工具/iTerm/配置")
+        leaf = Page.objects.get(external_id="3-Wiki/终端工具/iTerm/配置/快捷键.md")
+        assert outer.parent_id is None, "最外层目录页本来就该在根上"
+        assert middle.parent_id == outer.id, "中间那级目录页要挂在上一级目录页下"
+        assert leaf.parent_id == middle.id, "笔记挂在它自己那一级目录页下"
+
+    @pytest.mark.django_db
     def test_dry_run_creates_nothing(self, vault, workspace, create_user):
         call_command(
             "import_wiki_markdown", workspace_slug=workspace.slug, owner=create_user.email, dry_run=True, stdout=_sink()
