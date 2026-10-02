@@ -14,6 +14,7 @@ from django.utils import timezone
 # Third party imports
 from rest_framework import status
 from rest_framework.response import Response
+from plane.utils.html_to_markdown import html_to_markdown
 
 # Module imports
 from plane.app.permissions import ROLE, allow_permission
@@ -31,7 +32,11 @@ from plane.app.serializers import (
 from plane.app.serializers.page_collection import WikiPageTreeSerializer
 from plane.db.models import Page, PageCollection, Project, ProjectPage, Workspace
 from plane.utils.error_codes import ERROR_CODES
-from plane.utils.markdown_storage import move_page_markdown
+from plane.utils.markdown_storage import (
+    move_page_markdown,
+    move_wiki_page_markdown,
+    write_wiki_page_markdown,
+)
 from plane.utils.wiki_collections import GENERAL, PREDEFINED_KEYS, resolve_collection_key
 
 # Local imports
@@ -41,7 +46,13 @@ from ..base import BaseViewSet
 # prohibition (`views/page/base.py` carries unrelated uncommitted work).
 # Importing its mirror helpers rather than copying them keeps one definition of
 # how a page becomes markdown — do not "fix" this by inlining a copy.
-from .base import _page_ancestors, _project_name, _write_page_mirror
+from .base import (
+    _page_ancestors,
+    _project_name,
+    _resolve_asset_url,
+    _resolve_user_display_name,
+    _write_page_mirror,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -492,12 +503,51 @@ def _wiki_page_project_id(page):
     )
 
 
-def _mirror_wiki_page(page, description_html):
-    """Mirror a wiki page's body to a local ``.md``; skip if it has no project.
+def _write_collection_page_mirror(page, collection, description_html):
+    """Mirror a page body into its collection's folder under the wiki vault root.
 
-    See ``_wiki_page_project_id`` for why a project-less page is skipped
-    rather than guessed at.
+    The project path mirrors through ``base._write_page_mirror``, which is
+    project-scoped by construction (it resolves a directory name through
+    ``Project.objects``). A collection is not a project, so this is the sibling
+    writer rather than a flag on that one — ``base.py`` is under a hard
+    no-write prohibition and its helper is left exactly as it is.
+
+    Best-effort like every other mirror: ``write_wiki_page_markdown`` swallows
+    ``OSError`` and logs, so a read-only vault cannot fail a page save.
     """
+    user_cache, asset_cache = {}, {}
+    markdown = html_to_markdown(
+        description_html,
+        resolve_user=lambda uid: _resolve_user_display_name(uid, user_cache),
+        resolve_asset_url=lambda aid: _resolve_asset_url(aid, asset_cache),
+    )
+    write_wiki_page_markdown(
+        collection_name=collection.name,
+        collection_id=str(collection.id),
+        ancestors=_page_ancestors(page.parent_id),
+        page_id=str(page.id),
+        name=page.name,
+        markdown=markdown,
+    )
+
+
+def _mirror_wiki_page(page, description_html):
+    """Mirror a wiki page's body to a local ``.md``, or skip when it has no home.
+
+    Routing is three-way and **collection-first** (design §3.3): a page in a
+    collection mirrors under the wiki vault root, keyed by the collection name —
+    the collection is the axis the user sees in the Wiki, so that is where the
+    file belongs. A page with no collection but a live ``ProjectPage`` link
+    keeps the pre-existing project behaviour verbatim. A page with neither is
+    skipped and logged — see ``_wiki_page_project_id`` for why guessing a
+    location is worse than writing nothing.
+    """
+    if page.collection_id is not None:
+        collection = PageCollection.objects.filter(id=page.collection_id).first()
+        if collection is not None:
+            _write_collection_page_mirror(page, collection, description_html)
+            return
+
     project_id = _wiki_page_project_id(page)
 
     if project_id is None:
@@ -519,17 +569,30 @@ def _mirror_wiki_page(page, description_html):
 
 
 def _move_wiki_page_mirror(page, old_name):
-    """Move a wiki page's ``.md`` after a rename; skip if it has no project.
+    """Move a wiki page's ``.md`` after a rename; skip if it has no home.
 
-    The mirror path is name-derived, so a rename that is not carried into the
-    filesystem leaves the old file behind and lets the next body write create a
-    second one under the new title — two files, one ``frontmatter.id``.
-
+    Same three-way routing as ``_mirror_wiki_page`` — the two must agree, or a
+    rename would move the file into the *other* tree (or fail to find it at all).
     The wiki metadata route never reparents, so old and new ancestors are the
-    same list; both are passed because that is ``move_page_markdown``'s
-    contract. Best-effort like every other mirror call: it swallows ``OSError``
-    and logs, so a read-only vault cannot fail a rename.
+    same list; both are passed because that is the callee's contract.
+    Best-effort like every other mirror call.
     """
+    ancestors = _page_ancestors(page.parent_id)
+
+    if page.collection_id is not None:
+        collection = PageCollection.objects.filter(id=page.collection_id).first()
+        if collection is not None:
+            move_wiki_page_markdown(
+                collection_name=collection.name,
+                collection_id=str(collection.id),
+                old_ancestors=ancestors,
+                new_ancestors=ancestors,
+                page_id=str(page.id),
+                old_name=old_name,
+                new_name=page.name,
+            )
+            return
+
     project_id = _wiki_page_project_id(page)
 
     if project_id is None:
@@ -541,7 +604,6 @@ def _move_wiki_page_mirror(page, old_name):
         )
         return
 
-    ancestors = _page_ancestors(page.parent_id)
     move_page_markdown(
         project_name=_project_name(project_id),
         project_id=str(project_id),
