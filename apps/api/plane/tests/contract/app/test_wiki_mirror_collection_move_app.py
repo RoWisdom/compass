@@ -329,6 +329,49 @@ class TestWikiMirrorCollectionMove:
         assert not old_file.exists()
 
     @pytest.mark.django_db
+    def test_one_request_that_moves_and_writes_the_body_lands_on_one_file(
+        self, isolate_markdown_mirror, session_client, workspace, create_user
+    ):
+        """同一请求既换集合、又写正文 ⇒ 只留一份文件，正文落在被搬过去的那份上。
+
+        正文端点（`WikiPageDescriptionViewSet.partial_update`）先搬后写，而写正文时
+        `_wiki_page_own_path` 读的是**内存里**那个 `page.external_id`。只把新路径写进库、
+        不写进实例的话，这一次写入仍会用旧 `own_path` 去比 ⇒ 目标文件不被认作自己的 ⇒
+        冒出 `剪藏页-{id8}.md`。这条就是那行内存赋值的载荷测试。
+        """
+        source = _collection(workspace, create_user, "集合A")
+        target = _collection(workspace, create_user, "集合B")
+        page = _wiki_page(workspace, create_user, "剪藏页")
+        Page.objects.filter(id=page.id).update(
+            collection=source, external_source="obsidian-vault", external_id="3-Wiki/集合A/剪藏页.md"
+        )
+
+        # 导入形状的来源文件：**没有 `id:`**，所以归属只能靠 `own_path` 认。
+        original = "---\ntags:\n  - 罗盘\n---\n\n用户手写的正文\n"
+        source_file = isolate_markdown_mirror.parent / "3-Wiki" / "集合A" / "剪藏页.md"
+        source_file.parent.mkdir(parents=True, exist_ok=True)
+        source_file.write_text(original, encoding="utf-8")
+
+        response = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{page.id}/description/",
+            {
+                "collection_id": str(target.id),
+                "description_html": "<p>Plane 正文</p>",
+                "description_json": {"type": "doc"},
+            },
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+
+        moved = isolate_markdown_mirror.parent / "3-Wiki" / "集合B" / "剪藏页.md"
+        assert moved.is_file(), "文件要搬到新集合下"
+        assert moved.read_text(encoding="utf-8").endswith("Plane 正文"), "正文要落在这份文件上"
+        assert list((isolate_markdown_mirror.parent / "3-Wiki" / "集合A").glob("*.md")) == [], "旧集合下不该留文件"
+        assert not list(moved.parent.glob("剪藏页-*.md")), "不得冒出 -{id8} 兄弟文件"
+        page.refresh_from_db()
+        assert page.external_id == "3-Wiki/集合B/剪藏页.md"
+
+    @pytest.mark.django_db
     def test_collection_change_repoints_an_imported_pages_external_id(
         self, session_client, isolate_markdown_mirror, workspace, create_user
     ):
@@ -343,7 +386,9 @@ class TestWikiMirrorCollectionMove:
         page = _wiki_page(workspace, create_user, "剪藏页")
         a = _collection(workspace, create_user, "集合A")
         b = _collection(workspace, create_user, "集合B")
-        Page.objects.filter(id=page.id).update(collection=a, external_id="3-Wiki/集合A/剪藏页.md")
+        Page.objects.filter(id=page.id).update(
+            collection=a, external_source="obsidian-vault", external_id="3-Wiki/集合A/剪藏页.md"
+        )
 
         wiki_root = isolate_markdown_mirror.parent / "3-Wiki"
         old_file = wiki_root / "集合A" / "剪藏页.md"
@@ -391,7 +436,9 @@ class TestWikiMirrorCollectionMove:
         """
         page = _wiki_page(workspace, create_user, "旧剪藏名")
         a = _collection(workspace, create_user, "集合A")
-        Page.objects.filter(id=page.id).update(collection=a, external_id="3-Wiki/集合A/旧剪藏名.md")
+        Page.objects.filter(id=page.id).update(
+            collection=a, external_source="obsidian-vault", external_id="3-Wiki/集合A/旧剪藏名.md"
+        )
 
         wiki_root = isolate_markdown_mirror.parent / "3-Wiki"
         old_file = wiki_root / "集合A" / "旧剪藏名.md"

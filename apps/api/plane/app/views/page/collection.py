@@ -821,8 +821,8 @@ def _move_wiki_page_mirror(page, old_name, old_collection_id):
     #   · `moved` —— 文件确实被这次调用搬到了新路径；
     #   · 新路径上**什么都不存在** —— 那里没有别人的文件可以被认领，指针指向的是
     #     下一次写正文会落笔的地方。
-    # 其余一律不动（目标被别的页面占着、来源不是本页的且目标也被占、搬移抛异常）：
-    # 文件还在原处，指针跟过去会把新位置上那份东西认成本页的，下一次写正文就覆盖它。
+    # 这两条之外就是不跟：目标位置已经躺着别人的文件时指针留在原处，下一次写正文
+    # 只会多出一个 `-{id8}` 兄弟文件，绝不会覆盖它。
     if moved or not new_path.exists():
         _repoint_page_external_id(page, old_path, new_path)
 
@@ -854,7 +854,7 @@ def _repoint_page_external_id(page, old_path, new_path):
     request**, resolving ``own_path`` off this very attribute — a database-only
     fix would leave that first write landing on the sibling anyway.
     """
-    if not page.external_id:
+    if not page.external_id or page.external_source != EXTERNAL_SOURCE:
         return
 
     vault_root = get_wiki_markdown_root().parent
