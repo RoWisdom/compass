@@ -327,3 +327,169 @@ class TestWikiMirrorCollectionMove:
         assert page.collection_id == b.id
         assert (wiki_root / "集合B" / "正文路由页.md").is_file(), "正文路由同样要跟着集合搬镜像"
         assert not old_file.exists()
+
+    @pytest.mark.django_db
+    def test_collection_change_repoints_an_imported_pages_external_id(
+        self, session_client, isolate_markdown_mirror, workspace, create_user
+    ):
+        """导入形状的页换集合：`external_id` 跟着文件走，下一次写正文不另起兄弟文件。
+
+        「导入页」的定义是本缺陷的关键：文件里**没有** `id:` 行（剪藏 / 手写
+        frontmatter）。`_resolve_page_path` 对没有 `id:` 的文件唯一的判据就是
+        「它是否**正好**是本页的 `own_path`」—— `own_path` 从 `external_id` 算。
+        搬完不改 `external_id`，下一笔正文就把刚搬过去的那份当成别人的剪藏，
+        改写 `X-<id8>.md` 兄弟文件，被搬走的那份从此陈旧。
+        """
+        page = _wiki_page(workspace, create_user, "剪藏页")
+        a = _collection(workspace, create_user, "集合A")
+        b = _collection(workspace, create_user, "集合B")
+        Page.objects.filter(id=page.id).update(collection=a, external_id="3-Wiki/集合A/剪藏页.md")
+
+        wiki_root = isolate_markdown_mirror.parent / "3-Wiki"
+        old_file = wiki_root / "集合A" / "剪藏页.md"
+        old_file.parent.mkdir(parents=True, exist_ok=True)
+        original = "---\ntags: [剪藏]\n---\n\n从网页剪下来的正文\n"
+        old_file.write_text(original, encoding="utf-8")
+
+        response = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{page.id}/",
+            {"collection_id": str(b.id)},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+
+        page.refresh_from_db()
+        assert page.collection_id == b.id
+        assert page.external_id == "3-Wiki/集合B/剪藏页.md", "行指针必须跟着文件走"
+
+        new_file = wiki_root / "集合B" / "剪藏页.md"
+        assert new_file.is_file(), "镜像必须搬到新集合文件夹"
+        assert new_file.read_text(encoding="utf-8") == original, "搬移不得动内容（含剪藏的 frontmatter 键）"
+        assert not old_file.exists(), "旧集合文件夹下不得留残骸"
+
+        # 再走一次**正文**保存：如果 `external_id` 没跟，这一笔会在新集合下写出
+        # `剪藏页-<id8>.md` 兄弟文件，刚搬过去的那份反而不动了。
+        body = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{page.id}/description/",
+            {"description_html": "<p>搬家后的新正文</p>", "description_json": {"type": "doc"}},
+            format="json",
+        )
+        assert body.status_code == status.HTTP_200_OK
+        sibling = wiki_root / "集合B" / f"剪藏页-{str(page.id)[:8]}.md"
+        assert not sibling.exists(), "指针跟对了就不会再冒出一个兄弟文件"
+        assert new_file.is_file(), "正文必须落回被搬过来的那份文件"
+        assert _all_mirrors(isolate_markdown_mirror) == [new_file], "正文保存后仍应只有一份镜像"
+
+    @pytest.mark.django_db
+    def test_rename_repoints_an_imported_pages_external_id(
+        self, session_client, isolate_markdown_mirror, workspace, create_user
+    ):
+        """同一收口的另一支：只改名（集合不动），`external_id` 同样得跟着走。
+
+        改名与换集合搬的是同一个收口 `_move_wiki_page_mirror`，判据也同一条：
+        文件搬到哪，指针跟到哪。少了这一跟，改名后的第一笔正文同样落在兄弟文件上。
+        """
+        page = _wiki_page(workspace, create_user, "旧剪藏名")
+        a = _collection(workspace, create_user, "集合A")
+        Page.objects.filter(id=page.id).update(collection=a, external_id="3-Wiki/集合A/旧剪藏名.md")
+
+        wiki_root = isolate_markdown_mirror.parent / "3-Wiki"
+        old_file = wiki_root / "集合A" / "旧剪藏名.md"
+        old_file.parent.mkdir(parents=True, exist_ok=True)
+        original = "---\ntags: [改名前]\n---\n\n正文\n"
+        old_file.write_text(original, encoding="utf-8")
+
+        response = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{page.id}/",
+            {"name": "新剪藏名"},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+
+        page.refresh_from_db()
+        assert page.name == "新剪藏名"
+        assert page.external_id == "3-Wiki/集合A/新剪藏名.md", "行指针必须跟着改名后的文件走"
+
+        new_file = wiki_root / "集合A" / "新剪藏名.md"
+        assert new_file.is_file()
+        assert new_file.read_text(encoding="utf-8") == original, "搬移不得动内容"
+        assert not old_file.exists(), "旧名字下不得留残骸"
+
+        body = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{page.id}/description/",
+            {"description_html": "<p>改名后的新正文</p>", "description_json": {"type": "doc"}},
+            format="json",
+        )
+        assert body.status_code == status.HTTP_200_OK
+        sibling = wiki_root / "集合A" / f"新剪藏名-{str(page.id)[:8]}.md"
+        assert not sibling.exists(), "指针跟对了就不会再冒出一个兄弟文件"
+        assert new_file.is_file(), "正文必须落回改名后的那份文件"
+        assert _all_mirrors(isolate_markdown_mirror) == [new_file], "正文保存后仍应只有一份镜像"
+
+    @pytest.mark.django_db
+    def test_cross_root_move_leaves_external_id_alone(
+        self, session_client, isolate_markdown_mirror, workspace, create_user, project
+    ):
+        """护栏：集合 → 项目（跨根）时 `external_id` **一字不得改**。
+
+        `external_id`-as-locator 是 **wiki 树**内的概念（`3-Wiki/…`）。跨根搬移之后
+        文件在 `2-项目/…`，那个位置不由 wiki 根拼出来，指针跟过去就指向了一个
+        本函数管不着的地方 —— 守住「只在 wiki 根内才改指针」。
+        """
+        page = _wiki_page(workspace, create_user, "跨根剪藏")
+        _project_with_page(workspace, project, page, create_user)
+        a = _collection(workspace, create_user, "集合A")
+        Page.objects.filter(id=page.id).update(collection=a, external_id="3-Wiki/集合A/跨根剪藏.md")
+
+        wiki_root = isolate_markdown_mirror.parent / "3-Wiki"
+        old_file = wiki_root / "集合A" / "跨根剪藏.md"
+        old_file.parent.mkdir(parents=True, exist_ok=True)
+        old_file.write_text("---\ntags: [跨根]\n---\n\n正文\n", encoding="utf-8")
+
+        response = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{page.id}/",
+            {"collection_id": None},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+
+        page.refresh_from_db()
+        assert page.collection_id is None
+        assert page.external_id == "3-Wiki/集合A/跨根剪藏.md", "跨根搬移不归 wiki 指针管，一字不得改"
+
+        project_file = isolate_markdown_mirror / "镜像项目" / "跨根剪藏.md"
+        assert project_file.is_file(), "文件本身仍要照搬"
+        assert not old_file.exists(), "wiki 树里不得留残骸"
+
+    @pytest.mark.django_db
+    def test_page_without_an_external_id_gains_none(
+        self, session_client, isolate_markdown_mirror, workspace, create_user
+    ):
+        """护栏：Plane 原生页（没有 `external_id`）换集合后**仍然没有** —— 不无中生有。
+
+        给原生页造一个来源凭证，等于让它此后每一笔正文写入都把那个位置上
+        恰好同名的用户笔记认成自己的。搬移照旧，指针保持空。
+        """
+        page = _wiki_page(workspace, create_user, "原生页")
+        a = _collection(workspace, create_user, "集合A")
+        b = _collection(workspace, create_user, "集合B")
+        Page.objects.filter(id=page.id).update(collection=a)
+        assert page.external_id is None, "前置：这是一张 Plane 原生页"
+
+        _write_mirror(page)
+        wiki_root = isolate_markdown_mirror.parent / "3-Wiki"
+        old_file = wiki_root / "集合A" / "原生页.md"
+        assert old_file.is_file()
+
+        response = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{page.id}/",
+            {"collection_id": str(b.id)},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+
+        page.refresh_from_db()
+        assert page.collection_id == b.id
+        assert page.external_id is None, "不得给 Plane 原生页凭空造一个来源凭证"
+        assert (wiki_root / "集合B" / "原生页.md").is_file(), "搬移本身照旧"
+        assert not old_file.exists()

@@ -776,6 +776,13 @@ def _move_wiki_page_mirror(page, old_name, old_collection_id):
     warning is logged: the wiki never deletes vault folders (design §243
     「删集合不删文件夹」), and a page leaving the wiki for a project-less
     limbo is not a reason to silently destroy the user's notes.
+
+    The recorded path (``Page.external_id``) follows the file, so the next body write
+    still recognises it as this page's own — see ``_repoint_page_external_id`` for the
+    guards. One case is deliberately **not** covered: a descendant whose file moves
+    merely because its *parent's* folder moved keeps a stale ``external_id`` — the
+    pointer is only re-pointed when the page's own route runs. The next write for such
+    a page lands on a ``-{id[:8]}`` sibling; the original is left alone.
     """
     ancestors = _page_ancestors(page.parent_id)
     old_path = _wiki_mirror_path(page, collection_id=old_collection_id, name=old_name, ancestors=ancestors)
@@ -802,7 +809,69 @@ def _move_wiki_page_mirror(page, old_name, old_collection_id):
         )
         return
 
-    move_mirror_file(old_path, new_path, old_name, page.name, str(page.id))
+    if old_path == new_path:
+        # 路径没变（名字与集合都没动，或 `_sanitize_name` 把差别吃掉了）：
+        # 磁盘与行指针都已经是对的，没有什么可跟。
+        return
+
+    moved = move_mirror_file(old_path, new_path, old_name, page.name, str(page.id))
+
+    # `external_id` 是**定位符**不是来源凭证（与集合改名同一条裁定）：文件搬到哪，
+    # 行指针就跟到哪。只有两种情况跟：
+    #   · `moved` —— 文件确实被这次调用搬到了新路径；
+    #   · 新路径上**什么都不存在** —— 那里没有别人的文件可以被认领，指针指向的是
+    #     下一次写正文会落笔的地方。
+    # 其余一律不动（目标被别的页面占着、来源不是本页的且目标也被占、搬移抛异常）：
+    # 文件还在原处，指针跟过去会把新位置上那份东西认成本页的，下一次写正文就覆盖它。
+    if moved or not new_path.exists():
+        _repoint_page_external_id(page, old_path, new_path)
+
+
+def _repoint_page_external_id(page, old_path, new_path):
+    """Let ``Page.external_id`` follow the mirror file — but only when it really
+    named the old location.
+
+    ``external_id`` is a **locator**, not an immutable record of provenance (the
+    same ruling a collection rename is built on): the file moved, so the recorded
+    path has to move with it. Left behind, the next body write resolves
+    ``own_path`` off the stale value, fails to recognise the file it just moved as
+    its own, and writes a ``-{id[:8]}`` sibling instead — one file at a time, the
+    same defect a collection rename had for a whole folder.
+
+    Three guards, all in the direction of *not* changing anything:
+
+    * the recorded path must be exactly ``old_path`` (vault-relative) — anything
+      else points somewhere this move has nothing to say about;
+    * both paths must be under the wiki root — ``external_id``-as-locator is a
+      wiki-tree notion, and a page crossing to the project tree is not this
+      function's business;
+    * the caller has already established that the move happened or that the
+      destination is empty (see ``_move_wiki_page_mirror``).
+
+    One column, one ``update`` — the same discipline as ``_reprefix_external_id``.
+    The in-memory instance is updated too, and that is not a nicety: the
+    description endpoint moves the file and writes the body **in the same
+    request**, resolving ``own_path`` off this very attribute — a database-only
+    fix would leave that first write landing on the sibling anyway.
+    """
+    if not page.external_id:
+        return
+
+    vault_root = get_wiki_markdown_root().parent
+    try:
+        old_rel = old_path.relative_to(vault_root).as_posix()
+        new_rel = new_path.relative_to(vault_root).as_posix()
+    except ValueError:
+        return
+    if page.external_id != old_rel:
+        return
+    try:
+        new_path.relative_to(get_wiki_markdown_root())
+    except ValueError:
+        return
+
+    Page.objects.filter(id=page.id).update(external_id=new_rel)
+    page.external_id = new_rel
 
 
 #: 级联下行的深度上限。
