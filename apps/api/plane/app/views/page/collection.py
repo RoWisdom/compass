@@ -535,13 +535,14 @@ def _rename_collection_mirror(collection, old_name):
     Best-effort on the filesystem, like every other mirror call: a failure is
     logged, never raised — a read-only vault must not fail a rename.
 
-    The recorded path is re-pointed **only** when the folder really is at the new
-    name (or when there is no folder at all). Both refusals — the destination
-    already exists, and ``os.replace`` failed — deliberately leave it alone,
-    because the files are still under the old name: re-pointing it there would
-    tell the next body write that whatever sits at the destination is this page's
-    own file, and it would overwrite it. The failure direction is therefore
-    "a stale folder / a duplicate file", never "someone else's file was written".
+    The recorded path is re-pointed **only** when the destination folder is free
+    and the collection's files are either already there (the move succeeded) or
+    not on disk at all. Every other exit — the destination is occupied, or
+    ``os.replace`` failed — leaves it exactly where it was, because the files are
+    still under the old name: re-pointing it would tell the next body write that
+    whatever sits at the destination is this page's own file, and it would
+    overwrite it. The failure direction is therefore "a stale folder / a duplicate
+    file", never "someone else's file was written".
     """
     old_dir = wiki_collection_directory(old_name, collection.id)
     new_dir = wiki_collection_directory(collection.name, collection.id)
@@ -556,26 +557,32 @@ def _rename_collection_mirror(collection, old_name):
         # so neither the disk nor the recorded path has anything to change.
         return
 
-    if not old_dir.exists():
-        # Nothing mirrored yet — the folder appears under the new name on the next
-        # body write. The recorded path is still re-pointed: it is what tells a
-        # later write which file is this page's own.
-        _reprefix_external_id(collection.workspace_id, old_rel, new_rel)
-        return
-
     if new_dir.exists():
-        # Refusing is a **decision**, not a failure: merging two folders is
-        # destruction, and the destination may be someone else's folder. So the
-        # recorded path is left exactly where it was — it still names the folder
-        # the files actually sit in — and a later write under the new name lands
-        # on a ``-{id8}`` sibling instead of on whatever is at the destination.
+        # The destination is occupied, so nothing is re-pointed into it. Refusing
+        # is a **decision**, not a failure: the folder sitting there may be someone
+        # else's (and merging two folders is destruction), and when nothing has been
+        # mirrored yet there is simply nothing to move into it either. Either way the
+        # rows keep pointing at the folder their files are really in, and a later
+        # write under the new name lands on a ``-{id8}`` sibling instead of on
+        # whatever is at the destination. This check has to come **before** the
+        # "no folder to move" exit below: that exit re-points the rows, and doing
+        # that into an occupied folder is how a hand-written note gets adopted and
+        # then overwritten.
         logger.warning(
-            "Not renaming collection mirror directory %s -> %s: the destination already exists, "
-            "and merging two folders is not something a rename may do. Rows keep pointing at %s.",
+            "Not re-pointing collection mirror rows %s -> %s: the destination already exists, and "
+            "claiming it is not something a rename may do. Rows keep pointing at %s.",
             old_rel,
             new_rel,
             old_rel,
         )
+        return
+
+    if not old_dir.exists():
+        # Nothing mirrored yet — the folder appears under the new name on the next
+        # body write. The recorded path is still re-pointed: it is what tells a
+        # later write which file is this page's own. (Safe because the destination
+        # was just proven free.)
+        _reprefix_external_id(collection.workspace_id, old_rel, new_rel)
         return
 
     try:
@@ -598,11 +605,12 @@ def _rename_collection_mirror(collection, old_name):
 def _reprefix_external_id(workspace_id, old_rel, new_rel):
     """Re-point every imported row under ``<old_rel>/`` at ``<new_rel>/``.
 
-    Only ever called once the folder really is at the new name, or when there is
-    no folder at all — never after a refused or failed move, where the files are
-    still under the old name and re-pointing them would hand a later body write
-    someone else's file to overwrite. Callers are the four ``_rename_collection_mirror``
-    exits that have earned it; see its docstring.
+    Only ever called once the destination folder is free and the collection's
+    files are either already at the new name or not on disk at all — never after
+    a refused or failed move, where the files are still under the old name and
+    re-pointing them would hand a later body write someone else's file to
+    overwrite. Exactly two of ``_rename_collection_mirror``'s exits call it; see
+    its docstring for which two and why.
 
     ``old_rel``/``new_rel`` are folder paths **relative to the vault root**
     (``3-Wiki/<集合>``) — the same spelling ``Page.external_id`` uses, and the same
@@ -615,6 +623,11 @@ def _reprefix_external_id(workspace_id, old_rel, new_rel):
     — hence the exact-or-slash-suffixed pair rather than a bare ``startswith``.
     ``<old_rel>`` **is** matched exactly too: that is the collection row's own
     shape, and a sub-directory page's shape (``3-Wiki/<old>/sub``).
+
+    A row whose ``external_id`` spells the folder differently from what
+    ``wiki_collection_directory`` computes (e.g. a collection imported from a
+    vault folder named outside the writer) is left pointing at the old name —
+    conservative, and it costs a duplicate file rather than a clobbered one.
     """
     prefix = f"{old_rel}/"
 

@@ -301,6 +301,53 @@ class TestWikiCollectionRename:
         assert user_note.read_text(encoding="utf-8") == user_note_text, "④ 手写笔记一字未动（保存之后仍是）"
 
     @pytest.mark.django_db
+    def test_occupied_destination_is_not_claimed_even_with_no_mirror_folder(
+        self, session_client, isolate_markdown_mirror, workspace, create_user
+    ):
+        """**F6 的回归锁**：`3-Wiki/C/` 不在磁盘上时，目标被占**仍不得**认领。
+
+        触发场景（复评者端到端复现）：用户在 Obsidian 里手工整理过文件夹、把
+        `3-Wiki/C/` 删了，而 `3-Wiki/D/X.md` 是他手写的笔记（无 `id:`）。旧分支顺序
+        （「无旧目录 ⇒ 直接改写指针」排在「目标已存在 ⇒ 拒绝」**之前**）会在拒绝检查
+        之前就把 `external_id` 改成 `3-Wiki/D/X.md`，于是下一篇正文把那篇手写笔记认作
+        本页自己的来源文件（`_resolve_page_path` 的归属判据）**覆盖**它。
+
+        修法是让拒绝检查先跑：目标被占就没得商量，无论旧目录在不在。这条与
+        `test_rename_without_a_mirror_directory_is_a_noop`（两个目录都不存在 ⇒ 仍改写
+        指针）互为边界 —— 那条证明修复没有把「无旧目录」这一支整个砍掉。
+        """
+        root = _wiki_root(isolate_markdown_mirror)
+        collection = _collection(workspace, create_user, "C", external_source="obsidian-vault", external_id=f"{WIKI}/C")
+        page = _wiki_page(
+            workspace,
+            create_user,
+            "X",
+            collection=collection,
+            external_id=f"{WIKI}/C/X.md",
+            external_source="obsidian-vault",
+        )
+        # 用户的旧镜像目录**不在磁盘上**：他手工整理过，C/ 已经没了。
+        assert not (root / "C").exists()
+
+        user_note = root / "D" / "X.md"
+        user_note.parent.mkdir(parents=True, exist_ok=True)
+        user_note_text = "---\ntags:\n  - 手写\n---\n\n这是我手写的一篇笔记，Plane 不认识它。\n"
+        user_note.write_text(user_note_text, encoding="utf-8")
+
+        response = _rename(session_client, workspace, collection, "D")
+        assert response.status_code == status.HTTP_200_OK
+
+        page.refresh_from_db()
+        assert page.external_id == f"{WIKI}/C/X.md", "① 目标被占 ⇒ 定位符一字未变"
+        assert user_note.read_text(encoding="utf-8") == user_note_text, "② 手写笔记一字未动"
+
+        # 「下一刀」：改名之后再保存一次正文 —— 指针没动，它就不该落到别人的文件上。
+        response = _save_body(session_client, workspace, page)
+        assert response.status_code == status.HTTP_200_OK
+
+        assert user_note.read_text(encoding="utf-8") == user_note_text, "② 手写笔记一字未动（保存之后仍是）"
+
+    @pytest.mark.django_db
     def test_rename_moves_the_sanitized_folder(
         self, session_client, isolate_markdown_mirror, workspace, create_user
     ):
