@@ -14,10 +14,13 @@ wiki 集合页面镜像在 `WIKI_MARKDOWN_STORAGE_PATH`（`…/ObsidianVault/3-W
 `isolate_markdown_mirror` 夹具（把 `MARKDOWN_STORAGE_PATH` 指到 tmp_path）
 自动把 wiki 根也隔离到 tmp_path 下，不会有测试写到真实 vault。"""
 
+import os
+
 import pytest
 
 from plane.utils.markdown_storage import (
     WIKI_MARKDOWN_STORAGE_PATH_ENV,
+    get_markdown_root,
     get_wiki_markdown_root,
     wiki_page_markdown_path,
     write_wiki_page_markdown,
@@ -30,10 +33,29 @@ class TestGetWikiMarkdownRoot:
         monkeypatch.setenv(WIKI_MARKDOWN_STORAGE_PATH_ENV, str(tmp_path / "3-Wiki"))
         assert get_wiki_markdown_root() == tmp_path / "3-Wiki"
 
-    def test_falls_back_next_to_the_projects_root(self, isolate_markdown_mirror):
-        """`isolate_markdown_mirror` 把项目根设成 `<tmp>/markdown-mirror`，
-        所以回落值必须是 `<tmp>/3-Wiki`（父目录的兄弟，不是它的子目录）。"""
-        assert get_wiki_markdown_root() == isolate_markdown_mirror.parent / "3-Wiki"
+    def test_falls_back_next_to_the_projects_root(self, monkeypatch, tmp_path):
+        """真正走回落分支：没有 `WIKI_MARKDOWN_STORAGE_PATH` 时，
+        `get_wiki_markdown_root` 必须等于 `get_markdown_root().parent / "3-Wiki"`
+        （父目录的兄弟，不是它的子目录）。
+
+        autouse 的 `isolate_markdown_mirror` 夹具**总是**设了 wiki env（钉住两个根是
+        故意的，曾挡住一次把镜像写进用户真实 vault 的事故，不要动它）。所以这里必须由
+        **测试自己**删掉那个变量、再走回落——否则该函数永远走 env 分支，这条断言两侧
+        都来自同一个 env 值，会退化成恒真的空转。
+        """
+        mirror_root = tmp_path / "markdown-mirror"
+        monkeypatch.setenv("MARKDOWN_STORAGE_PATH", str(mirror_root))
+        monkeypatch.delenv(WIKI_MARKDOWN_STORAGE_PATH_ENV, raising=False)
+
+        # 防回归断言：本测试**自身**保证此刻真的不在 env 分支。将来若有人再往夹具/环境里
+        # 塞 wiki env 而这条测试没跟上，第一句就会红，而不是悄悄变回空转。
+        assert WIKI_MARKDOWN_STORAGE_PATH_ENV not in os.environ
+
+        assert get_wiki_markdown_root() == get_markdown_root().parent / "3-Wiki"
+        # 实测确认（不靠推理）：删掉 wiki env 后回落值仍落在 tmp_path 之下，
+        # 夹具那条 `root.is_relative_to(tmp_path)` 守卫不受影响。
+        assert get_wiki_markdown_root() == tmp_path / "3-Wiki"
+        assert get_wiki_markdown_root().is_relative_to(tmp_path)
 
     def test_the_two_roots_are_independent(self, monkeypatch, tmp_path):
         monkeypatch.setenv("MARKDOWN_STORAGE_PATH", str(tmp_path / "2-项目"))
