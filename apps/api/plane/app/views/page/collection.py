@@ -4,6 +4,7 @@
 
 # Python imports
 import logging
+import os
 
 # Django imports
 from django.db.models import Q
@@ -57,6 +58,11 @@ from .base import (
 )
 
 logger = logging.getLogger(__name__)
+
+#: 与 ``import_wiki_markdown.EXTERNAL_SOURCE`` **同一个值**。刻意不 import 那个常量：
+#: 它是管理命令模块里的东西，为了一根字符串就把整条 CLI 依赖链拉进视图模块不划算。
+#: 两边若要分叉，让测试先红 —— `test_wiki_collection_rename_app.py` 用的是这个常量。
+EXTERNAL_SOURCE = "obsidian-vault"
 
 
 def _visible_page_q(user):
@@ -153,8 +159,15 @@ class PageCollectionViewSet(BaseViewSet):
         返回体**不带 `page_count`**：那是 `list` 为了侧栏一次渲染完才现算的，重命名这一刀
         再算一遍就要复制那段计数查询，而调用方（弹窗）本来就只拿它判成功、随后由 store
         重拉整个集合列表。
+
+        改名的副作用不止落在 DB 上：集合的名字有三份拷贝（``PageCollection.name``、
+        vault 里的目录名 ``3-Wiki/<集合名>/``、导入时记进 ``external_id`` 的路径前缀），
+        三份必须一起动 —— 搬目录与重写 ``external_id`` 前缀都由
+        ``_rename_collection_mirror`` 完成，理由见它的 docstring。
         """
         collection = get_object_or_404(PageCollection.objects.filter(workspace__slug=slug), pk=pk)
+
+        old_name = collection.name
 
         # `partial=True`：PATCH 的语义是「只改传了的字段」。序列化器的 `name` 是
         # required，不加 `partial` 的话一个只有 `{"name": ...}` 的载荷确实能过，
@@ -163,7 +176,14 @@ class PageCollectionViewSet(BaseViewSet):
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-        serializer.save()
+        collection = serializer.save()
+
+        # 集合的名字是三份拷贝（`PageCollection.name`、vault 里的目录名、导入时记进
+        # `external_id` 的路径前缀），改名必须让三份一起动 —— 理由见
+        # `_rename_collection_mirror` 的 docstring。
+        if collection.name != old_name:
+            _rename_collection_mirror(collection, old_name)
+
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
@@ -503,6 +523,70 @@ def _wiki_page_project_id(page):
         .values_list("project_id", flat=True)
         .first()
     )
+
+
+def _rename_collection_mirror(collection, old_name):
+    """Follow a collection rename with the matching folder move and the matching
+    ``external_id`` rewrite — see the module's ``_wiki_page_own_path`` for why all
+    three copies of the name have to move together.
+
+    Best-effort on the filesystem, like every other mirror call: a failure is
+    logged, never raised — a read-only vault must not fail a rename. When the
+    destination folder already exists we refuse to move at all: merging two
+    folders is destruction, and neither folder is ours to arbitrate. The failure
+    direction is always "the folder did not move", never "a folder was clobbered".
+    """
+    root = get_wiki_markdown_root()
+    old_dir = root / old_name
+    new_dir = root / collection.name
+
+    if old_dir.exists() and not new_dir.exists():
+        try:
+            os.replace(old_dir, new_dir)
+        except (OSError, UnicodeDecodeError) as exc:
+            logger.warning(
+                "Failed to rename collection mirror directory %s -> %s: %s",
+                old_name,
+                collection.name,
+                exc,
+            )
+    elif old_dir.exists():
+        logger.warning(
+            "Not renaming collection mirror directory %s -> %s: the destination already exists, "
+            "and merging two folders is not something a rename may do.",
+            old_name,
+            collection.name,
+        )
+    # else: nothing mirrored yet — the folder appears on the next body write.
+
+    _reprefix_external_id(collection.workspace_id, old_name, collection.name)
+
+
+def _reprefix_external_id(workspace_id, old_name, new_name):
+    """Re-point every imported row under ``3-Wiki/<old>/`` at ``3-Wiki/<new>/``.
+
+    Only rows this project's importer owns are touched (``external_source``), and
+    the match is on **whole path segments**: renaming ``C`` must not touch ``C2``,
+    hence the exact-or-slash-suffixed pair rather than a bare ``startswith``.
+    ``3-Wiki/<old>`` **is** matched exactly too — that is the collection row's own
+    shape, and a sub-directory page's shape (``3-Wiki/<old>/sub``).
+    """
+    old_exact = f"3-Wiki/{old_name}"
+    new_exact = f"3-Wiki/{new_name}"
+    prefix = f"{old_exact}/"
+
+    for model in (Page, PageCollection):
+        rows = (
+            model.objects.filter(workspace_id=workspace_id, external_source=EXTERNAL_SOURCE)
+            .filter(Q(external_id=old_exact) | Q(external_id__startswith=prefix))
+            .values_list("id", "external_id")
+        )
+        for row_id, value in rows:
+            # A single-column ``update`` rather than ``save()``: the only thing
+            # changing is a pointer, and ``save()`` would drag every other field
+            # and the model's own write path into a rename that has nothing to do
+            # with them.
+            model.objects.filter(id=row_id).update(external_id=new_exact + value[len(old_exact) :])
 
 
 def _wiki_page_own_path(page):
