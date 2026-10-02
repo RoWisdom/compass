@@ -33,6 +33,7 @@ from plane.app.serializers.page_collection import WikiPageTreeSerializer
 from plane.db.models import Page, PageCollection, Project, ProjectPage, Workspace
 from plane.utils.error_codes import ERROR_CODES
 from plane.utils.markdown_storage import (
+    get_wiki_markdown_root,
     move_mirror_file,
     page_markdown_path,
     wiki_page_markdown_path,
@@ -504,6 +505,21 @@ def _wiki_page_project_id(page):
     )
 
 
+def _wiki_page_own_path(page):
+    """The vault path this page was imported from, absolute — or ``None``.
+
+    ``Page.external_id`` records a **vault-relative** path
+    (``3-Wiki/<集合>/<笔记>.md``, see ``import_wiki_markdown``), so the vault
+    root is the wiki root's parent. ``_resolve_page_path`` uses this to tell
+    "the file this page owns" apart from a same-named note the user wrote by
+    hand: without it, a page landing on a hand-written note's name would write
+    over it. Factored out so the write and the move agree on one definition.
+    """
+    if not page.external_id:
+        return None
+    return get_wiki_markdown_root().parent / page.external_id
+
+
 def _write_collection_page_mirror(page, collection, description_html):
     """Mirror a page body into its collection's folder under the wiki vault root.
 
@@ -529,6 +545,7 @@ def _write_collection_page_mirror(page, collection, description_html):
         page_id=str(page.id),
         name=page.name,
         markdown=markdown,
+        own_path=_wiki_page_own_path(page),
     )
 
 
@@ -590,6 +607,7 @@ def _wiki_mirror_path(page, *, collection_id, name, ancestors):
                 ancestors=ancestors,
                 name=name,
                 page_id=str(page.id),
+                own_path=_wiki_page_own_path(page),
             )
         # collection_id set but the row is gone — fall through to the project
         # branch, exactly as _mirror_wiki_page does.

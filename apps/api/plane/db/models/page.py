@@ -175,11 +175,14 @@ class PageCollection(BaseModel):
     owned_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="page_collections")
     sort_order = models.FloatField(default=Page.DEFAULT_SORT_ORDER)
 
-    # Provenance for imported rows: which vault a collection came from, and its
-    # vault-relative path. Same shape as Page.external_id/external_source so the
-    # two read alike. Deliberately **not** unique: the nullable Page columns are
-    # not either, and idempotency is enforced by the import command's
-    # get-or-create, not by a constraint that would have to be re-derived.
+    # Provenance for imported rows. Same shape as Page.external_id/external_source
+    # so the two read alike, and the same mapping:
+    #   external_id     — vault-relative path, e.g. ``3-Wiki/<集合>`` for a
+    #                     collection (and ``3-Wiki/<集合>/<笔记>.md`` for a page).
+    #   external_source — provenance discriminator, e.g. ``"obsidian-vault"``.
+    # Deliberately **not** unique: the nullable Page columns are not either, and
+    # idempotency is enforced by the import command's get-or-create, not by a
+    # constraint that would have to be re-derived.
     external_id = models.CharField(max_length=255, null=True, blank=True)
     external_source = models.CharField(max_length=255, null=True, blank=True)
 

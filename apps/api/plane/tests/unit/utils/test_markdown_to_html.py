@@ -163,3 +163,53 @@ class TestHardBreak:
 
     def test_leading_indentation_is_dropped(self):
         assert markdown_to_html("  hello") == "<p>hello</p>"
+
+
+@pytest.mark.unit
+class TestImageRoundTrip:
+    """图片轴的往返（最终评审 W1）。
+
+    `markdown_to_html` 对 `![](url)` 无条件产出 `alt=""`，而 `html_to_markdown`
+    原先要求 `src` 与 `alt` **都**非空才输出 —— 于是**空 alt 的图片往返一次就整段
+    消失**，且触发路径是**每次正文保存**（`_write_collection_page_mirror` 把
+    `description_html` 转回 markdown 再覆盖文件）。真实命中一处：vault 里
+    `3-Wiki/Claude Code/DeepSeek 模型接入.md` 的第 43 行。这组用例把这条轴钉住 ——
+    「宁可丢样式，不可丢内容」。
+    """
+
+    def test_empty_alt_image_round_trips(self):
+        """空 alt 的图片往返后仍是同一张图，不是空串。"""
+        markdown = "![](https://cdn.example.com/a.png)"
+        assert html_to_markdown(markdown_to_html(markdown)) == markdown
+
+    def test_img_without_alt_attribute_keeps_the_image(self):
+        """完全没有 `alt` 属性：转成 markdown 仍看得见这张图，且不出现字面 `None`。
+
+        图片写在 `<p>` 里 —— TipTap 产出的就是这个形状。（**裸** `<img>` 直接做 body
+        的子节点是另一条既有分支：`_render_block` 不认 `img`、会走 unwrap，整块变空。
+        那是 W1 之外的轴，别在这里顺手改。）
+        """
+        markdown = html_to_markdown('<p><img src="https://cdn.example.com/b.png"></p>')
+        assert markdown == "![](https://cdn.example.com/b.png)"
+        assert "None" not in markdown
+        # 再转回去图片仍在 —— 这是「两个方向互认」的那一步。
+        assert html_to_markdown(markdown_to_html(markdown)) == markdown
+
+    def test_img_with_alt_round_trips_exactly(self):
+        """带 alt 的图片往返精确不变 —— 回归锁（这条本来就是好的）。"""
+        markdown = "![说明](https://cdn.example.com/c.png)"
+        assert html_to_markdown(markdown_to_html(markdown)) == markdown
+
+    def test_unresolved_asset_url_keeps_the_reference(self):
+        """资产 URL 解析不出来时保留原始引用，而不是整张图丢掉。"""
+        html = '<p><image-component src="asset-1"></image-component></p>'
+        markdown = html_to_markdown(html, resolve_asset_url=lambda aid: None)
+        assert markdown == "![](asset-1)"
+        assert markdown != ""
+
+    def test_resolvable_asset_url_is_used(self):
+        """回归锁：能解析出来时仍然用解析后的 URL。"""
+        html = '<p><image-component src="asset-1"></image-component></p>'
+        assert html_to_markdown(html, resolve_asset_url=lambda aid: f"https://x/{aid}.png") == (
+            "![](https://x/asset-1.png)"
+        )

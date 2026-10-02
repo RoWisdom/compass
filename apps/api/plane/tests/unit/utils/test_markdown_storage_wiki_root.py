@@ -14,8 +14,6 @@ wiki 集合页面镜像在 `WIKI_MARKDOWN_STORAGE_PATH`（`…/ObsidianVault/3-W
 `isolate_markdown_mirror` 夹具（把 `MARKDOWN_STORAGE_PATH` 指到 tmp_path）
 自动把 wiki 根也隔离到 tmp_path 下，不会有测试写到真实 vault。"""
 
-import os
-
 import pytest
 
 from plane.utils.markdown_storage import (
@@ -47,10 +45,11 @@ class TestGetWikiMarkdownRoot:
         monkeypatch.setenv("MARKDOWN_STORAGE_PATH", str(mirror_root))
         monkeypatch.delenv(WIKI_MARKDOWN_STORAGE_PATH_ENV, raising=False)
 
-        # 防回归断言：本测试**自身**保证此刻真的不在 env 分支。将来若有人再往夹具/环境里
-        # 塞 wiki env 而这条测试没跟上，第一句就会红，而不是悄悄变回空转。
-        assert WIKI_MARKDOWN_STORAGE_PATH_ENV not in os.environ
-
+        # 守卫就是**下面这一句**：它要求 `get_wiki_markdown_root()` 等于
+        # `get_markdown_root().parent / "3-Wiki"`，只有走了回落分支才成立。若将来有人
+        # 又把 wiki env 塞回夹具/环境（或删掉这里的 delenv），本句会红 —— 原先它上方
+        # 还有一句 `assert ... not in os.environ`，但那句在刚 delenv 之后恒真、抓不到任何
+        # 东西，已删除。
         assert get_wiki_markdown_root() == get_markdown_root().parent / "3-Wiki"
         # 实测确认（不靠推理）：删掉 wiki env 后回落值仍落在 tmp_path 之下，
         # 夹具那条 `root.is_relative_to(tmp_path)` 守卫不受影响。
@@ -116,6 +115,10 @@ class TestWriteWikiPageMarkdown:
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text("---\ntags:\n  - 罗盘\nsource: https://x\n---\n\n老正文\n", encoding="utf-8")
 
+        # `own_path=target`：这篇无 `id:` 的剪藏笔记**就是本页记录在案的来源文件**
+        # （`Page.external_id` 指向它），所以它算本页自己的、应当原地合并。
+        # 不传 `own_path` 的含义是「本页没有记录在案的来源」——那时按 W2 的裁定要
+        # **让开**（写到 `剪藏-<id8>.md`），不能覆盖用户手写的同名笔记。
         write_wiki_page_markdown(
             collection_name="C",
             collection_id="col-1",
@@ -123,6 +126,7 @@ class TestWriteWikiPageMarkdown:
             page_id="p-1",
             name="剪藏",
             markdown="新正文",
+            own_path=target,
         )
         text = target.read_text(encoding="utf-8")
         assert "  - 罗盘" in text
