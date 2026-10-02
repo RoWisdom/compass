@@ -838,7 +838,9 @@ def _repoint_page_external_id(page, old_path, new_path):
     its own, and writes a ``-{id[:8]}`` sibling instead — one file at a time, the
     same defect a collection rename had for a whole folder.
 
-    Three guards, all in the direction of *not* changing anything:
+    The row must be one this project's importer owns (``external_source``) — the same
+    narrowing ``_reprefix_external_id`` applies — and the path it records must still be
+    the old one. Three further guards, all in the direction of *not* changing anything:
 
     * the recorded path must be exactly ``old_path`` (vault-relative) — anything
       else points somewhere this move has nothing to say about;

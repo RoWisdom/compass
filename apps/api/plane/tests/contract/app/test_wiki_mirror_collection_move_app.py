@@ -486,7 +486,9 @@ class TestWikiMirrorCollectionMove:
         page = _wiki_page(workspace, create_user, "跨根剪藏")
         _project_with_page(workspace, project, page, create_user)
         a = _collection(workspace, create_user, "集合A")
-        Page.objects.filter(id=page.id).update(collection=a, external_id="3-Wiki/集合A/跨根剪藏.md")
+        Page.objects.filter(id=page.id).update(
+            collection=a, external_source="obsidian-vault", external_id="3-Wiki/集合A/跨根剪藏.md"
+        )
 
         wiki_root = isolate_markdown_mirror.parent / "3-Wiki"
         old_file = wiki_root / "集合A" / "跨根剪藏.md"
