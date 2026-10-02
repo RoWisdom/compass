@@ -21,6 +21,8 @@ wiki 根 = `3-Wiki`（tmp_path 下的**兄弟**目录）。vault 根 = wiki 根�
 所以 `Page.external_id`（vault 相对路径，如 `3-Wiki/C/X.md`）在这里就落在 tmp_path 下。
 """
 
+import os
+
 import pytest
 from rest_framework import status
 
@@ -177,32 +179,47 @@ class TestWikiCollectionRename:
         assert (root / "C2" / "Z.md").is_file(), "兄弟集合的目录不得被搬走"
 
     @pytest.mark.django_db
-    def test_rename_does_not_touch_the_destination_when_it_already_exists(
+    def test_rename_does_not_move_when_the_destination_exists(
         self, session_client, isolate_markdown_mirror, workspace, create_user
     ):
-        """目标目录已存在 ⇒ **拒绝搬**（合并两个目录是破坏，不是改名该做的事）。
+        """目标目录已存在（**空目录**）⇒ **拒绝搬**，`external_id` 也一字不动。
 
-        失败方向永远是「目录没搬」，绝不是「目录被覆盖/合并」。
+        目标是空目录时 `os.replace` 本来**会成功** —— 拒绝完全靠我们那条守卫。
+        所以这条才有判别力：删掉拒绝分支的 `return`，它会落进 `os.replace`，
+        目录被并掉、断言变红。（目标是**非空**目录那档由
+        `test_refused_rename_never_clobbers_the_destination_note` 承担 —— 那里
+        `os.replace` 自己就会 `ENOTEMPTY`，判别不了守卫在不在。）
+
+        拒绝是**决策**不是失败：合并两个目录是破坏。失败方向永远是「目录没搬」，
+        记录下的定位符也必须留在旧名字上 —— 否则下一篇正文会写到目标目录去。
         """
         root = _wiki_root(isolate_markdown_mirror)
-        collection = _collection(workspace, create_user, "C")
+        collection = _collection(workspace, create_user, "C", external_source="obsidian-vault", external_id=f"{WIKI}/C")
+        page = _wiki_page(
+            workspace,
+            create_user,
+            "X",
+            collection=collection,
+            external_id=f"{WIKI}/C/X.md",
+            external_source="obsidian-vault",
+        )
         source = root / "C" / "X.md"
         source.parent.mkdir(parents=True, exist_ok=True)
         source.write_text("C 的镜像\n", encoding="utf-8")
         source_before = source.read_text(encoding="utf-8")
 
-        handwritten = root / "D" / "手写.md"
-        handwritten.parent.mkdir(parents=True, exist_ok=True)
-        handwritten.write_text("用户手写正文\n", encoding="utf-8")
-        handwritten_before = handwritten.read_text(encoding="utf-8")
+        (root / "D").mkdir(parents=True, exist_ok=True)
+        assert (root / "D").is_dir() and not any((root / "D").iterdir()), "目标是一个空目录"
 
         response = _rename(session_client, workspace, collection, "D")
         assert response.status_code == status.HTTP_200_OK
 
-        assert source.is_file(), "目标已存在时来源必须留在原地"
+        page.refresh_from_db()
+        assert (root / "C").is_dir(), "目标已存在时来源必须留在原地"
         assert source.read_text(encoding="utf-8") == source_before, "旧文件内容不变"
-        assert handwritten.read_text(encoding="utf-8") == handwritten_before, "目标里那篇手写文件一字不得动"
-        assert not (root / "D" / "X.md").exists(), "不得把旧目录的内容并进目标目录"
+        assert (root / "D").is_dir(), "目标目录仍在"
+        assert not any((root / "D").iterdir()), "不得把旧目录的内容并进目标目录"
+        assert page.external_id == f"{WIKI}/C/X.md", "拒绝搬时记录下的定位符必须一字未变"
 
     @pytest.mark.django_db
     def test_rename_without_a_mirror_directory_is_a_noop(
@@ -236,13 +253,97 @@ class TestWikiCollectionRename:
         assert not (root / "D").exists(), "也不得凭空造出新目录 —— 它在下一次正文写入时才出现"
 
     @pytest.mark.django_db
-    def test_same_name_patch_does_not_move_anything(
+    def test_refused_rename_never_clobbers_the_destination_note(
         self, session_client, isolate_markdown_mirror, workspace, create_user
     ):
-        """PATCH 一个同名 `name` ⇒ 什么都不搬（只在真的改名时才动手）。
+        """**F1 的回归锁**（最重要）：拒绝搬移之后**不得**改写 `external_id`。
 
-        一次多余的 `os.replace` 会白改文件 mtime，也会让「保存」这个动作在磁盘上留下
-        与内容无关的痕迹。这条守住「name 没变就不碰磁盘」。
+        目标目录 `3-Wiki/D/` 里有一篇**用户手写**的同名笔记（无 `id:`）。若
+        `_reprefix_external_id` 仍被无条件调用，本行的 `external_id` 会变成
+        `3-Wiki/D/X.md` ⇒ 下一篇正文保存把那篇手写笔记认作**本页自己的来源文件**
+        （`_resolve_page_path` 的归属判据），**覆盖**它。这条锁的就是「拒绝之后
+        下一刀正文绝不落进别人的文件」。
+        """
+        root = _wiki_root(isolate_markdown_mirror)
+        collection = _collection(workspace, create_user, "C", external_source="obsidian-vault", external_id=f"{WIKI}/C")
+        page = _wiki_page(
+            workspace,
+            create_user,
+            "X",
+            collection=collection,
+            external_id=f"{WIKI}/C/X.md",
+            external_source="obsidian-vault",
+        )
+        ours = root / "C" / "X.md"
+        ours.parent.mkdir(parents=True, exist_ok=True)
+        ours.write_text("C 的镜像\n", encoding="utf-8")
+
+        user_note = root / "D" / "X.md"
+        user_note.parent.mkdir(parents=True, exist_ok=True)
+        user_note_text = "---\ntags:\n  - 手写\n---\n\n这是我手写的一篇笔记，Plane 不认识它。\n"
+        user_note.write_text(user_note_text, encoding="utf-8")
+
+        response = _rename(session_client, workspace, collection, "D")
+        assert response.status_code == status.HTTP_200_OK
+
+        page.refresh_from_db()
+        assert (root / "C").is_dir(), "① 目标已存在 ⇒ 旧目录仍在"
+        assert ours.is_file(), "② 本页的镜像仍在"
+        assert page.external_id == f"{WIKI}/C/X.md", "③ 拒绝搬时定位符必须一字未变"
+        assert user_note.read_text(encoding="utf-8") == user_note_text, "④ 手写笔记一字未动"
+
+        # 「下一刀」：改名之后再保存一次正文。
+        response = _save_body(session_client, workspace, page)
+        assert response.status_code == status.HTTP_200_OK
+
+        page.refresh_from_db()
+        assert page.external_id == f"{WIKI}/C/X.md", "保存正文也不得把定位符挪走"
+        assert user_note.read_text(encoding="utf-8") == user_note_text, "④ 手写笔记一字未动（保存之后仍是）"
+
+    @pytest.mark.django_db
+    def test_rename_moves_the_sanitized_folder(
+        self, session_client, isolate_markdown_mirror, workspace, create_user
+    ):
+        """**F2 的回归锁**：搬移必须用**写侧同一套**目录命名（`_sanitize_name`）。
+
+        集合名 `"C  D"`（两个空格）经 API 能活下来（DRF 的 `trim_whitespace`
+        只削首尾，内部空白保留），而写侧的拼法是
+        `_sanitize_name("C  D") == "C D"`（单空格）。镜像与 `external_id` 都按
+        写侧拼法落在 `3-Wiki/C D/` 下；搬移若用**裸名字**去找 `3-Wiki/C  D/`，
+        就会找不到而静默 no-op —— 留下一个写侧永远不会用的目录。
+        """
+        root = _wiki_root(isolate_markdown_mirror)
+        collection = _collection(
+            workspace, create_user, "C  D", external_source="obsidian-vault", external_id=f"{WIKI}/C D"
+        )
+        page = _wiki_page(
+            workspace,
+            create_user,
+            "X",
+            collection=collection,
+            external_id=f"{WIKI}/C D/X.md",
+            external_source="obsidian-vault",
+        )
+        note = root / "C D" / "X.md"
+        note.parent.mkdir(parents=True, exist_ok=True)
+        note.write_text("用户正文\n", encoding="utf-8")
+
+        response = _rename(session_client, workspace, collection, "E")
+        assert response.status_code == status.HTTP_200_OK
+
+        page.refresh_from_db()
+        assert (root / "E" / "X.md").is_file(), "目录必须按写侧拼法找到并搬进新名字"
+        assert not (root / "C D").exists(), "旧（写侧拼法）目录必须消失"
+        assert page.external_id == f"{WIKI}/E/X.md", "定位符跟着搬"
+
+    @pytest.mark.django_db
+    def test_failed_move_leaves_the_recorded_path_alone(
+        self, session_client, isolate_markdown_mirror, workspace, create_user, monkeypatch
+    ):
+        """**F3 的锁**：`os.replace` 抛错 ⇒ 目录没搬 ⇒ `external_id` 也不得动。
+
+        与拒绝分支同一条道理：文件还在旧名字下，指针跟着挪就会让下一篇正文
+        落到新名字处那篇（别人的）文件上。`monkeypatch` 会在测试后还原 `os.replace`。
         """
         root = _wiki_root(isolate_markdown_mirror)
         collection = _collection(workspace, create_user, "C", external_source="obsidian-vault", external_id=f"{WIKI}/C")
@@ -256,16 +357,67 @@ class TestWikiCollectionRename:
         )
         note = root / "C" / "X.md"
         note.parent.mkdir(parents=True, exist_ok=True)
-        note.write_text("C 的镜像\n", encoding="utf-8")
-        mtime_before = note.stat().st_mtime_ns
+        note.write_text("用户正文\n", encoding="utf-8")
 
-        response = _rename(session_client, workspace, collection, "C")
-        assert response.status_code == status.HTTP_200_OK
+        def _boom(*args, **kwargs):
+            raise OSError("read-only vault")
+
+        monkeypatch.setattr(os, "replace", _boom)
+
+        response = _rename(session_client, workspace, collection, "D")
+        assert response.status_code == status.HTTP_200_OK, "镜像搬移失败不得让改名失败"
 
         page.refresh_from_db()
-        collection.refresh_from_db()
-        assert (root / "C" / "X.md").is_file(), "旧目录仍在原位"
-        assert note.stat().st_mtime_ns == mtime_before, "同名 PATCH 不得白改文件的 mtime"
-        assert not (root / "D").exists(), "没有新名字，就没有新目录"
-        assert page.external_id == f"{WIKI}/C/X.md", "没改名就不该动 external_id"
-        assert collection.external_id == f"{WIKI}/C"
+        assert (root / "C" / "X.md").is_file(), "搬移失败，文件应留在原处"
+        assert not (root / "D").exists(), "搬移失败不得造出新目录"
+        assert page.external_id == f"{WIKI}/C/X.md", "搬移失败时定位符必须一字未变"
+
+    @pytest.mark.django_db
+    def test_rename_rewrites_a_nested_pages_external_id(
+        self, session_client, isolate_markdown_mirror, workspace, create_user
+    ):
+        """深一层的段边界：`3-Wiki/C/子目录/Y.md` 跟着改，`3-Wiki/C2/...` 不受影响。"""
+        root = _wiki_root(isolate_markdown_mirror)
+        collection = _collection(workspace, create_user, "C", external_source="obsidian-vault", external_id=f"{WIKI}/C")
+        sibling = _collection(
+            workspace, create_user, "C2", external_source="obsidian-vault", external_id=f"{WIKI}/C2"
+        )
+        nested = _wiki_page(
+            workspace,
+            create_user,
+            "Y",
+            collection=collection,
+            external_id=f"{WIKI}/C/子目录/Y.md",
+            external_source="obsidian-vault",
+        )
+        sibling_page = _wiki_page(
+            workspace,
+            create_user,
+            "Z",
+            collection=sibling,
+            external_id=f"{WIKI}/C2/Z.md",
+            external_source="obsidian-vault",
+        )
+
+        response = _rename(session_client, workspace, collection, "D")
+        assert response.status_code == status.HTTP_200_OK
+
+        nested.refresh_from_db()
+        sibling.refresh_from_db()
+        sibling_page.refresh_from_db()
+        assert nested.external_id == f"{WIKI}/D/子目录/Y.md", "深一层的行也按整段前缀重写"
+        assert sibling.external_id == f"{WIKI}/C2", "同前缀的兄弟集合不得被改到"
+        assert sibling_page.external_id == f"{WIKI}/C2/Z.md", "兄弟集合下的页面也不得被改到"
+
+
+def test_view_constant_matches_the_importer():
+    """**F4 的锁**：视图模块用的 ``EXTERNAL_SOURCE`` 必须与导入器那个常量同值。
+
+    视图刻意不 import 导入器的常量（那是管理命令模块，为一根字符串就把整条 CLI
+    依赖链拉进视图模块不划算），于是两边只能靠这条测试对齐 —— 一旦分叉，
+    ``_reprefix_external_id`` 的过滤会静默匹配不到任何行，改名悄悄不生效。
+    """
+    from plane.app.views.page.collection import EXTERNAL_SOURCE as view_source
+    from plane.db.management.commands.import_wiki_markdown import EXTERNAL_SOURCE as importer_source
+
+    assert view_source == importer_source

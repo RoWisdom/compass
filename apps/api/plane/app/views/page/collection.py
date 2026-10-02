@@ -37,6 +37,7 @@ from plane.utils.markdown_storage import (
     get_wiki_markdown_root,
     move_mirror_file,
     page_markdown_path,
+    wiki_collection_directory,
     wiki_page_markdown_path,
     write_wiki_page_markdown,
 )
@@ -61,7 +62,8 @@ logger = logging.getLogger(__name__)
 
 #: 与 ``import_wiki_markdown.EXTERNAL_SOURCE`` **同一个值**。刻意不 import 那个常量：
 #: 它是管理命令模块里的东西，为了一根字符串就把整条 CLI 依赖链拉进视图模块不划算。
-#: 两边若要分叉，让测试先红 —— `test_wiki_collection_rename_app.py` 用的是这个常量。
+#: 两边一旦分叉，过滤会静默匹配不到任何行 —— ``test_view_constant_matches_the_importer``
+#: 就是为此存在的（它直接把两个值比一遍）。
 EXTERNAL_SOURCE = "obsidian-vault"
 
 
@@ -531,54 +533,95 @@ def _rename_collection_mirror(collection, old_name):
     three copies of the name have to move together.
 
     Best-effort on the filesystem, like every other mirror call: a failure is
-    logged, never raised — a read-only vault must not fail a rename. When the
-    destination folder already exists we refuse to move at all: merging two
-    folders is destruction, and neither folder is ours to arbitrate. The failure
-    direction is always "the folder did not move", never "a folder was clobbered".
-    """
-    root = get_wiki_markdown_root()
-    old_dir = root / old_name
-    new_dir = root / collection.name
+    logged, never raised — a read-only vault must not fail a rename.
 
-    if old_dir.exists() and not new_dir.exists():
-        try:
-            os.replace(old_dir, new_dir)
-        except (OSError, UnicodeDecodeError) as exc:
-            logger.warning(
-                "Failed to rename collection mirror directory %s -> %s: %s",
-                old_name,
-                collection.name,
-                exc,
-            )
-    elif old_dir.exists():
+    The recorded path is re-pointed **only** when the folder really is at the new
+    name (or when there is no folder at all). Both refusals — the destination
+    already exists, and ``os.replace`` failed — deliberately leave it alone,
+    because the files are still under the old name: re-pointing it there would
+    tell the next body write that whatever sits at the destination is this page's
+    own file, and it would overwrite it. The failure direction is therefore
+    "a stale folder / a duplicate file", never "someone else's file was written".
+    """
+    old_dir = wiki_collection_directory(old_name, collection.id)
+    new_dir = wiki_collection_directory(collection.name, collection.id)
+    vault_root = get_wiki_markdown_root().parent
+    old_rel = old_dir.relative_to(vault_root).as_posix()
+    new_rel = new_dir.relative_to(vault_root).as_posix()
+
+    if old_dir == new_dir:
+        # Both names land on the same folder (``_sanitize_name`` collapsed the
+        # difference — "C  D" and "C D" are one folder on disk). The folder is
+        # already the right one and the two relative paths are the same string,
+        # so neither the disk nor the recorded path has anything to change.
+        return
+
+    if not old_dir.exists():
+        # Nothing mirrored yet — the folder appears under the new name on the next
+        # body write. The recorded path is still re-pointed: it is what tells a
+        # later write which file is this page's own.
+        _reprefix_external_id(collection.workspace_id, old_rel, new_rel)
+        return
+
+    if new_dir.exists():
+        # Refusing is a **decision**, not a failure: merging two folders is
+        # destruction, and the destination may be someone else's folder. So the
+        # recorded path is left exactly where it was — it still names the folder
+        # the files actually sit in — and a later write under the new name lands
+        # on a ``-{id8}`` sibling instead of on whatever is at the destination.
         logger.warning(
             "Not renaming collection mirror directory %s -> %s: the destination already exists, "
-            "and merging two folders is not something a rename may do.",
-            old_name,
-            collection.name,
+            "and merging two folders is not something a rename may do. Rows keep pointing at %s.",
+            old_rel,
+            new_rel,
+            old_rel,
         )
-    # else: nothing mirrored yet — the folder appears on the next body write.
+        return
 
-    _reprefix_external_id(collection.workspace_id, old_name, collection.name)
+    try:
+        os.replace(old_dir, new_dir)
+    except (OSError, UnicodeDecodeError) as exc:
+        # Same reasoning as the refusal above: the folder did not move, so the
+        # recorded path must not move either.
+        logger.warning(
+            "Failed to rename collection mirror directory %s -> %s: %s. Rows keep pointing at %s.",
+            old_rel,
+            new_rel,
+            exc,
+            old_rel,
+        )
+        return
+
+    _reprefix_external_id(collection.workspace_id, old_rel, new_rel)
 
 
-def _reprefix_external_id(workspace_id, old_name, new_name):
-    """Re-point every imported row under ``3-Wiki/<old>/`` at ``3-Wiki/<new>/``.
+def _reprefix_external_id(workspace_id, old_rel, new_rel):
+    """Re-point every imported row under ``<old_rel>/`` at ``<new_rel>/``.
+
+    Only ever called once the folder really is at the new name, or when there is
+    no folder at all — never after a refused or failed move, where the files are
+    still under the old name and re-pointing them would hand a later body write
+    someone else's file to overwrite. Callers are the four ``_rename_collection_mirror``
+    exits that have earned it; see its docstring.
+
+    ``old_rel``/``new_rel`` are folder paths **relative to the vault root**
+    (``3-Wiki/<集合>``) — the same spelling ``Page.external_id`` uses, and the same
+    spelling ``_wiki_page_own_path`` turns back into an absolute path. They are
+    derived from the very folders the move used, so the pointer and the disk can
+    no longer be computed from two different spellings of the name.
 
     Only rows this project's importer owns are touched (``external_source``), and
-    the match is on **whole path segments**: renaming ``C`` must not touch ``C2``,
-    hence the exact-or-slash-suffixed pair rather than a bare ``startswith``.
-    ``3-Wiki/<old>`` **is** matched exactly too — that is the collection row's own
+    the match is on **whole path segments** — renaming ``C`` must not touch ``C2``
+    — hence the exact-or-slash-suffixed pair rather than a bare ``startswith``.
+    ``<old_rel>`` **is** matched exactly too: that is the collection row's own
     shape, and a sub-directory page's shape (``3-Wiki/<old>/sub``).
     """
-    old_exact = f"3-Wiki/{old_name}"
-    new_exact = f"3-Wiki/{new_name}"
-    prefix = f"{old_exact}/"
+    prefix = f"{old_rel}/"
 
     for model in (Page, PageCollection):
         rows = (
             model.objects.filter(workspace_id=workspace_id, external_source=EXTERNAL_SOURCE)
-            .filter(Q(external_id=old_exact) | Q(external_id__startswith=prefix))
+            .filter(Q(external_id=old_rel) | Q(external_id__startswith=prefix))
             .values_list("id", "external_id")
         )
         for row_id, value in rows:
@@ -586,7 +629,7 @@ def _reprefix_external_id(workspace_id, old_name, new_name):
             # changing is a pointer, and ``save()`` would drag every other field
             # and the model's own write path into a rename that has nothing to do
             # with them.
-            model.objects.filter(id=row_id).update(external_id=new_exact + value[len(old_exact) :])
+            model.objects.filter(id=row_id).update(external_id=new_rel + value[len(old_rel) :])
 
 
 def _wiki_page_own_path(page):
