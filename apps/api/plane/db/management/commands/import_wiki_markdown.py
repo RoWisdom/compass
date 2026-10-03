@@ -9,7 +9,10 @@
 #
 # Three properties this command must keep:
 #   * create-only — a page whose external_id already exists is skipped and left
-#     exactly as it is, so re-running can never clobber an edit made in Plane;
+#     exactly as it is, so re-running can never clobber an edit made in Plane.
+#     The one exception is a directory page's `node_type`, which this command
+#     re-stamps: it is not editable in Plane (every write path leaves it
+#     read-only), so re-stamping cannot discard a user's change.
 #   * read-only on the vault — importing writes no files at all;
 #   * deterministic order — folders and files are created in *reverse*
 #     alphabetical order so the model's `-created_at` default ordering shows
@@ -123,18 +126,19 @@ class Command(BaseCommand):
         relative = path.relative_to(folder)
         external_id = f"3-Wiki/{folder.name}/{relative.as_posix()}"
 
-        if Page.objects.filter(
-            workspace=workspace, external_source=EXTERNAL_SOURCE, external_id=external_id
-        ).exists():
-            return False
-
         # A note in a sub-directory hangs off a page named after that directory —
         # the same convention the mirror uses (a page's children live in a folder
         # named after it), so a round trip lands in the same shape.
+        #
+        # This runs **before** the already-imported early return below, on purpose:
+        # a re-run visits notes that already exist, and those are exactly the runs
+        # where an existing directory page has to be re-stamped. Doing it after the
+        # early return would make the re-stamp unreachable for every page the first
+        # import created — i.e. for every page that needs it.
         parent_id = None
         for depth in range(1, len(relative.parts)):
             directory_parts = relative.parts[:depth]
-            parent, _ = Page.objects.get_or_create(
+            parent, created = Page.objects.get_or_create(
                 workspace=workspace,
                 external_source=EXTERNAL_SOURCE,
                 external_id=f"3-Wiki/{folder.name}/{'/'.join(directory_parts)}",
@@ -144,9 +148,30 @@ class Command(BaseCommand):
                     "owned_by": owner,
                     "is_global": True,
                     "collection": collection,
+                    # 目录页是**文件夹**，不是页面（罗盘 Round D）。一条目录不再有自己的
+                    # 正文 —— 它只是层级里的一个节点。
+                    "node_type": Page.NODE_TYPE_FOLDER,
                 },
             )
+            if not created and parent.node_type != Page.NODE_TYPE_FOLDER:
+                # **补盖**：`defaults` 只在**新建**时生效，所以本轮之前导过的那批目录页
+                # 会留在 `"doc"` —— 侧栏里是页面图标、被算进集合计数、"最近编辑"里占位。
+                # 补盖让"重跑一次导入"成为这个缺陷的修法，而不是要用户去手改数据库。
+                #
+                # **只写一个字段**（`update_fields`）：本命令的硬不变量是"重跑不抹掉
+                # 用户在 Plane 里改过的正文"，而 `node_type` 在 Plane 里**没有任何写
+                # 入口**（树/详情序列化器都把它放在 `read_only_fields`、更新序列化器
+                # 根本不声明它）—— 它不是"用户的改动"，所以补它不越线。
+                # `updated_at` 必须一起给：`auto_now` 只在字段进了 `update_fields`
+                # 时才会落库。
+                parent.node_type = Page.NODE_TYPE_FOLDER
+                parent.save(update_fields=["node_type", "updated_at"])
             parent_id = parent.id
+
+        if Page.objects.filter(
+            workspace=workspace, external_source=EXTERNAL_SOURCE, external_id=external_id
+        ).exists():
+            return False
 
         _, body = split_frontmatter(path.read_text(encoding="utf-8"))
 

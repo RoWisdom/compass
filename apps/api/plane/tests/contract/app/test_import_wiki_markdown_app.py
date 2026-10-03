@@ -152,6 +152,74 @@ class TestImportWikiMarkdown:
         with pytest.raises(CommandError):
             call_command("import_wiki_markdown", workspace_slug=workspace.slug, owner="nobody@nowhere", stdout=_sink())
 
+    @pytest.mark.django_db
+    def test_directory_pages_are_stamped_as_folders(self, vault, workspace, create_user):
+        """目录页是**文件夹**，笔记是**页面** —— 判别符不能混（罗盘 Round D）。"""
+        (vault / "终端工具").mkdir()
+        (vault / "终端工具" / "iTerm").mkdir()
+        (vault / "终端工具" / "iTerm" / "配置").mkdir()
+        (vault / "终端工具" / "iTerm" / "配置" / "快捷键.md").write_text("正文\n", encoding="utf-8")
+
+        call_command("import_wiki_markdown", workspace_slug=workspace.slug, owner=create_user.email, stdout=_sink())
+
+        # `3-Wiki/终端工具` 是**集合**（顶层文件夹被建成集合），不是页面 —— 所以没有
+        # 它的 node_type 可断言。目录**页**从集合内的第一层子目录才开始。
+        assert not Page.objects.filter(external_id="3-Wiki/终端工具").exists(), "顶层文件夹是集合，不是页面"
+        assert Page.objects.get(external_id="3-Wiki/终端工具/iTerm").node_type == Page.NODE_TYPE_FOLDER
+        assert Page.objects.get(external_id="3-Wiki/终端工具/iTerm/配置").node_type == Page.NODE_TYPE_FOLDER
+        assert Page.objects.get(external_id="3-Wiki/终端工具/iTerm/配置/快捷键.md").node_type == Page.NODE_TYPE_DOC, (
+            "笔记还是页面 —— 目录页与笔记的判别符不能混"
+        )
+
+    @pytest.mark.django_db
+    def test_an_existing_directory_page_is_restamped(self, vault, workspace, create_user):
+        """**已经导过一遍**的目录页要在重跑时被补盖。
+
+        `get_or_create` 的 `defaults` 只在新建时生效，所以 226 上那 6 个已存在的目录页
+        会留在 `"doc"`。这条锁住"重跑一次导入就能修好"，而不是要用户去手改数据库。
+
+        （补盖不违反本命令"重跑不抹掉用户在 Plane 里的改动"那条不变量：`node_type`
+        在 Plane 里**没有任何写入口** —— 树/详情序列化器都把它放在 `read_only_fields`、
+        更新序列化器根本不声明它 —— 所以它不是"用户的改动"。）
+        """
+        (vault / "终端工具").mkdir()
+        (vault / "终端工具" / "iTerm").mkdir()
+        (vault / "终端工具" / "iTerm" / "快捷键.md").write_text("正文\n", encoding="utf-8")
+        call_command("import_wiki_markdown", workspace_slug=workspace.slug, owner=create_user.email, stdout=_sink())
+
+        directory_page = Page.objects.get(external_id="3-Wiki/终端工具/iTerm")
+        # 模拟"本轮之前导过的库"：判别符还是默认值。
+        Page.objects.filter(pk=directory_page.id).update(node_type=Page.NODE_TYPE_DOC)
+
+        call_command("import_wiki_markdown", workspace_slug=workspace.slug, owner=create_user.email, stdout=_sink())
+
+        assert Page.objects.get(pk=directory_page.id).node_type == Page.NODE_TYPE_FOLDER
+
+    @pytest.mark.django_db
+    def test_restamping_touches_only_the_node_type(self, vault, workspace, create_user):
+        """补盖**只准动 `node_type` 一个字段**。
+
+        用目录页上"用户在 Plane 里改过的名字"做哨兵：`save(update_fields=[...])` 一旦
+        漏掉这个纪律（写成 `save()`，或把 `name` 顺手带进 `defaults` 的更新分支），
+        这条就红 —— 而 `test_rerunning_changes_nothing`（既有）盯的是**笔记**，
+        盯不到目录页那条 `get_or_create` 分支。
+        """
+        (vault / "终端工具").mkdir()
+        (vault / "终端工具" / "iTerm").mkdir()
+        (vault / "终端工具" / "iTerm" / "快捷键.md").write_text("正文\n", encoding="utf-8")
+        call_command("import_wiki_markdown", workspace_slug=workspace.slug, owner=create_user.email, stdout=_sink())
+
+        directory_page = Page.objects.get(external_id="3-Wiki/终端工具/iTerm")
+        Page.objects.filter(pk=directory_page.id).update(
+            node_type=Page.NODE_TYPE_DOC, name="用户在 Plane 里改过的目录名"
+        )
+
+        call_command("import_wiki_markdown", workspace_slug=workspace.slug, owner=create_user.email, stdout=_sink())
+
+        refreshed = Page.objects.get(pk=directory_page.id)
+        assert refreshed.node_type == Page.NODE_TYPE_FOLDER
+        assert refreshed.name == "用户在 Plane 里改过的目录名", "补盖只准动 node_type 一个字段"
+
 
 class _sink:
     """吞掉命令的 stdout，测试只关心库里的结果。"""
