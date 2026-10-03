@@ -32,6 +32,10 @@
       "delete_with_pages_description": "Koleksiyonu ve tüm sayfalarını kalıcı olarak siler. Bu işlem geri alınamaz.",
       "submit": "Koleksiyonu sil"
     },
+    "delete_folder_modal": {
+      "title": "Klasör silinsin mi?",
+      "description": "İçindeki sayfalar ve alt klasörler bir üst seviyeye taşınır — silinmez."
+    },
     "header": {
       "add_page": "Sayfa ekle"
     },
@@ -42,6 +46,7 @@
       "edit_collection": "Koleksiyonu düzenle",
       "collection_options": "Koleksiyon seçenekleri",
       "move_to_collection": "Koleksiyona taşı",
+      "move_to": "Şuraya taşı",
       "remove_from_wiki": "Wiki'den kaldır"
     },
     "add_existing_page_modal": {
@@ -86,6 +91,7 @@
       "create_page_error": "Sayfa oluşturulamadı. Lütfen tekrar deneyin.",
       "create_page_in_collection_error": "Sayfa oluşturulamadı veya koleksiyona eklenemedi. Lütfen tekrar deneyin.",
       "create_folder_error": "Klasör oluşturulamadı. Lütfen tekrar deneyin.",
+      "delete_folder_error": "Klasör silinemedi. Lütfen tekrar deneyin.",
       "collection_link_copied": "Koleksiyon bağlantısı panoya kopyalandı."
     }
   },

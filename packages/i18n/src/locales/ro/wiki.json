@@ -32,6 +32,10 @@
       "delete_with_pages_description": "Șterge definitiv colecția și toate paginile ei. Această acțiune nu poate fi anulată.",
       "submit": "Șterge colecția"
     },
+    "delete_folder_modal": {
+      "title": "Ștergi folderul?",
+      "description": "Paginile și subfolderele din interior urcă un nivel — nu sunt șterse."
+    },
     "header": {
       "add_page": "Adaugă o pagină"
     },
@@ -42,6 +46,7 @@
       "edit_collection": "Editează colecția",
       "collection_options": "Opțiuni colecție",
       "move_to_collection": "Mută în colecție",
+      "move_to": "Mută în",
       "remove_from_wiki": "Elimină din Wiki"
     },
     "add_existing_page_modal": {
@@ -86,6 +91,7 @@
       "create_page_error": "Pagina nu a putut fi creată. Te rugăm să încerci din nou.",
       "create_page_in_collection_error": "Pagina nu a putut fi creată sau adăugată în colecție. Te rugăm să încerci din nou.",
       "create_folder_error": "Folderul nu a putut fi creat. Încearcă din nou.",
+      "delete_folder_error": "Folderul nu a putut fi șters. Încearcă din nou.",
       "collection_link_copied": "Linkul colecției a fost copiat în clipboard."
     }
   },

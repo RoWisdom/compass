@@ -32,6 +32,10 @@
       "delete_with_pages_description": "Elimina definitivamente la raccolta e tutte le sue pagine. Questa azione non può essere annullata.",
       "submit": "Elimina raccolta"
     },
+    "delete_folder_modal": {
+      "title": "Eliminare la cartella?",
+      "description": "Le pagine e le sottocartelle all'interno salgono di un livello: non vengono eliminate."
+    },
     "header": {
       "add_page": "Aggiungi pagina"
     },
@@ -42,6 +46,7 @@
       "edit_collection": "Modifica raccolta",
       "collection_options": "Opzioni della raccolta",
       "move_to_collection": "Sposta nella raccolta",
+      "move_to": "Sposta in",
       "remove_from_wiki": "Rimuovi dal Wiki"
     },
     "add_existing_page_modal": {
@@ -86,6 +91,7 @@
       "create_page_error": "Impossibile creare la pagina. Riprova.",
       "create_page_in_collection_error": "Impossibile creare la pagina o aggiungerla alla raccolta. Riprova.",
       "create_folder_error": "Impossibile creare la cartella. Riprova.",
+      "delete_folder_error": "Impossibile eliminare la cartella. Riprova.",
       "collection_link_copied": "Link della raccolta copiato negli appunti."
     }
   },

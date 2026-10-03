@@ -32,6 +32,10 @@
       "delete_with_pages_description": "Exclui permanentemente a coleção e todas as suas páginas. Esta ação não pode ser desfeita.",
       "submit": "Excluir coleção"
     },
+    "delete_folder_modal": {
+      "title": "Excluir pasta?",
+      "description": "As páginas e subpastas dentro dela sobem um nível — não são excluídas."
+    },
     "header": {
       "add_page": "Adicionar página"
     },
@@ -42,6 +46,7 @@
       "edit_collection": "Editar coleção",
       "collection_options": "Opções da coleção",
       "move_to_collection": "Mover para a coleção",
+      "move_to": "Mover para",
       "remove_from_wiki": "Remover do Wiki"
     },
     "add_existing_page_modal": {
@@ -86,6 +91,7 @@
       "create_page_error": "Não foi possível criar a página. Tente novamente.",
       "create_page_in_collection_error": "Não foi possível criar a página ou adicioná-la à coleção. Tente novamente.",
       "create_folder_error": "Não foi possível criar a pasta. Tente novamente.",
+      "delete_folder_error": "Não foi possível excluir a pasta. Tente novamente.",
       "collection_link_copied": "Link da coleção copiado para a área de transferência."
     }
   },

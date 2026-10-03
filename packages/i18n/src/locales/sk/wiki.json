@@ -32,6 +32,10 @@
       "delete_with_pages_description": "Natrvalo odstráni kolekciu aj všetky jej stránky. Túto akciu nie je možné vrátiť späť.",
       "submit": "Odstrániť kolekciu"
     },
+    "delete_folder_modal": {
+      "title": "Odstrániť priečinok?",
+      "description": "Stránky a podpriečinky vnútri sa presunú o úroveň vyššie — nebudú odstránené."
+    },
     "header": {
       "add_page": "Pridať stránku"
     },
@@ -42,6 +46,7 @@
       "edit_collection": "Upraviť kolekciu",
       "collection_options": "Možnosti kolekcie",
       "move_to_collection": "Presunúť do kolekcie",
+      "move_to": "Presunúť do",
       "remove_from_wiki": "Odstrániť z Wiki"
     },
     "add_existing_page_modal": {
@@ -86,6 +91,7 @@
       "create_page_error": "Stránku sa nepodarilo vytvoriť. Skúste to prosím znova.",
       "create_page_in_collection_error": "Stránku sa nepodarilo vytvoriť alebo pridať do kolekcie. Skúste to prosím znova.",
       "create_folder_error": "Priečinok sa nepodarilo vytvoriť. Skúste to znova.",
+      "delete_folder_error": "Priečinok sa nepodarilo odstrániť. Skúste to znova.",
       "collection_link_copied": "Odkaz na kolekciu bol skopírovaný do schránky."
     }
   },

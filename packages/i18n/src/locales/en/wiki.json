@@ -32,6 +32,10 @@
       "delete_with_pages_description": "Permanently delete the collection and all its pages. This action can't be undone.",
       "submit": "Delete collection"
     },
+    "delete_folder_modal": {
+      "title": "Delete folder?",
+      "description": "Pages and subfolders inside move up one level — they are not deleted."
+    },
     "header": {
       "add_page": "Add page"
     },
@@ -42,6 +46,7 @@
       "edit_collection": "Edit collection",
       "collection_options": "Collection options",
       "move_to_collection": "Move to collection",
+      "move_to": "Move to",
       "remove_from_wiki": "Remove from Wiki"
     },
     "add_existing_page_modal": {
@@ -86,6 +91,7 @@
       "create_page_error": "Page could not be created. Please try again.",
       "create_page_in_collection_error": "Page could not be created or added to the collection. Please try again.",
       "create_folder_error": "Folder could not be created. Please try again.",
+      "delete_folder_error": "Couldn't delete the folder. Please try again.",
       "collection_link_copied": "Collection link copied to clipboard."
     }
   },

@@ -32,6 +32,10 @@
       "delete_with_pages_description": "Trvale smaže kolekci i všechny její stránky. Tuto akci nelze vrátit zpět.",
       "submit": "Smazat kolekci"
     },
+    "delete_folder_modal": {
+      "title": "Smazat složku?",
+      "description": "Stránky a podsložky uvnitř se přesunou o úroveň výš — nebudou smazány."
+    },
     "header": {
       "add_page": "Přidat stránku"
     },
@@ -42,6 +46,7 @@
       "edit_collection": "Upravit kolekci",
       "collection_options": "Možnosti kolekce",
       "move_to_collection": "Přesunout do kolekce",
+      "move_to": "Přesunout do",
       "remove_from_wiki": "Odebrat z Wiki"
     },
     "add_existing_page_modal": {
@@ -86,6 +91,7 @@
       "create_page_error": "Stránku se nepodařilo vytvořit. Zkuste to prosím znovu.",
       "create_page_in_collection_error": "Stránku se nepodařilo vytvořit nebo přidat do kolekce. Zkuste to prosím znovu.",
       "create_folder_error": "Složku se nepodařilo vytvořit. Zkuste to prosím znovu.",
+      "delete_folder_error": "Složku se nepodařilo smazat. Zkuste to znovu.",
       "collection_link_copied": "Odkaz na kolekci byl zkopírován do schránky."
     }
   },

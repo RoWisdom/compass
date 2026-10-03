@@ -32,6 +32,10 @@
       "delete_with_pages_description": "Hapus koleksi dan semua halamannya secara permanen. Tindakan ini tidak dapat dibatalkan.",
       "submit": "Hapus koleksi"
     },
+    "delete_folder_modal": {
+      "title": "Hapus folder?",
+      "description": "Halaman dan subfolder di dalamnya naik satu tingkat — tidak dihapus."
+    },
     "header": {
       "add_page": "Tambah halaman"
     },
@@ -42,6 +46,7 @@
       "edit_collection": "Edit koleksi",
       "collection_options": "Opsi koleksi",
       "move_to_collection": "Pindahkan ke koleksi",
+      "move_to": "Pindahkan ke",
       "remove_from_wiki": "Hapus dari Wiki"
     },
     "add_existing_page_modal": {
@@ -86,6 +91,7 @@
       "create_page_error": "Halaman tidak dapat dibuat. Silakan coba lagi.",
       "create_page_in_collection_error": "Halaman tidak dapat dibuat atau ditambahkan ke koleksi. Silakan coba lagi.",
       "create_folder_error": "Folder tidak dapat dibuat. Silakan coba lagi.",
+      "delete_folder_error": "Gagal menghapus folder. Coba lagi.",
       "collection_link_copied": "Tautan koleksi disalin ke clipboard."
     }
   },

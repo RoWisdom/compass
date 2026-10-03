@@ -32,6 +32,10 @@
       "delete_with_pages_description": "Xóa vĩnh viễn bộ sưu tập và tất cả các trang của nó. Hành động này không thể hoàn tác.",
       "submit": "Xóa bộ sưu tập"
     },
+    "delete_folder_modal": {
+      "title": "Xóa thư mục?",
+      "description": "Các trang và thư mục con bên trong sẽ di chuyển lên một cấp — chúng không bị xóa."
+    },
     "header": {
       "add_page": "Thêm trang"
     },
@@ -42,6 +46,7 @@
       "edit_collection": "Chỉnh sửa bộ sưu tập",
       "collection_options": "Tùy chọn bộ sưu tập",
       "move_to_collection": "Chuyển đến bộ sưu tập",
+      "move_to": "Di chuyển đến",
       "remove_from_wiki": "Xóa khỏi Wiki"
     },
     "add_existing_page_modal": {
@@ -86,6 +91,7 @@
       "create_page_error": "Không thể tạo trang. Vui lòng thử lại.",
       "create_page_in_collection_error": "Không thể tạo trang hoặc thêm trang vào bộ sưu tập. Vui lòng thử lại.",
       "create_folder_error": "Không thể tạo thư mục. Vui lòng thử lại.",
+      "delete_folder_error": "Không thể xóa thư mục. Vui lòng thử lại.",
       "collection_link_copied": "Đã sao chép liên kết bộ sưu tập vào bộ nhớ tạm."
     }
   },
