@@ -442,3 +442,117 @@ class TestFolderCountsAsItsOwnKind:
 
         row = next(item for item in response.data["collections"] if item["name"] == "我的集合")
         assert row["page_count"] == 1
+
+
+@pytest.mark.contract
+class TestFolderSubtree:
+    """``?folder=<uuid>`` —— 文件夹列表视图的数据源（设计 §5.3）。
+
+    四条口径在这里锁死（裁定 4/5/6 + 可见性）：
+
+    1. **含整棵子树**（子文件夹也是行）—— 不含的话 `buildWikiTreeLines` 会把
+       "父页不在集合里"的行按根渲染（`wiki-tree.ts:101` 的 R-2 兜底），
+       "层深缩进"直接落空；
+    2. **不含文件夹自己** —— 它在自己的列表里占一行、点进去回到同一处，荒谬；
+    3. **不带 `node_type`** —— 类型走 store 的旁挂索引（裁定 6），
+       默认列表路径的序列化器一个字不动；
+    4. **过可见性** —— 别人的私有子树不能靠猜 uuid 读到。
+    """
+
+    def _ids(self, response):
+        return {str(row["id"]) for row in response.data}
+
+    @pytest.mark.django_db
+    def test_returns_the_whole_subtree_without_the_folder_itself(self, session_client, workspace, folder_tree):
+        response = session_client.get(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/", {"folder": str(folder_tree["a"].id)}
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert self._ids(response) == {
+            str(folder_tree[key].id) for key in ("b", "c", "d", "t1", "t2", "t3")
+        }
+
+    @pytest.mark.django_db
+    def test_excludes_pages_outside_the_subtree(self, session_client, workspace, folder_tree):
+        """**反向断言** —— 漏了它，一个"返回工作区全部页面"的实现也会全绿。"""
+        response = session_client.get(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/", {"folder": str(folder_tree["b"].id)}
+        )
+
+        assert self._ids(response) == {str(folder_tree[key].id) for key in ("c", "t1", "t2")}
+        assert str(folder_tree["a"].id) not in self._ids(response), "祖先不在子树里"
+        assert str(folder_tree["outside"].id) not in self._ids(response)
+
+    @pytest.mark.django_db
+    def test_includes_nested_subfolders(self, session_client, workspace, folder_tree):
+        """裁定 5：子文件夹**是行**（前端要能逐层下钻）。"""
+        response = session_client.get(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/", {"folder": str(folder_tree["b"].id)}
+        )
+
+        by_id = {str(row["id"]): row for row in response.data}
+        assert str(folder_tree["c"].id) in by_id
+
+    @pytest.mark.django_db
+    def test_the_rows_have_no_node_type(self, session_client, workspace, folder_tree):
+        """裁定 6：这条路径的序列化器是 `WikiPageSerializer`，**没有** `node_type`。"""
+        response = session_client.get(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/", {"folder": str(folder_tree["a"].id)}
+        )
+
+        assert len(response.data) > 0
+        for row in response.data:
+            assert "node_type" not in row
+
+    @pytest.mark.django_db
+    def test_a_page_id_is_not_a_folder(self, session_client, workspace, folder_tree):
+        """`?folder=<一个页面的 uuid>` ⇒ 空列表。少了 `node_type` 那个过滤条件，
+        页面也会被当成根、把它下面的子页全吐出来。
+
+        **载荷必须是 `t1`（页面），不能是 `b`（文件夹）** —— 见文末控制器勘误。
+        """
+        response = session_client.get(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/", {"folder": str(folder_tree["t1"].id)}
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data == []
+
+    @pytest.mark.django_db
+    @pytest.mark.parametrize("value", ["2b0b7f60-0000-4000-8000-000000000000", "not-a-uuid", ""])
+    def test_a_unknown_or_malformed_folder_returns_an_empty_list(self, session_client, workspace, value):
+        """**畸形输入不能是 500**：`filter(id="abc")` 会在 Django 里抛 `ValidationError`。
+
+        这条 URL 是**可以手改的**（`?folder=` 是新加的、`?collection=` 从没被手改过），
+        所以畸形输入是必须自己兜住的现实路径。
+        """
+        response = session_client.get(f"/api/workspaces/{workspace.slug}/wiki-pages/", {"folder": value})
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data == []
+
+    @pytest.mark.django_db
+    def test_someone_elses_private_subtree_is_not_reachable(
+        self, session_client, workspace, folder_tree, create_user
+    ):
+        """私有文件夹整棵不可见 —— 复用 `_wiki_page_queryset`，不自己写第二套可见性。"""
+        secret = _folder(workspace, create_user, "私密文件夹", access=Page.PRIVATE_ACCESS)
+        secret_child = _wiki_page(workspace, create_user, "私密子页", parent=secret, access=Page.PRIVATE_ACCESS)
+        # 让 `session_client` 的调用者**看不见**它：属主改成别人。
+        other = User.objects.create(
+            email=f"holder-{uuid4().hex[:8]}@plane.so",
+            username=f"holder_{uuid4().hex[:8]}",
+            first_name="Holder",
+            last_name="User",
+        )
+        other.set_password("test-password")
+        other.save()
+        Page.objects.filter(id__in=[secret.id, secret_child.id]).update(owned_by=other)
+
+        response = session_client.get(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/", {"folder": str(secret.id)}
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data == [], "别人的私有文件夹既不能列表、也不能作为根带出子页"

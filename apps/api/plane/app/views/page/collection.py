@@ -5,6 +5,7 @@
 # Python imports
 import logging
 import os
+import uuid
 
 # Django imports
 from django.db.models import Q
@@ -284,6 +285,64 @@ class WikiPageViewSet(BaseViewSet):
             .select_related("owned_by")
             .defer("description_json", "description_binary", "description_html", "description_stripped")
         )
+
+        # `folder=<uuid>`：某个文件夹的**整棵子树** —— 设计 §5.3 的「文件夹列表视图」。
+        #
+        # 独立参数、**不复用** `collection`（与 `scope` 同一条理由）：`collection` 的值域是
+        # 「预置键或集合 uuid」，塞一个文件夹 uuid 进去会落进自建集合那条分支、按
+        # `collection_id` 过滤，**静默**返回空列表 —— 比报错难查得多。
+        #
+        # 放在这里而不是更靠前：上面那条 `pages` queryset 已经带好了
+        # `select_related` + `defer` 那组优化，本分支要**照抄同样的优化**（见下），
+        # 而下面那条 O(全部页面) 的 `resolved` 列表推导对本分支是纯浪费 —— 这一分支
+        # 直接 return，那一遍就不跑了。
+        folder_id = request.GET.get("folder")
+        if folder_id is not None:
+            # 先解析成 UUID 再进查询：`filter(id="abc")` 会抛 `ValidationError`
+            # （Django 的 UUIDField 在**过滤时**也校验），一路冒到 DRF 就是 500。
+            # `?collection=abc` 今天也是这个下场，但那条路径前端只会喂预置键或真 uuid；
+            # 这条是**新的、可以直接手改 URL 的**入口，所以自己把畸形输入兜住。
+            try:
+                folder_uuid = uuid.UUID(folder_id)
+            except ValueError:
+                return Response([], status=status.HTTP_200_OK)
+
+            # 文件夹必须是本工作区、可见、已收录，**且真的是文件夹** —— 与 `parent` 那三条
+            # （`create_page` 的注释）同一条纪律：调用者指名的 id 一律过
+            # `_wiki_page_queryset`。找不到就返回空列表、不落 404 —— 口径与
+            # `?collection=<不存在的 uuid>`（今天也是静默空列表）保持一致。
+            folder = (
+                _wiki_page_queryset(request, slug)
+                .filter(id=folder_uuid, node_type=Page.NODE_TYPE_FOLDER)
+                .first()
+            )
+            if folder is None:
+                return Response([], status=status.HTTP_200_OK)
+
+            # **自己不算**（裁定 4）：设计 §5.3/§5.4 两处都写「自己那一层不算」，
+            # §5.2 的括注写成「它自己 + 全部后代的 id 集」是那处括注自己错了。
+            # 语义上也必须这样：文件夹在自己列表里占一行、点进去回到同一处，荒谬。
+            #
+            # `_descendant_ids` 只按 workspace 收窄（BFS + 去重 + 深度上限 20），
+            # **不带可见性与收录过滤** —— 那两条由下面那次 `_wiki_page_queryset` 补上。
+            # 两个条件各只写一处，不重复实现；别人的私有子页因此也不会漏出来。
+            descendant_ids = _descendant_ids(root=folder)
+            if not descendant_ids:
+                return Response([], status=status.HTTP_200_OK)
+
+            subtree = (
+                _wiki_page_queryset(request, slug)
+                .filter(id__in=descendant_ids)
+                # 与上面那条 `pages` 同一组优化，理由逐条相同（`select_related` 免 N+1、
+                # `defer` 把三个重列移出 SELECT）。
+                .select_related("workspace")
+                .select_related("owned_by")
+                .defer("description_json", "description_binary", "description_html", "description_stripped")
+            )
+            # 用 `WikiPageSerializer`，**不带** `node_type`（裁定 6）：前端从 store 的
+            # `pageNodeTypes` 拿类型，那份由侧栏的 `scope=all` 取数灌满，
+            # 覆盖任何子树的**超集**。响应顺序沿用模型默认排序（`-created_at`）。
+            return Response(WikiPageSerializer(subtree, many=True).data, status=status.HTTP_200_OK)
 
         # 分区键**只算一次**：`resolve_collection_key` 是有优先级的业务规则，全仓只有
         # 这一处实现。`scope=all` 时把它随行发给前端（B-6），否则拿它做过滤。
