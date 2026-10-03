@@ -16,10 +16,12 @@ import type {
   TPageCollectionListResponse,
   TPageCreatePayload,
   TPageIncludeResponse,
+  TPageNodeType,
+  TPageWithParent,
   TPredefinedCollection,
   TWikiScopedPage,
 } from "@/services/page";
-import { WorkspacePageService } from "@/services/page";
+import { PAGE_NODE_TYPE_DOC, WorkspacePageService } from "@/services/page";
 // store
 import type { CoreRootStore } from "../root.store";
 import type { TWorkspacePage } from "./workspace-page";
@@ -49,6 +51,18 @@ export interface IWorkspacePageStore {
   treeRows: TWikiTreeRow[];
   /** pageId → 父页 id。**旁挂索引**，不进 `TPage`/`BasePage`（理由见 service 层的 `TPageWithParent`）。 */
   pageParentIds: Record<string, string | null>;
+  /**
+   * 节点的类型判别符，按 pageId 旁挂（罗盘 Round D）。
+   *
+   * **与 `pageParentIds` 同一条设计**：`BasePage` 是逐字段显式赋值构造的、
+   * 且被**项目页**共用，wiki 的类型没有理由去动它，所以类型也只在这条线上被读一次
+   * —— 读**原始响应**，随即落进这个索引，**不进页面模型**。
+   *
+   * **只有两条响应带这个字段**：`?scope=all`（树）与详情。`fetchPagesList` /
+   * `fetchFolderPages` 的响应里**没有**它，所以那两个 action **不许**写这个索引 ——
+   * 写就是把树刚灌进来的 `"folder"` 冲成默认的 `"doc"`（执行期裁定 7）。
+   */
+  pageNodeTypes: Record<string, TPageNodeType>;
   error: TError | undefined;
   filters: TPageFilters;
   // computed
@@ -57,6 +71,11 @@ export interface IWorkspacePageStore {
   getPageById: (pageId: string) => TWorkspacePage | undefined;
   getPageIdsByCollection: (key: string) => string[] | undefined;
   getFilteredPageIdsByCollection: (key: string) => string[] | undefined;
+  /**
+   * 某一行的类型。`undefined` = **还没取到**（首帧，树还没回来）——
+   * 调用方要按"当作页面"处理（那正是今天的既有行为，不是新错）。
+   */
+  getPageNodeType: (pageId: string) => TPageNodeType | undefined;
   updateFilters: <T extends keyof TPageFilters>(filterKey: T, filterValue: TPageFilters[T]) => void;
   clearAllFilters: () => void;
   // actions
@@ -69,6 +88,7 @@ export interface IWorkspacePageStore {
   ) => Promise<Omit<TPageCollection, "page_count">>;
   createPage: (workspaceSlug: string, payload: TPageCreatePayload) => Promise<TPage>;
   fetchPagesList: (workspaceSlug: string, collection: TCollectionFilter) => Promise<TPage[] | undefined>;
+  fetchFolderPages: (workspaceSlug: string, folderId: string) => Promise<TPageWithParent[] | undefined>;
   fetchWikiTree: (workspaceSlug: string) => Promise<TWikiScopedPage[] | undefined>;
   fetchPageDetails: (workspaceSlug: string, pageId: string) => Promise<TPage | undefined>;
   fetchCandidates: (workspaceSlug: string) => Promise<TPage[]>;
@@ -92,6 +112,7 @@ export class WorkspacePageStore implements IWorkspacePageStore {
   candidates: TPage[] = [];
   treeRows: TWikiTreeRow[] = [];
   pageParentIds: Record<string, string | null> = {};
+  pageNodeTypes: Record<string, TPageNodeType> = {};
   error: TError | undefined = undefined;
   filters: TPageFilters = {
     searchQuery: "",
@@ -112,6 +133,7 @@ export class WorkspacePageStore implements IWorkspacePageStore {
       candidates: observable,
       treeRows: observable,
       pageParentIds: observable,
+      pageNodeTypes: observable,
       error: observable,
       filters: observable,
       isAnyPageAvailable: computed,
@@ -122,6 +144,7 @@ export class WorkspacePageStore implements IWorkspacePageStore {
       updateCollection: action,
       createPage: action,
       fetchPagesList: action,
+      fetchFolderPages: action,
       fetchWikiTree: action,
       fetchPageDetails: action,
       fetchCandidates: action,
@@ -142,6 +165,18 @@ export class WorkspacePageStore implements IWorkspacePageStore {
   }
 
   getPageById = computedFn((pageId: string) => this.data?.[pageId] || undefined);
+
+  /**
+   * 某一行的类型判别符。
+   *
+   * **它的数据来自侧栏那次 `fetchAllPages`（`scope=all`）** —— 那条覆盖是完整的
+   * （工作区里所有可见且已收录的页面），是任何 `?collection=` / `?folder=` 列表的
+   * **超集**。侧栏住在 `wiki/layout.tsx`，两个列表视图都是它的子节点，所以取数是
+   * 先行的 —— 但它是**异步**的：首帧可能还没到，那时这里返回 `undefined`。
+   *
+   * 外层包 `computedFn`：`observer` 组件里读它就自动是 observable 依赖，值一变就重渲染。
+   */
+  getPageNodeType = computedFn((pageId: string) => this.pageNodeTypes?.[pageId] || undefined);
 
   /** 某个分区已加载的页面 id。分区名与后端 `partition_pages` 的返回值对齐。 */
   getPageIdsByCollection = computedFn((key: string) => this.collectionPageIds[key] ?? undefined);
@@ -331,6 +366,61 @@ export class WorkspacePageStore implements IWorkspacePageStore {
   };
 
   /**
+   * 某个文件夹的整棵子树 —— 「文件夹列表视图」的数据源（设计 §5.3）。
+   *
+   * **照 `fetchPagesList` 的形状**（同一个 `collectionPageIds` 键空间、同一套
+   * `pageParentIds` 写入、同一个 loader 口径）：主面板那两个视图共用
+   * `getFilteredPageIdsByCollection(collection)` 与 `WikiListRoot`，
+   * 所以文件夹的键就用**文件夹 uuid**，两条路径在 store 这一层完全同形。
+   *
+   * **刻意不写 `pageNodeTypes`**（裁定 7）：这条响应来自 `WikiPageSerializer`，
+   * 里面**没有** `node_type`；写了就等于把树灌进来的 `"folder"` 冲成 `"doc"`。
+   */
+  fetchFolderPages = async (workspaceSlug: string, folderId: string) => {
+    try {
+      if (!workspaceSlug || !folderId) return undefined;
+
+      const existingIds = this.collectionPageIds[folderId];
+      runInAction(() => {
+        this.loader = existingIds && existingIds.length > 0 ? "mutation-loader" : "init-loader";
+        this.error = undefined;
+      });
+
+      const pages = await this.service.fetchFolderPages(workspaceSlug, folderId);
+      runInAction(() => {
+        for (const page of pages) {
+          if (page?.id) {
+            const existingPage = this.getPageById(page.id);
+            if (existingPage) {
+              const { name, ...otherFields } = page;
+              existingPage.mutateProperties(otherFields, false);
+            } else {
+              set(this.data, [page.id], new WorkspacePage(this.store, page));
+            }
+            // 层级照记：主列表的缩进要按它算，而这条路径**必须**记 —— 文件夹视图里
+            // 父节点可能是另一个文件夹，而它也在 `pageParentIds` 里（由树那条写进来）。
+            set(this.pageParentIds, [page.id], page.parent ?? null);
+          }
+        }
+        set(
+          this.collectionPageIds,
+          [folderId],
+          pages.map((page) => page.id).filter((id): id is string => !!id)
+        );
+        this.loader = undefined;
+      });
+
+      return pages;
+    } catch (error) {
+      runInAction(() => {
+        this.loader = undefined;
+        this.error = { title: "Failed", description: "Failed to fetch the folder, Please try again later." };
+      });
+      throw error;
+    }
+  };
+
+  /**
    * 拉侧栏那棵树的数据 —— 全部已收录页 + 每行服务端算好的分区键（设计 B-5/B-6）。
    *
    * **不设 `loader`**：与 `createCollection` / `createPage` 同一条理由 —— `loader`
@@ -349,12 +439,20 @@ export class WorkspacePageStore implements IWorkspacePageStore {
           if (existingPage) {
             // `collection_key` 是**本端点独有**的字段，不能进 `mutateProperties` ——
             // 那会往页面实例上写一个没人认识的属性。它只活在 `treeRows` 里。
-            const { name, parent, collection_key: _collectionKey, ...otherFields } = row;
+            // `node_type` 与 `collection_key` 一样是**本端点独有**的字段，不能进
+            // `mutateProperties` —— 那是个盲写的 `set(this, key, value)`
+            // （`base-page.ts:545-551`），会把没人认识的属性写到页面实例上。
+            // 它只活在 `pageNodeTypes` 里。
+            const { name, parent, node_type, collection_key: _collectionKey, ...otherFields } = row;
             existingPage.mutateProperties(otherFields, false);
           } else {
             set(this.data, [row.id], new WorkspacePage(this.store, { ...row }));
           }
           set(this.pageParentIds, [row.id], row.parent ?? null);
+          // 缺省当 `doc`：**本轮之前建的页面没有这个字段**的可能性不存在（迁移给了默认值），
+          // 但一个 `undefined` 会让 `getPageNodeType` 返回 undefined、把"还没到的类型"
+          // 与"真的是页面"混在同一档 —— 树这条响应**总是**带这个字段，所以这里落成常量。
+          set(this.pageNodeTypes, [row.id], row.node_type ?? PAGE_NODE_TYPE_DOC);
         }
 
         this.treeRows = rows
@@ -385,8 +483,18 @@ export class WorkspacePageStore implements IWorkspacePageStore {
       runInAction(() => {
         if (page?.id) {
           const pageInstance = this.getPageById(page.id);
-          if (pageInstance) pageInstance.mutateProperties(page, false);
-          else set(this.data, [page.id], new WorkspacePage(this.store, page));
+          if (pageInstance) {
+            // 与 `fetchWikiTree` 同一条纪律：`node_type` 不能进 `mutateProperties`
+            // （盲写）。它是第二条**可信来源** —— 点开 `/wiki/<uuid>` 时树可能还没回来，
+            // 详情这条就是那时唯一的类型真相（`[pageId]/page.tsx` 靠它决定要不要
+            // `replace` 到 `?folder=`）。
+            const { node_type, ...otherFields } = page;
+            pageInstance.mutateProperties(otherFields, false);
+            set(this.pageNodeTypes, [page.id], node_type ?? PAGE_NODE_TYPE_DOC);
+          } else {
+            set(this.data, [page.id], new WorkspacePage(this.store, page));
+            set(this.pageNodeTypes, [page.id], page.node_type ?? PAGE_NODE_TYPE_DOC);
+          }
         }
         this.loader = undefined;
       });
@@ -514,6 +622,7 @@ export class WorkspacePageStore implements IWorkspacePageStore {
     runInAction(() => {
       unset(this.data, [pageId]);
       unset(this.pageParentIds, [pageId]);
+      unset(this.pageNodeTypes, [pageId]);
       this.treeRows = this.treeRows.filter((row) => row.pageId !== pageId);
       for (const key of Object.keys(this.collectionPageIds)) {
         this.collectionPageIds[key] = this.collectionPageIds[key].filter((id) => id !== pageId);

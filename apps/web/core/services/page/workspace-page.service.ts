@@ -98,6 +98,11 @@ export type TPageCreateTarget = {
   access?: 0 | 1;
   /** 父页 id。给了就建在这页下面，并从它继承 `access` / `collection_id`。 */
   parent?: string;
+  /**
+   * 要建的是页面还是文件夹。**只有文件夹才给** —— 页面走后端的默认值（`"doc"`），
+   * 前端不重复声明一遍默认值。
+   */
+  node_type?: TPageNodeType;
 };
 
 /**
@@ -117,6 +122,8 @@ export type TPageCreatePayload = {
   access?: 0 | 1;
   /** 父页 id。后端会做三条前置校验（本工作区 / 可见 / 已收录），不合规 404。 */
   parent?: string;
+  /** 要建的是页面还是文件夹。省略即 `"doc"`（后端 `WikiPageCreateSerializer` 的默认值）。 */
+  node_type?: TPageNodeType;
 };
 
 /**
@@ -127,8 +134,14 @@ export type TPageCreatePayload = {
  * :239 asJSON **四处**），加一个字段要同步改四处，而 `BasePage` 被**项目页**共用 ——
  * wiki 的层级没有理由去动它。所以层级只在这条线上被读一次：读**原始响应**，
  * 随即落进 store 的旁挂索引，**不进页面模型**。
+ *
+ * `node_type` 同一条待遇：**不进 `BasePage`**，只落 store 的旁挂索引
+ * （`workspace-page.store.ts` 的 `pageNodeTypes`）。而它**不是**每条列表响应都有 ——
+ * `fetchPages` / `fetchFolderPages` 走的是 `WikiPageSerializer`，那里**没有**这个字段
+ * （默认列表路径的响应必须逐字不变）。只有 `?scope=all`（树）与详情两条带它。
+ * 所以标记为可选是**如实的**，不是偷懒。
  */
-export type TPageWithParent = TPage & { parent?: string | null };
+export type TPageWithParent = TPage & { parent?: string | null; node_type?: TPageNodeType | null };
 
 /**
  * `?scope=all` 的行：在页面字段之上多一个**服务端算好的**分区键（设计 B-6）。
@@ -141,6 +154,19 @@ export type TWikiScopedPage = TPageWithParent & { collection_key: string };
 
 /** 侧栏选中的分区：预置分区的 key，或某个集合的 uuid。 */
 export type TCollectionFilter = TPredefinedCollectionKey | string;
+
+/**
+ * Wiki 树节点的类型判别符（罗盘 Round D）。**与后端 `Page.NODE_TYPE_*` 必须一致** ——
+ * 中间没有共享常量的通道，只能各写一份（`PREDEFINED_COLLECTION_KEYS` 也是这么手抄的，
+ * 那条注释写了同样的理由）。
+ *
+ * `doc` 有正文、可编辑、写 vault 镜像；`folder` 都没有（Confluence F2/F4）。
+ * **类型建时定死**（F16：文件夹不能变回页面）—— 前端只在**新建**时发它，
+ * 别处一律只读。
+ */
+export const PAGE_NODE_TYPE_DOC = "doc";
+export const PAGE_NODE_TYPE_FOLDER = "folder";
+export type TPageNodeType = typeof PAGE_NODE_TYPE_DOC | typeof PAGE_NODE_TYPE_FOLDER;
 
 /**
  * 工作区级 Wiki 页面的 HTTP 客户端。
@@ -248,6 +274,28 @@ export class WorkspacePageService extends APIService {
       });
   }
 
+  /**
+   * 某个文件夹下的**整棵子树** —— 主面板的「文件夹列表视图」的数据源（设计 §5.3）。
+   *
+   * 与 `fetchPages` 的分界：那个按**分区**取（`?collection=`），这个按**文件夹**取
+   * （`?folder=`）。**不复用 `collection`**：后者的值域是「预置键或集合 uuid」，
+   * 塞一个文件夹 uuid 进去会落进自建集合那条分支、按 `collection_id` 过滤，
+   * **静默**返回空列表。
+   *
+   * 响应**含子文件夹**（后端裁定 5），且**不含文件夹自己**（裁定 4）。行里**没有**
+   * `node_type` —— 类型从 store 的 `pageNodeTypes` 拿，那份由 `fetchAllPages`
+   * （侧栏的 `scope=all`）灌满。见 `WikiPageSerializer` 那段的说明。
+   */
+  async fetchFolderPages(workspaceSlug: string, folderId: string): Promise<TPageWithParent[]> {
+    return this.get(`/api/workspaces/${workspaceSlug}/wiki-pages/`, {
+      params: { folder: folderId },
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data ?? error;
+      });
+  }
+
   /** 本工作区**尚未收录**的页面 —— 「Add existing page」的候选。 */
   async fetchCandidates(workspaceSlug: string): Promise<TPage[]> {
     return this.get(`/api/workspaces/${workspaceSlug}/wiki-pages/`, {
@@ -260,7 +308,7 @@ export class WorkspacePageService extends APIService {
   }
 
   /** 单个页面（含正文）。 */
-  async fetchById(workspaceSlug: string, pageId: string): Promise<TPage> {
+  async fetchById(workspaceSlug: string, pageId: string): Promise<TPageWithParent> {
     return this.get(`/api/workspaces/${workspaceSlug}/wiki-pages/${pageId}/`)
       .then((response) => response?.data)
       .catch((error) => {
