@@ -81,12 +81,16 @@ class WikiPageTreeSerializer(WikiPageSerializer):
 
     单独一个类而不是给 ``WikiPageSerializer`` 加字段：默认（不带 ``scope``）那条路径
     必须逐字不变 —— 多出来的键会顺着前端 ``mutateProperties`` 被写成没人认识的属性。
+
+    这一轮又多一个 ``node_type``（罗盘 Round D）：前端侧栏要按类型分行渲染（文件夹
+    换图标、标题点了去列表视图而不是编辑器、行的 ``＋`` 下拉两项都在）。**仍然只加在
+    子类上** —— 理由同上，默认路径必须逐字不变。
     """
 
     collection_key = serializers.SerializerMethodField()
 
     class Meta(WikiPageSerializer.Meta):
-        fields = [*WikiPageSerializer.Meta.fields, "collection_key"]
+        fields = [*WikiPageSerializer.Meta.fields, "collection_key", "node_type"]
         read_only_fields = fields
 
     def get_collection_key(self, obj):
@@ -111,7 +115,7 @@ class WikiPageDetailSerializer(WikiPageSerializer):
     """
 
     class Meta(WikiPageSerializer.Meta):
-        fields = [*WikiPageSerializer.Meta.fields, "description_html", "description_json"]
+        fields = [*WikiPageSerializer.Meta.fields, "description_html", "description_json", "node_type"]
         read_only_fields = fields
 
 

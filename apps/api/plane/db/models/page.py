@@ -27,6 +27,18 @@ class Page(BaseModel):
 
     ACCESS_CHOICES = ((PRIVATE_ACCESS, "Private"), (PUBLIC_ACCESS, "Public"))
 
+    # ── Wiki 树的节点类型判别符（罗盘 Round D，设计 §5.1）──────────────────────────
+    # 路线 2：**不建第二张表**，复用 `parent` 那棵自引用树，用这个字段区分节点种类。
+    #   · ``NODE_TYPE_DOC``    今天的页面的行为，逐字不变；
+    #   · ``NODE_TYPE_FOLDER`` 没有正文、不写 vault 镜像、不进任何计数
+    #                          （Confluence F2 / F4 / F14）。
+    #
+    # **类型在创建时定死，之后只读**（F16：文件夹不能变回页面）。这不是"约束缺省"，
+    # 是设计：转换只单向存在（F15 页面 → 文件夹），而本轮两侧都不做。
+    NODE_TYPE_DOC = "doc"
+    NODE_TYPE_FOLDER = "folder"
+    NODE_TYPE_CHOICES = ((NODE_TYPE_DOC, "Document"), (NODE_TYPE_FOLDER, "Folder"))
+
     workspace = models.ForeignKey("db.Workspace", on_delete=models.CASCADE, related_name="pages")
     name = models.TextField(blank=True)
     description_json = models.JSONField(default=dict, blank=True)
@@ -44,6 +56,12 @@ class Page(BaseModel):
         blank=True,
         related_name="child_page",
     )
+    # 节点类型。`max_length=16` 对两个 6 字符的值绰绰有余，且与迁移里写下的长度一致 ——
+    # 两边分叉时 `makemigrations --check` 会报出来（Task 2 Step 6 就跑它）。
+    #
+    # **不加索引**（设计 §5.1）：全库页面的量级是千，而所有过滤都发生在已经按
+    # workspace / is_global 收窄过的 queryset 上；加索引只是徒增写放大。
+    node_type = models.CharField(max_length=16, choices=NODE_TYPE_CHOICES, default=NODE_TYPE_DOC)
     archived_at = models.DateField(null=True)
     is_locked = models.BooleanField(default=False)
     view_props = models.JSONField(default=get_view_props)
