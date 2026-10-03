@@ -46,19 +46,23 @@ type Props = {
  * **为什么页面也能当目标**：本仓的 wiki 从 Round C 起支持子页面，`create_page` 也一直
  * 收任意已收录的页面当 `parent`。只列文件夹会凭空造出一条「建得出来、搬不进去」的不对称。
  *
- * **为什么只列这些集合**：`general` + 用户自建集合是有合法 `collection_id` 的两种；
- * `private`/`shared`/`archived` 是**派生**分区（页面落在哪儿由 `access`/`archived_at`
- * 决定），`collection_id` 指不过去 —— 把它们当目标只会把 `collection_id` 变成 `null`、
- * 页面落回 general，而 UI 在骗用户。
+ * **为什么只列这些集合**：`general` + 用户自建集合是有合法 `collection_id` 的两种。
+ * `private`/`shared`/`archived` 是**派生**分区：一行落在其中哪个由 `access`/`archived_at`
+ * 决定（`resolve_collection_key` 的优先级 archived > private > collection_id > general），
+ * 与它自己的 `collection_id` 无关 —— 所以 `collection_id` 指不过去，把它们当目标只会把
+ * `collection_id` 变成 `null`、页面落回 general，而 UI 在骗用户。
  *
- * **派生分区里的行同样不列**（是不列，不是列出来再置灰）：分区键由服务端按优先级算
- * （`resolve_collection_key`：archived > private > collection_id > general），一行落在哪个
- * 分区与它自己的 `collection_id` 无关。把 `private`/`archived` 那一行当目标，被移动的页面
- * 拿到的是那一行的 `collection_id` ⇒ 落回 general 或它所在的集合，而**父行仍在派生分区里**。
- * 树是**按分区键分组建的**（下面 `linesFor`；侧栏同款，`sidebar.tsx:511`：「父页在别的
- * 分区时，子行在本分区里当根渲染」），跨分区的父链接两边都认不出来 —— 页面会以「顶层
- * 孤儿」的形态出现。用户点了「挂到这一行下面」，看起来却什么都没发生，正是上面那句
- * 「UI 在骗用户」。「常规」不受影响：它的行与被移动页面同属 general，父链接落在组内。
+ * **派生分区里的行同样不列**（是不列，不是列出来再置灰）：树按分区键分组建（下面
+ * `linesFor`；侧栏同款 —— 见 `linesByPartition` 那段注释「父页在别的分区时，子行在本
+ * 分区里当根渲染」，设计 R-2 的兜底），跨分区的父链接两边都认不出来；而移动**不搬
+ * `access`**（移动块只写 `parent_id` 与由目标推导的 `collection_id`），所以一个**本来
+ * 不在**该派生分区里的页面挂上去之后，仍留在自己分区里当**顶层孤儿** —— 用户点了「挂到
+ * 这一行下面」，嵌套却没发生（只可能连带换了集合），正是上面那句「UI 在骗用户」。
+ * 「常规」不受影响：它的行与被移动页面同属 general，父链接落在组内。
+ *
+ * **边界**（本轮不处理）：若被移动页面**本身就在**同一个派生分区里，那条父链接是分区
+ * 内的，嵌套会正常发生 —— 但设计 §5.1 的目标列表只给 `general` + 用户自建集合，没有
+ * 这种入口。这是设计取舍，不是这里的实现缺陷。
  *
  * **不发新请求**：树与索引都在 store 里（`fetchWikiTree` 灌的），侧栏随 layout 常驻 ——
  * 打开这个弹窗是零网络。
