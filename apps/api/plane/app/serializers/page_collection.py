@@ -122,9 +122,10 @@ class WikiPageDetailSerializer(WikiPageSerializer):
 class WikiPageUpdateSerializer(PageBinaryUpdateSerializer):
     """PATCH wiki-pages/<page_id>/ 的请求体。
 
-    三组字段全部可选、可任意组合：
+    四组字段全部可选、可任意组合：
       - collection_id：换集合；显式传 null 表示移回 general
       - name：改标题（协同服务器的标题同步会 PATCH 它）
+      - parent：目标位置；显式传 null 表示移到集合顶层，**不传表示不动**（PATCH 语义）
       - description_html / description_json / description_binary：正文
 
     正文的校验与写入直接复用 PageBinaryUpdateSerializer —— HTML 消毒走
@@ -148,6 +149,12 @@ class WikiPageUpdateSerializer(PageBinaryUpdateSerializer):
     collection_id = serializers.UUIDField(required=False, allow_null=True)
     name = serializers.CharField(required=False, allow_blank=True)
     description_json = serializers.JSONField(required=False)
+    # 目标位置。`null` = 移到集合顶层；uuid = 挂到那一行下面；**不传 = 不动**（PATCH 语义）。
+    #
+    # 与 collection_id 同一条纪律：这里只做**语法**校验。可达性（存在 / 本工作区 /
+    # 对调用者可见 / 已收录 / 不成环）由视图判定并落 404 / 400 —— 那是**跨表**的事实，
+    # 序列化器拿不到 request，判不了。
+    parent = serializers.UUIDField(required=False, allow_null=True)
 
     def update(self, instance, validated_data):
         collection_provided = "collection_id" in validated_data
@@ -159,16 +166,24 @@ class WikiPageUpdateSerializer(PageBinaryUpdateSerializer):
         name_provided = "name" in validated_data
         name = validated_data.pop("name", None)
 
-        # 只给了 collection_id / name 时不要空写一次正文
+        # `parent` 是同一个陷阱的第二个入口，而且是**外键**：基类一个字都不认识它，
+        # 留在 dict 里既不会报错也不会生效 —— 又是一个 200 而什么都没变。
+        # 三组非正文键都必须在这里 pop 干净。
+        parent_provided = "parent" in validated_data
+        parent_id = validated_data.pop("parent", None)
+
+        # 只给了 collection_id / name / parent 时不要空写一次正文
         if validated_data:
             instance = super().update(instance, validated_data)
 
         if name_provided:
             instance.name = name
 
-        if collection_provided or name_provided:
+        if collection_provided or name_provided or parent_provided:
             if collection_provided:
                 instance.collection_id = collection_id
+            if parent_provided:
+                instance.parent_id = parent_id
 
             # `updated_at` is auto_now, and `_save_table` only runs `pre_save`
             # for the fields named in `update_fields` — leaving it out freezes
@@ -183,6 +198,8 @@ class WikiPageUpdateSerializer(PageBinaryUpdateSerializer):
                 update_fields.append("name")
             if collection_provided:
                 update_fields.append("collection")
+            if parent_provided:
+                update_fields.append("parent")
             instance.save(update_fields=update_fields)
 
         return instance

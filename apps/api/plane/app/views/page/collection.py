@@ -560,6 +560,33 @@ class WikiPageViewSet(BaseViewSet):
             if target is None:
                 return Response({"error": "Collection not found."}, status=status.HTTP_404_NOT_FOUND)
 
+        # 目标位置（parent）。两条判定，都排在 save() 之前 —— 404 / 400 路径下
+        # **一个字段都不会动**。
+        #
+        # 可达性直接复用 `_wiki_page_queryset`（工作区 + 可见 + 已收录），
+        # 与 create_page 收 parent 时**逐字同一条**。只在这里加 `.filter(id=...)`
+        # 收窄到指名的那一行 —— 不把条件抄第二遍：抄一遍就多一处会与它走样的副本。
+        parent_id = serializer.validated_data.get("parent")
+        if parent_id is not None:
+            target_parent = _wiki_page_queryset(request, slug).filter(id=parent_id).first()
+            if target_parent is None:
+                return Response({"error": "Parent page not found."}, status=status.HTTP_404_NOT_FOUND)
+
+            # 环。`_descendant_ids` 自带 `seen` 集与深度封顶 —— 写操作撞上环会写成
+            # 死循环，那正是它存在的理由（见其 docstring）。直接复用，不自己写遍历。
+            if target_parent.id == page.id or target_parent.id in set(_descendant_ids(root=page)):
+                return Response(
+                    {"error": "Cannot move a page into itself or its own descendant."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # **位置决定集合**（E-10）：给了非空 parent，目标那一行的集合说了算，
+            # 同一请求里的 `collection_id` 被它覆盖。与建页时的继承同一条规则
+            # （子页跟随父页的集合，`create_page` 的 :484-488）。
+            # 写回 `validated_data` 之后再 `save()`，于是既有的集合归属校验**顺带把
+            # 推导出来的值也验了** —— 不必写第二遍。
+            serializer.validated_data["collection_id"] = target_parent.collection_id
+
         # 旧名与旧集合都必须在 save() **之前**记下来：serializer.update() 就地改
         # instance，save() 之后 page 上已经是新值，就再也算不出旧的了。
         old_name = page.name
@@ -989,8 +1016,9 @@ def _descendant_ids(*, root, max_depth=MAX_SUBTREE_DEPTH):
     """``root`` 的**全部后代** id，不含它自己。广度优先、有界、去重。
 
     必须带 ``seen`` 集：``parent`` 是普通外键，**没有任何约束**禁止 A 的父是 B、
-    B 的父是 A。今天 wiki 的路由改不了 ``parent``（``WikiPageUpdateSerializer``
-    没有这个字段），环只能从数据层造出来 —— 但级联是**写**操作，撞上环会写成死循环。
+    B 的父是 A。Round E 起 wiki 的路由**可以**改 ``parent``（``WikiPageUpdateSerializer``
+    有这个字段），但环仍能从数据层造出来（绕过 API 直接改库）—— 级联是**写**操作，
+    撞上环会写成死循环。
 
     按 ``workspace_id`` 收窄：正常写入路径下后代必然同工作区（建页时 workspace 与
     parent 一起给），这一层过滤是给「数据被绕过 API 改过」留的边界 —— 级联是写操作，
@@ -1129,6 +1157,16 @@ class WikiPageDescriptionViewSet(BaseViewSet):
             target = PageCollection.objects.filter(id=collection_id, workspace__slug=slug).first()
             if target is None:
                 return Response({"error": "Collection not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # `parent` 是**结构性**变更，只走 metadata 路由（设计 §4.7）。这个端点复用
+        # 同一个序列化器，不加这条守卫就会**连带接受** `parent` 并在下面直接 save() ——
+        # 绕过 404 / 环检测 / 集合推导**全部**校验，还能把页面挂到别的工作区的页下面。
+        # 移动只有一个门。
+        if "parent" in request.data:
+            return Response(
+                {"error": "Use the wiki-pages endpoint to move a page."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         # 旧名与旧集合都必须在 save() **之前**记下来：serializer.update() 就地改
         # instance，save() 之后 page.name / page.collection_id 已经是新值，

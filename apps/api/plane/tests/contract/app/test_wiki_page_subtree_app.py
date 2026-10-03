@@ -113,8 +113,8 @@ class TestWikiPageSubtreeCascade:
     def test_a_cyclic_parent_graph_terminates(self, session_client, workspace, create_user):
         """成环的 parent 图必须**终止**（设计 B-4 要求遍历有界 + visited 集）。
 
-        wiki 的路由改不了 `parent`（`WikiPageUpdateSerializer` 没有这个字段），
-        所以环只能从数据层造出来 —— 但级联撞上环会写成死循环，值得这五行防御。
+        B 的父是 A。Round E 起 wiki 的路由**可以**改 `parent`（`WikiPageUpdateSerializer` 有这个字段），
+        但环仍能从数据层造出来（绕过 API 直接改库）—— 级联是**写**操作，撞上环会写成死循环。
         """
         a = _page(workspace, create_user, "A")
         b = _page(workspace, create_user, "B", parent=a)
