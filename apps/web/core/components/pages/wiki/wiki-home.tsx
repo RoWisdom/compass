@@ -16,6 +16,7 @@ import { ListItem } from "@/components/core/list";
 // hooks
 import { EPageStoreType, usePageStore } from "@/hooks/store";
 // services
+import { PAGE_NODE_TYPE_FOLDER } from "@/services/page";
 import type { TPredefinedCollectionKey } from "@/services/page";
 // types
 import type { TWorkspacePage } from "@/store/pages/workspace-page";
@@ -58,7 +59,7 @@ export const WikiHome = observer(function WikiHome(props: Props) {
   // plane hooks
   const { t } = useTranslation();
   // store hooks
-  const { treeRows, getPageById, predefined, collections } = usePageStore(EPageStoreType.WORKSPACE);
+  const { treeRows, getPageById, getPageNodeType, predefined, collections } = usePageStore(EPageStoreType.WORKSPACE);
   // refs
   // `ListItem` 的 `parentRef` 是给行内浮层定位用的。`recents/page.tsx:46` 也是**整个列表共用
   // 一个 ref**，这里跟随（不是每行一个）。
@@ -71,7 +72,17 @@ export const WikiHome = observer(function WikiHome(props: Props) {
   // （用 `treeRows.length === 0` 判就不行 —— 那个与「一页都没有」不可区分。）
   const isCollectionsLoading = predefined.length === 0;
 
-  const recentPages = treeRows.map((row) => getPageById(row.pageId)).filter((page): page is TWorkspacePage => !!page);
+  // **文件夹不进「最近编辑」**（Round D）。它没有正文、没有编辑器（Confluence F2/F4），
+  // 点它进的是**列表视图**而不是"编辑" —— 列在一个叫「最近**编辑**」的表里是错的，
+  // 而且它永远不会有 `updated_at` 之外的意义（没有版本、不被索引，F4）。
+  //
+  // 判据写成「**显式等于 folder 才排除**」：`undefined`（首帧，树还没落地）
+  // 按**页面**处理，那正是今天的既有行为（裁定 7 的口径）—— 反过来写会把首帧
+  // 所有页面短暂地藏起来，比多显示一行文件夹难看。
+  const recentPages = treeRows
+    .map((row) => getPageById(row.pageId))
+    .filter((page): page is TWorkspacePage => !!page)
+    .filter((page) => page.id && getPageNodeType(page.id) !== PAGE_NODE_TYPE_FOLDER);
 
   // 按 `updated_at` 倒序（最新在前）。
   //
