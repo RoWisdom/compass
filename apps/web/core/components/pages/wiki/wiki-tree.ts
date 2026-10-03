@@ -131,10 +131,20 @@ export const buildWikiTreeLines = (input: {
 };
 
 /**
- * 这一行是不是被某个折叠着的祖先藏起来了。
+ * 这一行是不是被某个**没展开**的祖先藏起来了。
+ *
+ * 判据是「祖先里有谁**不在** `expanded` 里」。口径是**默认全部收起**
+ * （用户 2026-10-01：「子页面默认收起」；2026-10-02 换成 Notion 方案后又明确
+ * 「打开某一页时自动展开它的祖先链」，那是**调用方**往里加展开项，本函数不变），
+ * 所以状态存的是**展开**集、不是折叠集：空集就是最省事也最不会漂的默认值。
+ * 反过来存折叠集的话，默认值得是「全部页面 id」—— 而树是异步来的、之后还会新增页面，
+ * 那个默认值每加一页都要补一次，漏一处就成了「新页面默认展开」，与默认收起自相矛盾。
+ *
+ * 它取代了早先那个 `isLineHiddenByCollapse`（折叠集口径）—— 两者只差一个取反，
+ * 但语义相反，留两套迟早写错调用方，所以直接换掉而不是并存。
  *
  * 折叠**不改变行本身**，只影响渲染 —— 所以状态与结构是分开的两件事：
- * 折叠集变了不必重建树。
+ * 展开集变了不必重建树。
  */
-export const isLineHiddenByCollapse = (line: TWikiTreeLine, collapsed: ReadonlySet<string>): boolean =>
-  line.ancestorIds.some((ancestorId) => collapsed.has(ancestorId));
+export const isLineHiddenByExpansion = (line: TWikiTreeLine, expanded: ReadonlySet<string>): boolean =>
+  line.ancestorIds.some((ancestorId) => !expanded.has(ancestorId));
