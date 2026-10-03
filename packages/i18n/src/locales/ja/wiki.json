@@ -36,6 +36,9 @@
       "title": "フォルダを削除しますか？",
       "description": "中のページとサブフォルダは1つ上の階層に移動します。削除はされません。"
     },
+    "rename_folder_modal": {
+      "name_placeholder": "フォルダー名"
+    },
     "header": {
       "add_page": "ページを追加"
     },
@@ -46,6 +49,7 @@
       "edit_collection": "コレクションを編集",
       "collection_options": "コレクションのオプション",
       "move_to": "移動先",
+      "rename": "名前を変更",
       "remove_from_wiki": "Wikiから削除"
     },
     "add_existing_page_modal": {
@@ -91,6 +95,7 @@
       "create_page_in_collection_error": "ページを作成するか、コレクションに追加できませんでした。もう一度お試しください。",
       "create_folder_error": "フォルダを作成できませんでした。もう一度お試しください。",
       "delete_folder_error": "フォルダを削除できませんでした。もう一度お試しください。",
+      "rename_folder_error": "フォルダの名前を変更できませんでした。もう一度お試しください。",
       "collection_link_copied": "コレクションリンクをクリップボードにコピーしました。"
     }
   },

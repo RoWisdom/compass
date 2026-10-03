@@ -36,6 +36,9 @@
       "title": "Eliminare la cartella?",
       "description": "Le pagine e le sottocartelle all'interno salgono di un livello: non vengono eliminate."
     },
+    "rename_folder_modal": {
+      "name_placeholder": "Nome della cartella"
+    },
     "header": {
       "add_page": "Aggiungi pagina"
     },
@@ -46,6 +49,7 @@
       "edit_collection": "Modifica raccolta",
       "collection_options": "Opzioni della raccolta",
       "move_to": "Sposta in",
+      "rename": "Rinomina",
       "remove_from_wiki": "Rimuovi dal Wiki"
     },
     "add_existing_page_modal": {
@@ -91,6 +95,7 @@
       "create_page_in_collection_error": "Impossibile creare la pagina o aggiungerla alla raccolta. Riprova.",
       "create_folder_error": "Impossibile creare la cartella. Riprova.",
       "delete_folder_error": "Impossibile eliminare la cartella. Riprova.",
+      "rename_folder_error": "Impossibile rinominare la cartella. Riprova.",
       "collection_link_copied": "Link della raccolta copiato negli appunti."
     }
   },

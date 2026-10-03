@@ -36,6 +36,9 @@
       "title": "Supprimer le dossier ?",
       "description": "Les pages et sous-dossiers qu'il contient remontent d'un niveau ; ils ne sont pas supprimés."
     },
+    "rename_folder_modal": {
+      "name_placeholder": "Nom du dossier"
+    },
     "header": {
       "add_page": "Ajouter une page"
     },
@@ -46,6 +49,7 @@
       "edit_collection": "Modifier la collection",
       "collection_options": "Options de la collection",
       "move_to": "Déplacer vers",
+      "rename": "Renommer",
       "remove_from_wiki": "Retirer du Wiki"
     },
     "add_existing_page_modal": {
@@ -91,6 +95,7 @@
       "create_page_in_collection_error": "La page n'a pas pu être créée ou ajoutée à la collection. Veuillez réessayer.",
       "create_folder_error": "Le dossier n'a pas pu être créé. Veuillez réessayer.",
       "delete_folder_error": "Impossible de supprimer le dossier. Veuillez réessayer.",
+      "rename_folder_error": "Impossible de renommer le dossier. Veuillez réessayer.",
       "collection_link_copied": "Lien de la collection copié dans le presse-papiers."
     }
   },

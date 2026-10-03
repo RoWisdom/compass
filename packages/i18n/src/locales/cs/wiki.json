@@ -36,6 +36,9 @@
       "title": "Smazat složku?",
       "description": "Stránky a podsložky uvnitř se přesunou o úroveň výš — nebudou smazány."
     },
+    "rename_folder_modal": {
+      "name_placeholder": "Název složky"
+    },
     "header": {
       "add_page": "Přidat stránku"
     },
@@ -46,6 +49,7 @@
       "edit_collection": "Upravit kolekci",
       "collection_options": "Možnosti kolekce",
       "move_to": "Přesunout do",
+      "rename": "Přejmenovat",
       "remove_from_wiki": "Odebrat z Wiki"
     },
     "add_existing_page_modal": {
@@ -91,6 +95,7 @@
       "create_page_in_collection_error": "Stránku se nepodařilo vytvořit nebo přidat do kolekce. Zkuste to prosím znovu.",
       "create_folder_error": "Složku se nepodařilo vytvořit. Zkuste to prosím znovu.",
       "delete_folder_error": "Složku se nepodařilo smazat. Zkuste to znovu.",
+      "rename_folder_error": "Složku se nepodařilo přejmenovat. Zkuste to znovu.",
       "collection_link_copied": "Odkaz na kolekci byl zkopírován do schránky."
     }
   },

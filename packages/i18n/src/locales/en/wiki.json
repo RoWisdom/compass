@@ -36,6 +36,9 @@
       "title": "Delete folder?",
       "description": "Pages and subfolders inside move up one level — they are not deleted."
     },
+    "rename_folder_modal": {
+      "name_placeholder": "Folder name"
+    },
     "header": {
       "add_page": "Add page"
     },
@@ -46,6 +49,7 @@
       "edit_collection": "Edit collection",
       "collection_options": "Collection options",
       "move_to": "Move to",
+      "rename": "Rename",
       "remove_from_wiki": "Remove from Wiki"
     },
     "add_existing_page_modal": {
@@ -91,6 +95,7 @@
       "create_page_in_collection_error": "Page could not be created or added to the collection. Please try again.",
       "create_folder_error": "Folder could not be created. Please try again.",
       "delete_folder_error": "Couldn't delete the folder. Please try again.",
+      "rename_folder_error": "Couldn't rename the folder. Please try again.",
       "collection_link_copied": "Collection link copied to clipboard."
     }
   },

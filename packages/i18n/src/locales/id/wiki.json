@@ -36,6 +36,9 @@
       "title": "Hapus folder?",
       "description": "Halaman dan subfolder di dalamnya naik satu tingkat — tidak dihapus."
     },
+    "rename_folder_modal": {
+      "name_placeholder": "Nama folder"
+    },
     "header": {
       "add_page": "Tambah halaman"
     },
@@ -46,6 +49,7 @@
       "edit_collection": "Edit koleksi",
       "collection_options": "Opsi koleksi",
       "move_to": "Pindahkan ke",
+      "rename": "Ganti nama",
       "remove_from_wiki": "Hapus dari Wiki"
     },
     "add_existing_page_modal": {
@@ -91,6 +95,7 @@
       "create_page_in_collection_error": "Halaman tidak dapat dibuat atau ditambahkan ke koleksi. Silakan coba lagi.",
       "create_folder_error": "Folder tidak dapat dibuat. Silakan coba lagi.",
       "delete_folder_error": "Gagal menghapus folder. Coba lagi.",
+      "rename_folder_error": "Gagal mengganti nama folder. Coba lagi.",
       "collection_link_copied": "Tautan koleksi disalin ke clipboard."
     }
   },

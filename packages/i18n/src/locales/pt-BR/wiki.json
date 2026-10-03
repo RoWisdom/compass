@@ -36,6 +36,9 @@
       "title": "Excluir pasta?",
       "description": "As páginas e subpastas dentro dela sobem um nível — não são excluídas."
     },
+    "rename_folder_modal": {
+      "name_placeholder": "Nome da pasta"
+    },
     "header": {
       "add_page": "Adicionar página"
     },
@@ -46,6 +49,7 @@
       "edit_collection": "Editar coleção",
       "collection_options": "Opções da coleção",
       "move_to": "Mover para",
+      "rename": "Renomear",
       "remove_from_wiki": "Remover do Wiki"
     },
     "add_existing_page_modal": {
@@ -91,6 +95,7 @@
       "create_page_in_collection_error": "Não foi possível criar a página ou adicioná-la à coleção. Tente novamente.",
       "create_folder_error": "Não foi possível criar a pasta. Tente novamente.",
       "delete_folder_error": "Não foi possível excluir a pasta. Tente novamente.",
+      "rename_folder_error": "Não foi possível renomear a pasta. Tente novamente.",
       "collection_link_copied": "Link da coleção copiado para a área de transferência."
     }
   },

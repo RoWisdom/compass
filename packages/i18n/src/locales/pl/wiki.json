@@ -36,6 +36,9 @@
       "title": "Usunąć folder?",
       "description": "Strony i podfoldery w środku przeniosą się o poziom wyżej — nie zostaną usunięte."
     },
+    "rename_folder_modal": {
+      "name_placeholder": "Nazwa folderu"
+    },
     "header": {
       "add_page": "Dodaj stronę"
     },
@@ -46,6 +49,7 @@
       "edit_collection": "Edytuj kolekcję",
       "collection_options": "Opcje kolekcji",
       "move_to": "Przenieś do",
+      "rename": "Zmień nazwę",
       "remove_from_wiki": "Usuń z Wiki"
     },
     "add_existing_page_modal": {
@@ -91,6 +95,7 @@
       "create_page_in_collection_error": "Nie udało się utworzyć strony lub dodać jej do kolekcji. Spróbuj ponownie.",
       "create_folder_error": "Nie udało się utworzyć folderu. Spróbuj ponownie.",
       "delete_folder_error": "Nie udało się usunąć folderu. Spróbuj ponownie.",
+      "rename_folder_error": "Nie udało się zmienić nazwy folderu. Spróbuj ponownie.",
       "collection_link_copied": "Link do kolekcji skopiowano do schowka."
     }
   },

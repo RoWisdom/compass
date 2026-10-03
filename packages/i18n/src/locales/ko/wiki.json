@@ -36,6 +36,9 @@
       "title": "폴더를 삭제할까요?",
       "description": "안에 있는 페이지와 하위 폴더는 한 단계 위로 이동하며 삭제되지 않습니다."
     },
+    "rename_folder_modal": {
+      "name_placeholder": "폴더 이름"
+    },
     "header": {
       "add_page": "페이지 추가"
     },
@@ -46,6 +49,7 @@
       "edit_collection": "컬렉션 편집",
       "collection_options": "컬렉션 옵션",
       "move_to": "이동 위치",
+      "rename": "이름 바꾸기",
       "remove_from_wiki": "위키에서 제거"
     },
     "add_existing_page_modal": {
@@ -91,6 +95,7 @@
       "create_page_in_collection_error": "페이지를 만들거나 컬렉션에 추가할 수 없습니다. 다시 시도해 주세요.",
       "create_folder_error": "폴더를 만들 수 없습니다. 다시 시도해 주세요.",
       "delete_folder_error": "폴더를 삭제하지 못했습니다. 다시 시도해 주세요.",
+      "rename_folder_error": "폴더 이름을 바꾸지 못했습니다. 다시 시도해 주세요.",
       "collection_link_copied": "컬렉션 링크가 클립보드에 복사되었습니다."
     }
   },

@@ -36,6 +36,9 @@
       "title": "Ordner löschen?",
       "description": "Seiten und Unterordner darin werden eine Ebene nach oben verschoben – sie werden nicht gelöscht."
     },
+    "rename_folder_modal": {
+      "name_placeholder": "Ordnername"
+    },
     "header": {
       "add_page": "Seite hinzufügen"
     },
@@ -46,6 +49,7 @@
       "edit_collection": "Sammlung bearbeiten",
       "collection_options": "Sammlungsoptionen",
       "move_to": "Verschieben nach",
+      "rename": "Umbenennen",
       "remove_from_wiki": "Aus Wiki entfernen"
     },
     "add_existing_page_modal": {
@@ -91,6 +95,7 @@
       "create_page_in_collection_error": "Seite konnte nicht erstellt oder zur Sammlung hinzugefügt werden. Bitte versuchen Sie es erneut.",
       "create_folder_error": "Ordner konnte nicht erstellt werden. Bitte versuchen Sie es erneut.",
       "delete_folder_error": "Ordner konnte nicht gelöscht werden. Bitte erneut versuchen.",
+      "rename_folder_error": "Ordner konnte nicht umbenannt werden. Bitte erneut versuchen.",
       "collection_link_copied": "Sammlungslink in die Zwischenablage kopiert."
     }
   },

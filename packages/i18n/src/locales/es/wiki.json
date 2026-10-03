@@ -36,6 +36,9 @@
       "title": "¿Eliminar carpeta?",
       "description": "Las páginas y subcarpetas que contiene suben un nivel; no se eliminan."
     },
+    "rename_folder_modal": {
+      "name_placeholder": "Nombre de la carpeta"
+    },
     "header": {
       "add_page": "Añadir página"
     },
@@ -46,6 +49,7 @@
       "edit_collection": "Editar colección",
       "collection_options": "Opciones de la colección",
       "move_to": "Mover a",
+      "rename": "Cambiar nombre",
       "remove_from_wiki": "Quitar de Wiki"
     },
     "add_existing_page_modal": {
@@ -91,6 +95,7 @@
       "create_page_in_collection_error": "No se pudo crear la página o añadirla a la colección. Inténtalo de nuevo.",
       "create_folder_error": "No se pudo crear la carpeta. Inténtalo de nuevo.",
       "delete_folder_error": "No se pudo eliminar la carpeta. Inténtalo de nuevo.",
+      "rename_folder_error": "No se pudo cambiar el nombre de la carpeta. Inténtalo de nuevo.",
       "collection_link_copied": "Enlace de la colección copiado al portapapeles."
     }
   },

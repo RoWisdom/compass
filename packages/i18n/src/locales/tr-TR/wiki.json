@@ -36,6 +36,9 @@
       "title": "Klasör silinsin mi?",
       "description": "İçindeki sayfalar ve alt klasörler bir üst seviyeye taşınır — silinmez."
     },
+    "rename_folder_modal": {
+      "name_placeholder": "Klasör adı"
+    },
     "header": {
       "add_page": "Sayfa ekle"
     },
@@ -46,6 +49,7 @@
       "edit_collection": "Koleksiyonu düzenle",
       "collection_options": "Koleksiyon seçenekleri",
       "move_to": "Şuraya taşı",
+      "rename": "Yeniden adlandır",
       "remove_from_wiki": "Wiki'den kaldır"
     },
     "add_existing_page_modal": {
@@ -91,6 +95,7 @@
       "create_page_in_collection_error": "Sayfa oluşturulamadı veya koleksiyona eklenemedi. Lütfen tekrar deneyin.",
       "create_folder_error": "Klasör oluşturulamadı. Lütfen tekrar deneyin.",
       "delete_folder_error": "Klasör silinemedi. Lütfen tekrar deneyin.",
+      "rename_folder_error": "Klasör yeniden adlandırılamadı. Lütfen tekrar deneyin.",
       "collection_link_copied": "Koleksiyon bağlantısı panoya kopyalandı."
     }
   },

@@ -36,6 +36,9 @@
       "title": "删除文件夹？",
       "description": "文件夹里的页面和子文件夹会移到上一级，不会被删除。"
     },
+    "rename_folder_modal": {
+      "name_placeholder": "文件夹名称"
+    },
     "header": {
       "add_page": "添加页面"
     },
@@ -46,6 +49,7 @@
       "edit_collection": "编辑集合",
       "collection_options": "集合选项",
       "move_to": "移动到",
+      "rename": "重命名",
       "remove_from_wiki": "从 Wiki 中移除"
     },
     "add_existing_page_modal": {
@@ -91,6 +95,7 @@
       "create_page_in_collection_error": "无法创建页面或将其添加到集合中。请重试。",
       "create_folder_error": "无法创建文件夹。请重试。",
       "delete_folder_error": "无法删除文件夹。请重试。",
+      "rename_folder_error": "无法重命名文件夹。请重试。",
       "collection_link_copied": "集合链接已复制到剪贴板。"
     }
   },

@@ -36,6 +36,9 @@
       "title": "刪除資料夾？",
       "description": "資料夾裡的頁面和子資料夾會移到上一層，不會被刪除。"
     },
+    "rename_folder_modal": {
+      "name_placeholder": "資料夾名稱"
+    },
     "header": {
       "add_page": "新增頁面"
     },
@@ -46,6 +49,7 @@
       "edit_collection": "編輯集合",
       "collection_options": "集合選項",
       "move_to": "移動到",
+      "rename": "重新命名",
       "remove_from_wiki": "從 Wiki 中移除"
     },
     "add_existing_page_modal": {
@@ -91,6 +95,7 @@
       "create_page_in_collection_error": "無法建立頁面或將其加入集合。請再試一次。",
       "create_folder_error": "無法建立資料夾。請再試一次。",
       "delete_folder_error": "無法刪除資料夾。請重試。",
+      "rename_folder_error": "無法重新命名資料夾。請重試。",
       "collection_link_copied": "集合連結已複製到剪貼簿。"
     }
   },
