@@ -37,6 +37,7 @@
     },
     "menu": {
       "create_new_page": "Yeni sayfa oluştur",
+      "create_new_folder": "Yeni klasör oluştur",
       "add_existing_page": "Var olan sayfa ekle",
       "edit_collection": "Koleksiyonu düzenle",
       "collection_options": "Koleksiyon seçenekleri",
@@ -84,6 +85,7 @@
       "target_required": "Lütfen sayfaların taşınacağı bir koleksiyon seçin.",
       "create_page_error": "Sayfa oluşturulamadı. Lütfen tekrar deneyin.",
       "create_page_in_collection_error": "Sayfa oluşturulamadı veya koleksiyona eklenemedi. Lütfen tekrar deneyin.",
+      "create_folder_error": "Klasör oluşturulamadı. Lütfen tekrar deneyin.",
       "collection_link_copied": "Koleksiyon bağlantısı panoya kopyalandı."
     }
   },

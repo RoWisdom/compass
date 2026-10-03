@@ -37,6 +37,7 @@
     },
     "menu": {
       "create_new_page": "Crea nuova pagina",
+      "create_new_folder": "Crea nuova cartella",
       "add_existing_page": "Aggiungi pagina esistente",
       "edit_collection": "Modifica raccolta",
       "collection_options": "Opzioni della raccolta",
@@ -84,6 +85,7 @@
       "target_required": "Seleziona una raccolta in cui spostare le pagine.",
       "create_page_error": "Impossibile creare la pagina. Riprova.",
       "create_page_in_collection_error": "Impossibile creare la pagina o aggiungerla alla raccolta. Riprova.",
+      "create_folder_error": "Impossibile creare la cartella. Riprova.",
       "collection_link_copied": "Link della raccolta copiato negli appunti."
     }
   },

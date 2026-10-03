@@ -37,6 +37,7 @@
     },
     "menu": {
       "create_new_page": "新しいページを作成",
+      "create_new_folder": "新しいフォルダを作成",
       "add_existing_page": "既存のページを追加",
       "edit_collection": "コレクションを編集",
       "collection_options": "コレクションのオプション",
@@ -84,6 +85,7 @@
       "target_required": "ページの移動先となるコレクションを選択してください。",
       "create_page_error": "ページを作成できませんでした。もう一度お試しください。",
       "create_page_in_collection_error": "ページを作成するか、コレクションに追加できませんでした。もう一度お試しください。",
+      "create_folder_error": "フォルダを作成できませんでした。もう一度お試しください。",
       "collection_link_copied": "コレクションリンクをクリップボードにコピーしました。"
     }
   },

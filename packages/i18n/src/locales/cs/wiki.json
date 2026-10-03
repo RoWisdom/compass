@@ -37,6 +37,7 @@
     },
     "menu": {
       "create_new_page": "Vytvořit novou stránku",
+      "create_new_folder": "Vytvořit novou složku",
       "add_existing_page": "Přidat existující stránku",
       "edit_collection": "Upravit kolekci",
       "collection_options": "Možnosti kolekce",
@@ -84,6 +85,7 @@
       "target_required": "Vyberte prosím kolekci, do které chcete stránky přesunout.",
       "create_page_error": "Stránku se nepodařilo vytvořit. Zkuste to prosím znovu.",
       "create_page_in_collection_error": "Stránku se nepodařilo vytvořit nebo přidat do kolekce. Zkuste to prosím znovu.",
+      "create_folder_error": "Složku se nepodařilo vytvořit. Zkuste to prosím znovu.",
       "collection_link_copied": "Odkaz na kolekci byl zkopírován do schránky."
     }
   },

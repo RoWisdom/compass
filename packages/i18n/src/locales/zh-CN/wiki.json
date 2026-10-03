@@ -37,6 +37,7 @@
     },
     "menu": {
       "create_new_page": "创建新页面",
+      "create_new_folder": "新建文件夹",
       "add_existing_page": "添加现有页面",
       "edit_collection": "编辑集合",
       "collection_options": "集合选项",
@@ -84,6 +85,7 @@
       "target_required": "请选择要将页面移动到的集合。",
       "create_page_error": "无法创建页面。请重试。",
       "create_page_in_collection_error": "无法创建页面或将其添加到集合中。请重试。",
+      "create_folder_error": "无法创建文件夹。请重试。",
       "collection_link_copied": "集合链接已复制到剪贴板。"
     }
   },

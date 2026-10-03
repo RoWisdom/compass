@@ -37,6 +37,7 @@
     },
     "menu": {
       "create_new_page": "Crear nueva página",
+      "create_new_folder": "Crear nueva carpeta",
       "add_existing_page": "Añadir página existente",
       "edit_collection": "Editar colección",
       "collection_options": "Opciones de la colección",
@@ -84,6 +85,7 @@
       "target_required": "Selecciona una colección a la que mover las páginas.",
       "create_page_error": "No se pudo crear la página. Inténtalo de nuevo.",
       "create_page_in_collection_error": "No se pudo crear la página o añadirla a la colección. Inténtalo de nuevo.",
+      "create_folder_error": "No se pudo crear la carpeta. Inténtalo de nuevo.",
       "collection_link_copied": "Enlace de la colección copiado al portapapeles."
     }
   },

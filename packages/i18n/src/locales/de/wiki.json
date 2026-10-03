@@ -37,6 +37,7 @@
     },
     "menu": {
       "create_new_page": "Neue Seite erstellen",
+      "create_new_folder": "Neuen Ordner erstellen",
       "add_existing_page": "Vorhandene Seite hinzufügen",
       "edit_collection": "Sammlung bearbeiten",
       "collection_options": "Sammlungsoptionen",
@@ -84,6 +85,7 @@
       "target_required": "Bitte wählen Sie eine Sammlung aus, in die die Seiten verschoben werden sollen.",
       "create_page_error": "Seite konnte nicht erstellt werden. Bitte versuchen Sie es erneut.",
       "create_page_in_collection_error": "Seite konnte nicht erstellt oder zur Sammlung hinzugefügt werden. Bitte versuchen Sie es erneut.",
+      "create_folder_error": "Ordner konnte nicht erstellt werden. Bitte versuchen Sie es erneut.",
       "collection_link_copied": "Sammlungslink in die Zwischenablage kopiert."
     }
   },

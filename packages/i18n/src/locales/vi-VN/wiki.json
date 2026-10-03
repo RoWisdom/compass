@@ -37,6 +37,7 @@
     },
     "menu": {
       "create_new_page": "Tạo trang mới",
+      "create_new_folder": "Tạo thư mục mới",
       "add_existing_page": "Thêm trang hiện có",
       "edit_collection": "Chỉnh sửa bộ sưu tập",
       "collection_options": "Tùy chọn bộ sưu tập",
@@ -84,6 +85,7 @@
       "target_required": "Vui lòng chọn một bộ sưu tập để chuyển các trang đến.",
       "create_page_error": "Không thể tạo trang. Vui lòng thử lại.",
       "create_page_in_collection_error": "Không thể tạo trang hoặc thêm trang vào bộ sưu tập. Vui lòng thử lại.",
+      "create_folder_error": "Không thể tạo thư mục. Vui lòng thử lại.",
       "collection_link_copied": "Đã sao chép liên kết bộ sưu tập vào bộ nhớ tạm."
     }
   },

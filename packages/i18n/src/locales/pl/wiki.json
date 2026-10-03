@@ -37,6 +37,7 @@
     },
     "menu": {
       "create_new_page": "Utwórz nową stronę",
+      "create_new_folder": "Utwórz nowy folder",
       "add_existing_page": "Dodaj istniejącą stronę",
       "edit_collection": "Edytuj kolekcję",
       "collection_options": "Opcje kolekcji",
@@ -84,6 +85,7 @@
       "target_required": "Wybierz kolekcję, do której chcesz przenieść strony.",
       "create_page_error": "Nie udało się utworzyć strony. Spróbuj ponownie.",
       "create_page_in_collection_error": "Nie udało się utworzyć strony lub dodać jej do kolekcji. Spróbuj ponownie.",
+      "create_folder_error": "Nie udało się utworzyć folderu. Spróbuj ponownie.",
       "collection_link_copied": "Link do kolekcji skopiowano do schowka."
     }
   },

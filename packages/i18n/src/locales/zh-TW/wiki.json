@@ -37,6 +37,7 @@
     },
     "menu": {
       "create_new_page": "建立新頁面",
+      "create_new_folder": "建立新資料夾",
       "add_existing_page": "新增現有頁面",
       "edit_collection": "編輯集合",
       "collection_options": "集合選項",
@@ -84,6 +85,7 @@
       "target_required": "請選擇要將頁面移動到的集合。",
       "create_page_error": "無法建立頁面。請再試一次。",
       "create_page_in_collection_error": "無法建立頁面或將其加入集合。請再試一次。",
+      "create_folder_error": "無法建立資料夾。請再試一次。",
       "collection_link_copied": "集合連結已複製到剪貼簿。"
     }
   },

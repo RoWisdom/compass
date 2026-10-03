@@ -37,6 +37,7 @@
     },
     "menu": {
       "create_new_page": "Buat halaman baru",
+      "create_new_folder": "Buat folder baru",
       "add_existing_page": "Tambah halaman yang sudah ada",
       "edit_collection": "Edit koleksi",
       "collection_options": "Opsi koleksi",
@@ -84,6 +85,7 @@
       "target_required": "Silakan pilih koleksi tujuan untuk memindahkan halaman.",
       "create_page_error": "Halaman tidak dapat dibuat. Silakan coba lagi.",
       "create_page_in_collection_error": "Halaman tidak dapat dibuat atau ditambahkan ke koleksi. Silakan coba lagi.",
+      "create_folder_error": "Folder tidak dapat dibuat. Silakan coba lagi.",
       "collection_link_copied": "Tautan koleksi disalin ke clipboard."
     }
   },

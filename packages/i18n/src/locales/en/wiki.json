@@ -37,6 +37,7 @@
     },
     "menu": {
       "create_new_page": "Create new page",
+      "create_new_folder": "Create new folder",
       "add_existing_page": "Add existing page",
       "edit_collection": "Edit collection",
       "collection_options": "Collection options",
@@ -84,6 +85,7 @@
       "target_required": "Please select a collection to move pages to.",
       "create_page_error": "Page could not be created. Please try again.",
       "create_page_in_collection_error": "Page could not be created or added to the collection. Please try again.",
+      "create_folder_error": "Folder could not be created. Please try again.",
       "collection_link_copied": "Collection link copied to clipboard."
     }
   },
