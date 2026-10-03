@@ -591,6 +591,7 @@ class WikiPageViewSet(BaseViewSet):
         # instance，save() 之后 page 上已经是新值，就再也算不出旧的了。
         old_name = page.name
         old_collection_id = page.collection_id
+        old_parent_id = page.parent_id
 
         page = serializer.save()
 
@@ -607,8 +608,13 @@ class WikiPageViewSet(BaseViewSet):
         # 旧路径必须按 save() **之前**的集合与名字算：用保存后的集合去算旧路径，
         # 会指向一个不存在的文件，搬移静默失败、旧文件留在原集合文件夹里。
         # 搬移是尽力而为（镜像搬移内部吞 OSError），失败方向永远是「文件没搬」而不是「改名失败」。
-        if page.name != old_name or page.collection_id != old_collection_id:
-            _move_wiki_page_mirror(page, old_name, old_collection_id)
+        # 三个条件里任何一个变了，这一页的镜像路径就变了（镜像路径 = 集合名 / 祖先链 / 文件名）。
+        if page.name != old_name or page.collection_id != old_collection_id or page.parent_id != old_parent_id:
+            # 只有 parent 真的变了才需要旧祖先链。`old_parent_id` 是 save() 之前抓的
+            # 裸 UUID，所以这里再算它的祖先链是正确的 —— 但 `_page_ancestors` 是逐层
+            # 查库，而改名是协同编辑器**每次防抖都会发**的常规路径，没必要为它白走一趟。
+            old_ancestors = _page_ancestors(old_parent_id) if page.parent_id != old_parent_id else None
+            _move_wiki_page_mirror(page, old_name, old_collection_id, old_ancestors=old_ancestors)
 
         return Response(WikiPageDetailSerializer(page).data, status=status.HTTP_200_OK)
 
@@ -894,29 +900,46 @@ def _wiki_mirror_path(page, *, collection_id, name, ancestors):
     )
 
 
-def _move_wiki_page_mirror(page, old_name, old_collection_id):
-    """Move a wiki page's mirror after a rename, a collection change, or both.
+def _move_wiki_page_mirror(page, old_name, old_collection_id, old_ancestors=None):
+    """Move a wiki page's mirror after a rename, a collection change, a re-parent, or any mix.
 
     Both states are computed explicitly: the old path from ``old_name`` +
-    ``old_collection_id`` (the values before ``save()``), the new path from the
-    saved instance. A move that crosses roots (collection → project, or the
-    reverse) is just two paths in different trees — nothing here cares which.
+    ``old_collection_id`` + ``old_ancestors`` (the values before the write), the new
+    path from the saved instance. A move that crosses roots (collection → project,
+    or the reverse) is just two paths in different trees — nothing here cares which.
+
+    ``old_ancestors`` defaults to ``None``, which asserts **「the ancestor chain did
+    not change」** and resolves to the current one — that is exactly the pre-Round-E
+    behaviour, so the two callers that only rename or only change the collection keep
+    working untouched. A caller that changes ``parent`` **must** pass the chain it
+    captured before the write: ``save()`` overwrites ``parent_id``, so by the time
+    this runs the old chain is unrecoverable. ``None`` therefore means "unchanged",
+    never "unknown" — passing it while the parent *did* move computes the old path at
+    the new location, and the move silently finds nothing.
 
     When the new state has no home the old file is **left where it is** and a
-    warning is logged: the wiki never deletes vault folders (design §243
-    「删集合不删文件夹」), and a page leaving the wiki for a project-less
-    limbo is not a reason to silently destroy the user's notes.
+    warning is logged: the wiki never deletes vault folders (删集合不删文件夹), and a
+    page leaving the wiki for a project-less limbo is not a reason to silently
+    destroy the user's notes.
 
     The recorded path (``Page.external_id``) follows the file, so the next body write
     still recognises it as this page's own — see ``_repoint_page_external_id`` for the
-    guards. One case is deliberately **not** covered: a descendant whose file moves
-    merely because its *parent's* folder moved keeps a stale ``external_id`` — the
-    pointer is only re-pointed when the page's own route runs. The next write for such
-    a page lands on a ``-{id[:8]}`` sibling; the original is left alone.
+    guards.
+
+    A descendant whose file moves merely because its *parent's* folder moved keeps a
+    stale ``external_id`` — that is **still** not covered here, and deliberately so:
+    the descendant's file rides along inside the moved folder (``_move_page_file``'s
+    same-named-directory branch), so there is nothing for this function to move, and
+    re-pointing without a signal that the carrier actually moved risks claiming a
+    file that is not ours. Closing that gap is its own round — see
+    `罗盘-Wiki文件夹删除与移动-设计.md` §2.2 / §7 (E-16).
     """
-    ancestors = _page_ancestors(page.parent_id)
-    old_path = _wiki_mirror_path(page, collection_id=old_collection_id, name=old_name, ancestors=ancestors)
-    new_path = _wiki_mirror_path(page, collection_id=page.collection_id, name=page.name, ancestors=ancestors)
+    if old_ancestors is None:
+        # 祖先链**没变**（只改名 / 只换集合）：新旧共用一条链，与加这个参数之前逐字相同。
+        old_ancestors = _page_ancestors(page.parent_id)
+    new_ancestors = _page_ancestors(page.parent_id)
+    old_path = _wiki_mirror_path(page, collection_id=old_collection_id, name=old_name, ancestors=old_ancestors)
+    new_path = _wiki_mirror_path(page, collection_id=page.collection_id, name=page.name, ancestors=new_ancestors)
 
     if old_path is None:
         # Nothing on disk to move. Either the page never had a home, or it is
