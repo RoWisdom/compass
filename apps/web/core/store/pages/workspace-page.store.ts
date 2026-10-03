@@ -643,13 +643,32 @@ export class WorkspacePageStore implements IWorkspacePageStore {
    *   3. **不设 `loader`** —— 与 `moveTo` / `removeFromWiki` / `createPage` 同一惯例：
    *      一个改名不该把整个主面板打回骨架。
    *
-   * **不自己改本地 state**（对比 `deleteFolder` 要 `unset` 三处）：改名只动 `name` 一个字段，
-   * 而 `fetchWikiTree` 会重灌 `data`；列表面板读的 `getPageById` 是 `computedFn`，名字跟着
-   * 就变。多写一份乐观更新，只是多一处会与树不一致的副本。
+   * **必须自己把名字写回本地实例** —— 这条路径上**没有任何东西**会替我们写。实测：对
+   * **已存在**的实例，三条取数链路全部把 `name` 丢掉：
+   *   · `fetchWikiTree`（`:454-455`）：`const { name, ...otherFields } = row;` 把名字解构
+   *     摘出后传 `mutateProperties(otherFields, false)`，而 `base-page.ts:548` 一句
+   *     `if (key === "name" && !shouldUpdateName) return;` 就跳过了；能带上正确名字的
+   *     `new WorkspacePage(...)` 分支（`:457`）**只在实例不存在时**走。
+   *   · `fetchFolderPages`（`:400`）与 `fetchPageDetails` 是同一款写法。
+   * 这是本仓的**既定约定**，不是疏漏：标题归协同编辑器所有，重拉树不该冲掉用户正在输入的
+   * 字（`project-page.store.ts` 同款英文注释 `// …update all fields except name`）。
+   * 而侧栏与列表行读的**正是这个实例**（`sidebar.tsx:877` / `folder-list-row.tsx:67` 都取
+   * `getPageById(...)`），所以**只重拉树的话，改名在界面上根本不会发生** —— 要等一次硬刷新。
    */
   renameFolder = async (workspaceSlug: string, folderId: string, name: string) => {
     try {
       await this.service.update(workspaceSlug, folderId, { name });
+
+      const page = this.getPageById(folderId);
+      if (page && page.name !== name) {
+        page.updateTitle(name);
+        // `updateTitle` 会把 `oldName` 记成**旧**名，而 `BasePage` 的标题 reaction
+        // （`base-page.ts:200-220`，2s 防抖）稍后会拿新名再打一次 PATCH；万一那次冗余
+        // 请求失败，它会把名字回滚成 `oldName` —— 也就是把用户刚改好的样子退回旧名。
+        // 服务端此刻已经是新名了，所以回滚目标必须是新名，那次失败才等于什么都没做。
+        page.oldName = name;
+      }
+
       await this.fetchWikiTree(workspaceSlug).catch(() => {});
     } catch (error) {
       runInAction(() => {
