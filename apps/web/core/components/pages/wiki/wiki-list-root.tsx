@@ -173,8 +173,8 @@ export const WikiListRoot = observer(function WikiListRoot(props: Props) {
             // 那个组件被项目页共用，它没有也不该有「层级」这个概念。
             <div key={line.pageId} className={wikiTreeIndentClass(line.depth)}>
               {isFolderRow ? (
-                // 子文件夹：可点的行（下钻进它自己的 `?folder=`），**没有** `⋯`（裁定 11）。
-                <FolderListRow pageId={line.pageId} />
+                // 子文件夹：可点的行（下钻进它自己的 `?folder=`），**有** `•••`（Round E 起，裁定 11 作废）。
+                <FolderListRow pageId={line.pageId} canWrite={canWriteWiki} onChanged={refreshList} />
               ) : (
                 <PageListBlock
                   pageId={line.pageId}
