@@ -627,9 +627,52 @@ class WikiPageViewSet(BaseViewSet):
         if page is None:
             return Response({"error": "Page not found in this wiki."}, status=status.HTTP_404_NOT_FOUND)
 
+        if page.node_type == Page.NODE_TYPE_FOLDER:
+            return self._destroy_folder(page)
+
         # 移出 Wiki 只是取消收录，绝不删除页面本身 —— 页面承载版本历史与评论。
         # 同 create：QuerySet.update() 绕过 auto_now，updated_at 要显式传。
         Page.objects.filter(id=page.id).update(is_global=False, collection=None, updated_at=timezone.now())
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @staticmethod
+    def _destroy_folder(folder):
+        """删一个文件夹（罗盘 Round E，设计 §4.3）。语义照 Confluence Cloud：
+        **内容不删，整体上浮一级**。
+
+        与页面那条路径的差别只有一条，但它决定了这个功能对不对：页面被「移出 Wiki」时
+        **不动它的子节点**（子页变成孤儿、按根渲染 —— 那是既有行为，本轮不碰）；
+        而文件夹必须把**直接子节点重挂到自己的父级**上，否则用户看到的是「文件夹没了，
+        里面的东西也跟着没了」—— 与 Confluence 的承诺正好相反。
+
+        **为什么只重挂直接子节点就够**：后代的路径就是祖先链。被删的是 F，F 的子节点 C
+        挂到 F 的父级；C 以下的整棵子树里每一个节点的父**都没变**，所以祖先链里唯一变的
+        那一段（F 被摘掉）是通过 C 传导的。重挂 C 一处，全子树自动正确。
+
+        文件夹自己**不删行**：`is_global=False`（出 Wiki），与页面那条路径同一条不变量。
+        文件夹没有正文因此也没有自己的镜像（`create_page` 对文件夹跳过镜像），所以
+        子树里第一个要搬的就是它的子节点。
+
+        **顺序是载荷**：① 拍快照 → ② 重挂 → ③ 自己出 Wiki → ④ 搬镜像。
+        ④ 必须在 ② 之后 —— 搬移要读 `parent_id` 算新路径。
+        """
+        # ① 快照必须在重挂之前（重挂之后这些行就不再挂在 folder 下面了）。
+        child_ids, state = _snapshot_children_mirror_state(folder)
+
+        # ② 直接子节点上浮到被删文件夹的原父级。
+        # `collection` 不动（E-4）：被删文件夹与它的兄弟同属一个集合，上浮仍在同一集合里。
+        Page.objects.filter(workspace_id=folder.workspace_id, parent_id=folder.id).update(
+            parent_id=folder.parent_id, updated_at=timezone.now()
+        )
+
+        # ③ 自己出 Wiki —— 只取消收录，绝不删行（与页面那条同一条不变量）。
+        Page.objects.filter(id=folder.id).update(is_global=False, collection=None, updated_at=timezone.now())
+
+        # ④ 子节点的镜像。它们不会自己动：重挂是纯 SQL，磁盘上没有任何目录搬移跟着发生
+        #    （`_move_page_file` 的目录逻辑搬的是「这一页**同名**的目录」，而这里被摘掉的
+        #    那个目录属于**被删的文件夹**，没有任何一页的同名目录对应它）。
+        _move_children_mirrors(child_ids, state)
+
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -1080,6 +1123,53 @@ def _move_descendants_to_collection(page, collection_id):
     # `updated_by` **不写**：与 include / remove 两条路径同一裁定 ——
     # 刷新时间戳，不把执行者盖到「最后编辑人」上。
     Page.objects.filter(id__in=descendant_ids).update(collection=collection_id, updated_at=timezone.now())
+
+
+def _snapshot_children_mirror_state(folder):
+    """``folder`` 的**直接子节点** id 序列 + 每个节点**改之前**的 ``(name, collection_id, ancestors)``。
+
+    只要**直接子节点**，不要整棵子树 —— 与「只重挂直接子节点」是**同一条道理**：一条链上
+    唯一变的那一段通过直接子节点传导。多拍一层不仅白花，还要为每个节点各走一趟
+    ``_page_ancestors``。
+
+    ⚠️ **子节点里有文件夹，而且必须留着 —— 它们是嵌套子树唯一的搬运工。**
+    对**页面**子节点，``_move_page_file`` 搬的是它的 ``.md``。对**文件夹**子节点，
+    它连 ``.md`` 都不存在（文件夹没有正文，也就没有镜像）：``old_path.exists()`` 为假，
+    那个分支什么也不做；真正干活的是**后面那段同名目录搬移** ——
+    ``old_dir = <旧父>/<文件夹名>``、``new_dir = <新父>/<文件夹名>``，
+    然后 ``old_dir.replace(new_dir)``（``markdown_storage.py:289-297``）——
+    整个目录连同里面所有后代**一次搬完**。所以「删 B，B 的 C2 里还有 t2」这种情况，
+    搬 C2 那一次目录替换就把 t2 带走了，**不需要**为 t2 单独做任何事。
+
+    （顺带：``_move_wiki_page_mirror`` 对文件夹走完会落到
+    ``_repoint_page_external_id``，但那里第一行就是
+    ``if not page.external_id or page.external_source != EXTERNAL_SOURCE: return``
+    —— 应用内建的文件夹 ``external_id`` 是 ``None``，直接返回，不会写坏任何东西。）
+
+    **必须在重挂之前取**：重挂之后这些行就不再挂在 ``folder`` 下面了。
+    """
+    children = list(
+        Page.objects.filter(workspace_id=folder.workspace_id, parent_id=folder.id).values(
+            "id", "name", "parent_id", "collection_id"
+        )
+    )
+    state = {
+        str(row["id"]): (row["name"], row["collection_id"], _page_ancestors(row["parent_id"])) for row in children
+    }
+    return [str(row["id"]) for row in children], state
+
+
+def _move_children_mirrors(ordered_ids, state):
+    """搬 ``ordered_ids`` 里每个节点的镜像，逐个跟随 ``external_id``。
+
+    必须在**重挂之后**调用：搬移要读 ``page.parent_id`` 算**新**路径，重挂之前它还是旧值。
+
+    ``state`` 里查不到的节点按「什么都没变」处理（old == new ⇒ ``_move_wiki_page_mirror``
+    内部直接返回），所以多传几个 id 是安全的，不会误搬。
+    """
+    for node in Page.objects.filter(id__in=ordered_ids):
+        old_name, old_collection_id, old_ancestors = state.get(str(node.id), (node.name, node.collection_id, None))
+        _move_wiki_page_mirror(node, old_name, old_collection_id, old_ancestors=old_ancestors)
 
 
 class WikiPageDescriptionViewSet(BaseViewSet):
