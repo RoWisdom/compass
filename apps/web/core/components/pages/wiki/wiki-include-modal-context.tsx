@@ -38,11 +38,18 @@ export function WikiIncludeModalProvider(props: { children: React.ReactNode }) {
   const searchParams = useSearchParams();
   // 与 `wiki/header.tsx`、`wiki/page.tsx` 同一写法
   const collection = searchParams.get("collection") ?? "general";
+  // **Round D：文件夹里没有可收录的目标**（裁定 2 —— 顶栏 Add-page 与空态 CTA 在文件夹里都不渲染，
+  // 所以文件夹里也不该有弹窗）。判据与 header/page 的 **folder 优先** 口径一致：显式带 `folder`
+  // 参数即不可收录。**不能只靠按钮门控**：`?folder=` 的 URL 里没有 `?collection`，上式会退回
+  // `"general"`，`canIncludeIntoCollection("general")` 仍为 true —— 在 general 里开着弹窗、
+  // 浏览器后退进文件夹时 provider 不重建、下面那条 auto-close 也不触发，弹窗会挂着把页面
+  // 悄悄收进 general（正是本轮要消灭的「入口在、写错目标」那类）。
+  const isFolder = searchParams.get("folder") !== null;
   // 只有 `general` 与自建集合能接收收录（`private`/`shared`/`archived` 是派生分区，
   // 理由见 `canIncludeIntoCollection` 的注释）。
   // **门控放在 provider 里**，而不是只放在按钮上：换分区时 provider 不重建、`isModalOpen`
   // 会留着 —— 只门控按钮的话，在 general 打开弹窗再切到 private，弹窗会挂在那儿继续可选页。
-  const canIncludeHere = canIncludeIntoCollection(collection);
+  const canIncludeHere = !isFolder && canIncludeIntoCollection(collection);
 
   // 同时把 state 清掉：只算 `canIncludeHere && isModalOpen` 的话，在上面那个场景里回到
   // general 会凭空弹出来（它只是刚才被门控藏起来了，并没有被关过）。
