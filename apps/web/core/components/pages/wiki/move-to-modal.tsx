@@ -4,16 +4,17 @@
  * See the LICENSE file for details.
  */
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
-import { Folder } from "lucide-react";
+import { Box, Folder } from "lucide-react";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import { PageIcon } from "@plane/propel/icons";
+import { ChevronRightIcon, PageIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { EModalWidth, ModalCore } from "@plane/ui";
+import { cn } from "@plane/utils";
 // components
 import { buildWikiTreeLines, wikiTreeIndentClass } from "@/components/pages/wiki/wiki-tree";
 // hooks
@@ -68,6 +69,14 @@ type Props = {
  * 打开这个弹窗是零网络。
  *
  * 排序与缩进复用 `buildWikiTreeLines`（Round D：不引入第二套层级算法）。
+ *
+ * **集合行带折叠箭头、默认收起**（Round G）—— 一打开只看到集合名，点箭头才铺出该集合的
+ * 整棵子树。被移动节点**所在**的那个集合会自动展开，其余保持收起（否则收起之后用户
+ * 找不到自己那一页）。状态存**展开**集、空集即全收起，与侧栏 `expandedPartitionKeys`
+ * 同一口径。**只折集合层**，树内部不再每层可折 —— 知情的取舍，见设计 §5。
+ *
+ * 图标照侧栏 `sidebar.tsx:668-670` 的约定：集合 `Box` / 文件夹 `Folder` / 页面 `PageIcon`，
+ * 三个层级各一颗、互不复用。
  */
 export const MoveToModal = observer(function MoveToModal(props: Props) {
   const { isOpen, pageId, onMoved, handleClose } = props;
@@ -118,6 +127,42 @@ export const MoveToModal = observer(function MoveToModal(props: Props) {
     ];
   }, [collections, treeRows, pageParentIds, t]);
 
+  /**
+   * 哪些集合是**展开**的。存展开集、空集 ⇒ 全收起 —— 与侧栏 `expandedPartitionKeys`
+   * （`sidebar.tsx:385`）同一口径。理由见 `wiki-tree.ts:150-163`：存折叠集的话默认值得是
+   * 「全部集合键」，而集合是异步来的、之后还会新增，那个默认值每加一个就要补一次，
+   * 漏一处就成了「新集合默认展开」，与「默认收起」自相矛盾（设计 G-2 / G-8）。
+   */
+  const [expandedGroupKeys, setExpandedGroupKeys] = useState<string[]>([]);
+
+  /**
+   * 被移动的节点落在哪个集合 —— 弹窗一打开就把它展开（设计 G-10）。不这么做的话，
+   * 「默认收起」会让用户**找不到自己那一页在哪儿**。同源：侧栏 `sidebar.tsx:570-586`
+   * 自动展开锚点的祖先链。
+   *
+   * **先压成字符串再进依赖**：`treeRows` 是 store 上的数组，引用一变 effect 就重跑，
+   * 而 effect 里又 setState —— 把数组本身放进依赖是**死循环**（设计 §8 那条风险）。
+   */
+  const anchorGroupKey = useMemo(
+    () => (pageId ? (treeRows.find((row) => row.pageId === pageId)?.collectionKey ?? null) : null),
+    [pageId, treeRows]
+  );
+
+  /**
+   * **只在「打开」与「锚点真的换了」时跑**。用户手动开合改的是 `expandedGroupKeys`，
+   * 它**不在**依赖里 —— 所以手动状态不会被程序掰回去（侧栏 `sidebar.tsx:587` 同款
+   * 「**不强行掰回来**」：那颗箭头不该变成一个点了没反应的死控件）。设计 G-6。
+   */
+  useEffect(() => {
+    if (!isOpen) return;
+    setExpandedGroupKeys(anchorGroupKey ? [anchorGroupKey] : []);
+  }, [isOpen, anchorGroupKey]);
+
+  const toggleGroup = (key: string) =>
+    setExpandedGroupKeys((current) =>
+      current.includes(key) ? current.filter((item) => item !== key) : [...current, key]
+    );
+
   const handleMove = async (target: { collectionId: string | null; parentId: string | null }) => {
     if (!workspaceSlug || !pageId) return;
     try {
@@ -140,35 +185,65 @@ export const MoveToModal = observer(function MoveToModal(props: Props) {
       <div className="flex flex-col gap-4 p-5">
         <h3 className="text-16 font-medium">{t("wiki_collections.menu.move_to")}</h3>
         <div className="flex max-h-80 flex-col gap-1 overflow-y-auto">
-          {groups.map((group) => (
-            <div key={group.key} className="flex flex-col">
-              <button
-                type="button"
-                disabled={forbidden.has(group.key)}
-                onClick={() => handleMove({ collectionId: group.key === "general" ? null : group.key, parentId: null })}
-                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-13 hover:bg-layer-1 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <PageIcon className="h-4 w-4 text-tertiary" />
-                <span className="truncate">{group.label}</span>
-              </button>
-              {group.lines.map((line) => (
-                <button
-                  key={line.pageId}
-                  type="button"
-                  disabled={forbidden.has(line.pageId)}
-                  onClick={() => handleMove({ collectionId: null, parentId: line.pageId })}
-                  className={`flex items-center gap-2 rounded-md py-1.5 pr-2 text-left text-13 hover:bg-layer-1 disabled:cursor-not-allowed disabled:opacity-40 ${wikiTreeIndentClass(line.depth + 1)}`}
-                >
-                  {pageNodeTypes[line.pageId] === PAGE_NODE_TYPE_FOLDER ? (
-                    <Folder className="h-4 w-4 flex-shrink-0 text-tertiary" />
+          {groups.map((group) => {
+            const isExpanded = expandedGroupKeys.includes(group.key);
+            return (
+              <div key={group.key} className="flex flex-col">
+                {/* **两个热区**（设计 G-4）：标签 = 移到该集合顶层（行为与改动前**逐字不变**），
+                    箭头 = 展开/收起。与侧栏的分组标题**刻意不同** —— 那边点标题也折叠
+                    （`sidebar.tsx:251-252`），因为这边的整行是一个**动作**。 */}
+                <div className="flex items-center gap-2 rounded-md px-2 py-1.5 text-13 hover:bg-layer-1">
+                  <button
+                    type="button"
+                    disabled={forbidden.has(group.key)}
+                    onClick={() =>
+                      handleMove({ collectionId: group.key === "general" ? null : group.key, parentId: null })
+                    }
+                    className="flex min-w-0 flex-1 items-center gap-2 text-left disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {/* 集合那一行是 `Box`（lucide），**不是**页面行那颗 `PageIcon` ——
+                        侧栏 `sidebar.tsx:668-670` 写死的约定：集合 `Box` / 文件夹 `Folder` /
+                        页面 `PageIcon`，三个层级各一颗、互不复用（设计 G-1）。 */}
+                    <Box className="h-4 w-4 flex-shrink-0 text-tertiary" />
+                    <span className="truncate">{group.label}</span>
+                  </button>
+                  {/* 箭头**常显**，不做「悬停才浮出」（设计 G-3）—— 这是侧栏
+                      `sidebar.tsx:556-561` 对「分组标题」那一档的口径：收起后它是横躺的、
+                      一眼能看见也能点开。没有子行就不给箭头（G-9），留**等宽占位**保对齐。 */}
+                  {group.lines.length > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => toggleGroup(group.key)}
+                      aria-expanded={isExpanded}
+                      aria-label={group.label}
+                      className="flex-shrink-0 text-tertiary"
+                    >
+                      <ChevronRightIcon className={cn("size-3 transition-transform", { "rotate-90": isExpanded })} />
+                    </button>
                   ) : (
-                    <PageIcon className="h-4 w-4 flex-shrink-0 text-tertiary" />
+                    <span className="size-3 flex-shrink-0" />
                   )}
-                  <span className="truncate">{getPageById(line.pageId)?.name ?? ""}</span>
-                </button>
-              ))}
-            </div>
-          ))}
+                </div>
+                {isExpanded &&
+                  group.lines.map((line) => (
+                    <button
+                      key={line.pageId}
+                      type="button"
+                      disabled={forbidden.has(line.pageId)}
+                      onClick={() => handleMove({ collectionId: null, parentId: line.pageId })}
+                      className={`flex items-center gap-2 rounded-md py-1.5 pr-2 text-left text-13 hover:bg-layer-1 disabled:cursor-not-allowed disabled:opacity-40 ${wikiTreeIndentClass(line.depth + 1)}`}
+                    >
+                      {pageNodeTypes[line.pageId] === PAGE_NODE_TYPE_FOLDER ? (
+                        <Folder className="h-4 w-4 flex-shrink-0 text-tertiary" />
+                      ) : (
+                        <PageIcon className="h-4 w-4 flex-shrink-0 text-tertiary" />
+                      )}
+                      <span className="truncate">{getPageById(line.pageId)?.name ?? ""}</span>
+                    </button>
+                  ))}
+              </div>
+            );
+          })}
         </div>
         <div className="flex justify-end gap-2">
           <Button variant="secondary" size="lg" onClick={handleClose}>
