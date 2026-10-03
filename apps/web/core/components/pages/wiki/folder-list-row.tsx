@@ -21,8 +21,8 @@ type Props = {
   pageId: string;
   /**
    * 行右那颗 `•••` 渲不渲染。**由 `WikiListRoot` 的 `canWriteWiki` 给** ——
-   * 菜单里两个动作都是写（移动到… / 删除），后端只给 ADMIN/MEMBER
-   * （`wiki-pages/` 的 PATCH / DELETE）；不收窄的话 GUEST 会看见一个点下去
+   * 菜单里三个动作都是写（移动到… / 重命名 / 删除），后端只给 ADMIN/MEMBER
+   * （都走 `wiki-pages/` 的 PATCH 或 DELETE）；不收窄的话 GUEST 会看见一个点下去
    * 必然 403 的 `•••`。与同一视图里页面行的 `extraActions` 是同一道门。
    */
   canWrite: boolean;
@@ -42,7 +42,8 @@ type Props = {
  * - **有 `⋯`**（Round E 起，裁定 11 作废）—— 当时不给，是因为那两个动作都是**页面专属**的
  *   （移到集合 / 移出 Wiki，都以「页面自己有一行 `collection_id`、有一份 vault 镜像」为前提），
  *   对文件夹「语义未定」。Round E 把文件夹的语义定死了（Confluence 的 Folders 模型）：
- *   移动到… / 删除。所以现在给，而且与侧栏那处**共用** `FolderRowActions`。
+ *   移动到… / 删除（Round F 起再加「重命名」，见 `rename-folder-modal.tsx`）。
+ *   所以现在给，而且与侧栏那处**共用** `FolderRowActions`。
  *
  * 图标用 `lucide-react` 的 `Folder` —— 与侧栏文件夹行**同一个图标**
  * （裁定 9 的同源要求：同一棵树、两种视图里同一个东西要长得一样）。

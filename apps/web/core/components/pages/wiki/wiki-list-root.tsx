@@ -79,8 +79,9 @@ export const WikiListRoot = observer(function WikiListRoot(props: Props) {
       }),
     [filteredPageIds, pageParentIds]
   );
-  // 写权限：行菜单里的两个动作都是**写**（PATCH 换集合 / DELETE 移出），后端只给
-  // ADMIN/MEMBER（`apps/api/plane/app/views/page/collection.py` 的 partial_update/destroy）——
+  // 写权限：两处行菜单里的动作都是**写** —— 页面行的「移动到… / 移出 Wiki」（PATCH 换集合 /
+  // DELETE 移出），文件夹行的「移动到… / 重命名 / 删除」（Round F 起三项，同一个 `•••` 组件）。
+  // 后端只给 ADMIN/MEMBER（`apps/api/plane/app/views/page/collection.py` 的 partial_update/destroy）——
   // 这是**用户 2026-09-27 的裁定**，有意收窄设计与计划原文里的 `[ADMIN, MEMBER, GUEST]`。
   // 前端不收窄的话，GUEST 会看见一个点下去必然 403 的菜单项。
   // 与顶栏按钮、空态 CTA 用的是同一个谓词（工作区级 ADMIN/MEMBER）。
@@ -138,7 +139,7 @@ export const WikiListRoot = observer(function WikiListRoot(props: Props) {
    * 同样用**隐藏**表达，而不是渲染成 disabled。
    *
    * **Round D：只给页面行**（裁定 11）。文件夹行有自己的 `•••`（Round E 起），里面的
-   * 动作是「移动到… / 删除」—— 与这里的两个**不是同一套**：本函数给页面的
+   * 动作是「移动到… / 重命名 / 删除」（Round F 起三项）—— 与这里的两个**不是同一套**：本函数给页面的
    * 「移出 Wiki」对文件夹没有对应物（文件夹的对应动作是删除，语义见后端 `destroy`），
    * 所以两处各自构建，不合并。
    */
