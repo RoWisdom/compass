@@ -20,6 +20,7 @@ import { ProjectDropdown } from "@/components/dropdowns/project/dropdown";
 import { EPageStoreType, usePageStore } from "@/hooks/store";
 import { useAppRouter } from "@/hooks/use-app-router";
 // services
+import { PAGE_NODE_TYPE_FOLDER } from "@/services/page";
 import type { TPageCreatePayload, TPageCreateTarget } from "@/services/page";
 
 type Props = {
@@ -74,6 +75,17 @@ export const PageFormModal = observer(function PageFormModal(props: Props) {
     }
   }, [isOpen]);
 
+  /**
+   * 这次建的是文件夹吗（罗盘 Round D）。判据是 **`target` 而不是响应体** ——
+   * `create_page` 回的是 `WikiPageSerializer`，那里**没有** `node_type`
+   * （默认列表路径的响应必须逐字不变，见执行期裁定 6），所以类型只能从**输入**读，
+   * 而调用方本来就知道自己要建什么。
+   *
+   * 必须定义在 `handleSubmit` **之前**：下面有两处消费它（payload 里带上类型、
+   * 成功后的跳转），外加 JSX 里藏项目选择器那一处。
+   */
+  const isFolder = target.node_type === PAGE_NODE_TYPE_FOLDER;
+
   const handleSubmit = async () => {
     if (!workspaceSlug || isSubmitting) return;
     setIsSubmitting(true);
@@ -94,6 +106,11 @@ export const PageFormModal = observer(function PageFormModal(props: Props) {
       if (target.parent) payload.parent = target.parent;
       if (target.collection_id !== undefined) payload.collection_id = target.collection_id;
       if (target.access !== undefined) payload.access = target.access;
+      // **这一行是整件事的开关**：漏了它，`＋ → 新建文件夹` 会安静地建出一个普通页面 ——
+      // 后端 `node_type` 的默认值就是 `"doc"`（执行期裁定 3：缺省即文档，老客户端不受影响），
+      // 少发这个字段**不报错**，只建错东西。
+      // 与上面三行**同一写法**（`!== undefined` 才发），页面那支因此一个字节都没变。
+      if (target.node_type !== undefined) payload.node_type = target.node_type;
 
       created = await createPage(workspaceSlug, payload);
     } catch {
@@ -101,9 +118,11 @@ export const PageFormModal = observer(function PageFormModal(props: Props) {
       // 文案分叉与官方那两个键的语义一致：落集合时失败，要说清「页面或集合归属」都可能没成。
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: target.collection_id
-          ? t("wiki_collections.toasts.create_page_in_collection_error")
-          : t("wiki_collections.toasts.create_page_error"),
+        title: isFolder
+          ? t("wiki_collections.toasts.create_folder_error")
+          : target.collection_id
+            ? t("wiki_collections.toasts.create_page_in_collection_error")
+            : t("wiki_collections.toasts.create_page_error"),
       });
       return;
     } finally {
@@ -122,13 +141,18 @@ export const PageFormModal = observer(function PageFormModal(props: Props) {
     // **不弹成功 toast**：`wiki_collections.toasts.*` 下没有「页面已创建」的键 ——
     // 官方的规格是建页成功就**打开它**。照着做既省一个键，也少一次打扰。
     handleClose();
-    router.push(`/${workspaceSlug}/wiki/${created.id}`);
+    // 文件夹没有正文、没有编辑器（Confluence F2），所以建完**不进 `/wiki/<id>`** ——
+    // 进去是一个空编辑器，还会被 `[pageId]/page.tsx` 的守卫再 replace 一次（闪一下）。
+    // 直接落到它自己的列表视图。判据同 `isFolder`。
+    router.push(isFolder ? `/${workspaceSlug}/wiki/?folder=${created.id}` : `/${workspaceSlug}/wiki/${created.id}`);
   };
 
   return (
     <ModalCore isOpen={isOpen} handleClose={handleClose} width={EModalWidth.LG}>
       <div className="flex flex-col gap-4 p-5">
-        <h3 className="text-16 font-medium">{t("wiki_collections.menu.create_new_page")}</h3>
+        <h3 className="text-16 font-medium">
+          {isFolder ? t("wiki_collections.menu.create_new_folder") : t("wiki_collections.menu.create_new_page")}
+        </h3>
 
         <Input value={name} onChange={(event) => setName(event.target.value)} placeholder={t("common.name")} />
 
@@ -146,32 +170,39 @@ export const PageFormModal = observer(function PageFormModal(props: Props) {
           `placeholder` 显式传 `common.project`：共享组件的默认值是硬编码英文
           `"Project"`（`base.tsx:67`），那是个波及项目页的既有 i18n 缺口，本轮只在本弹窗里绕开。
         */}
-        <div className="flex items-center gap-2">
-          <ProjectDropdown
-            value={projectId}
-            onChange={(val: string) => setProjectId(val)}
-            multiple={false}
-            buttonVariant="border-with-text"
-            placeholder={t("common.project")}
-          />
-          {projectId && (
-            <button
-              type="button"
-              onClick={() => setProjectId(null)}
-              aria-label={t("common.clear")}
-              className="rounded-sm p-0.5 text-tertiary hover:bg-layer-1 hover:text-secondary"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          )}
-        </div>
+        {/* 文件夹没有正文 ⇒ 不写 vault 镜像 ⇒ 「有没有项目」唯一的作用（决定写到哪个
+            项目目录）消失（裁定 8）。摆一个只会写一行无意义的 `ProjectPage` 的下拉框
+            是纯粹的误导。后端同一条纪律做成守卫（文件夹 + project_id ⇒ 400）。 */}
+        {!isFolder && (
+          <>
+            <div className="flex items-center gap-2">
+              <ProjectDropdown
+                value={projectId}
+                onChange={(val: string) => setProjectId(val)}
+                multiple={false}
+                buttonVariant="border-with-text"
+                placeholder={t("common.project")}
+              />
+              {projectId && (
+                <button
+                  type="button"
+                  onClick={() => setProjectId(null)}
+                  aria-label={t("common.clear")}
+                  className="rounded-sm p-0.5 text-tertiary hover:bg-layer-1 hover:text-secondary"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          </>
+        )}
 
         <div className="flex justify-end gap-2">
           <Button variant="secondary" size="lg" onClick={handleClose} disabled={isSubmitting}>
             {t("common.cancel")}
           </Button>
           <Button variant="primary" size="lg" onClick={handleSubmit} loading={isSubmitting}>
-            {t("wiki_collections.menu.create_new_page")}
+            {isFolder ? t("wiki_collections.menu.create_new_folder") : t("wiki_collections.menu.create_new_page")}
           </Button>
         </div>
       </div>

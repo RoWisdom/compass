@@ -29,7 +29,7 @@ import { EPageStoreType, usePage, usePageStore } from "@/hooks/store";
 // plane web services
 import { WorkspaceService } from "@/services/workspace.service";
 // services
-import { WorkspacePageService } from "@/services/page";
+import { PAGE_NODE_TYPE_FOLDER, WorkspacePageService } from "@/services/page";
 import type { Route } from "./+types/page";
 
 const workspaceService = new WorkspaceService();
@@ -42,7 +42,7 @@ function PageDetailsPage({ params }: Route.ComponentProps) {
   const router = useAppRouter();
   const { workspaceSlug, pageId } = params;
   // store hooks
-  const { fetchPageDetails } = usePageStore(storeType);
+  const { fetchPageDetails, getPageNodeType } = usePageStore(storeType);
   const page = usePage({ pageId, storeType });
   const { getWorkspaceBySlug } = useWorkspace();
   const { uploadEditorAsset, duplicateEditorAsset } = useEditorAsset();
@@ -148,6 +148,24 @@ function PageDetailsPage({ params }: Route.ComponentProps) {
       router.push(pageRootHandlers.getRedirectionLink());
     }
   }, [page?.deleted_at, page?.id, router, pageRootHandlers]);
+
+  /**
+   * **文件夹没有编辑器**（Confluence F2/F4）：正文端点对文件夹一律 400（Task 4）。
+   * 所以手敲 / 粘贴 / 从旧书签进 `/wiki/<文件夹 id>` 时，直接 **replace 到它自己的
+   * 列表视图** —— 否则用户看见的是一个必然报错的编辑器。
+   *
+   * 用 `router.replace` 而不是 `push`：这不是一次导航，是**纠一条走错的地址** ——
+   * 用 `push` 会让返回键在两者之间弹回来（用户按"后退"又回到这条错地址，再被弹走）。
+   *
+   * 判据取 `page?.id` 而不是 `pageId` 参数：类型来自 `pageNodeTypes` 这个旁挂索引，
+   * 而它是**异步**灌进来的（裁定 7）—— 用参数会在首帧就跳，用 `page` 则等到详情
+   * 落地、类型也就绪时再跳，只跳一次。
+   */
+  useEffect(() => {
+    if (page?.id && getPageNodeType(page.id) === PAGE_NODE_TYPE_FOLDER) {
+      router.replace(`/${workspaceSlug}/wiki/?folder=${page.id}`);
+    }
+  }, [page?.id, getPageNodeType, router, workspaceSlug]);
 
   if ((!page || !id) && !pageDetailsError)
     return (

@@ -19,8 +19,17 @@ type Props = {
   isOpen: boolean;
   /** `null` 表示当前没有要移动的页面（弹窗只是被关着）。 */
   pageId: string | null;
-  /** 当前分区：动作落库后要重拉的就是它。 */
-  collection: string;
+  /**
+   * 动作落库后重拉**当前视图**。
+   *
+   * **Round D 起由调用方给，不再由本弹窗自己 `fetchPagesList(workspaceSlug, collection)`。**
+   * 这个弹窗现在也会从**文件夹视图**里被打开（页面行的 `⋯` 在两种视图里都在），
+   * 而那时「当前键」是一个文件夹 uuid —— `fetchPagesList` 打的是 `?collection=<uuid>`，
+   * 后端按 `collection_id` 过滤后会**静默返回空列表**，把用户右半边整个清空，
+   * 且不报任何错。只有调用方知道自己在哪种视图里（`WikiListRoot.refreshList`），
+   * 所以这个决定必须挪到它那儿，而不是在这里猜。
+   */
+  onMoved: () => void;
   handleClose: () => void;
 };
 
@@ -35,13 +44,13 @@ type Props = {
  * 所以列表由构造保证不会出现派生分区。
  */
 export const MoveToCollectionModal = observer(function MoveToCollectionModal(props: Props) {
-  const { isOpen, pageId, collection, handleClose } = props;
+  const { isOpen, pageId, onMoved, handleClose } = props;
   // router
   const { workspaceSlug } = useParams();
   // plane hooks
   const { t } = useTranslation();
   // store hooks
-  const { collections, moveToCollection, fetchPagesList } = usePageStore(EPageStoreType.WORKSPACE);
+  const { collections, moveToCollection } = usePageStore(EPageStoreType.WORKSPACE);
 
   const targets: { id: string | null; label: string }[] = [
     // `collection_id = null` 即「落回 general」，与 `add-existing-page-modal.tsx` 的映射同一个道理。
@@ -63,9 +72,9 @@ export const MoveToCollectionModal = observer(function MoveToCollectionModal(pro
       return;
     }
     handleClose();
-    // 换集合会改变当前分区的成员。与收录弹窗同款：**不 await、吞掉错误** ——
-    // 动作这时已经落库，让刷新失败把它报成错误是撒谎（store 自己会把失败记进 `this.error`）。
-    fetchPagesList(workspaceSlug, collection).catch(() => {});
+    // 换集合会改变**当前这个键**下的成员（分区与文件夹都算）。刷新的分叉在调用方，
+    // 理由见 `onMoved` 的注释 —— 这里只负责把"已经落库了"这件事告诉它。
+    onMoved();
   };
 
   return (

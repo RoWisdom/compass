@@ -19,13 +19,27 @@ import type { Route } from "./+types/page";
 function WikiPage({ params }: Route.ComponentProps) {
   const { workspaceSlug } = params;
   const searchParams = useSearchParams();
-  // **`?collection` 缺省 = 首页**，不兜底成 `"general"`。
-  //
-  // 这个分界必须与侧栏的选中判据（`!activePageId && !explicitCollection`）和顶栏的
-  // `isHome` 是同一条：若这里用 `?? "general"` 兜底后再判，首页会去拉「常规」的列表，
-  // 而侧栏那颗「首页」也亮着 —— 列表内容与高亮行说的是两个地方。
-  // 顺带也省掉首页上那次没用的 `fetchPagesList`。
+  /**
+   * 三个参数不是三选一，而是**一条优先级链**（执行期裁定 1）：
+   *
+   *   `?folder=`  >  `?collection=`  >  都没有（= 首页）
+   *
+   * **「首页」= 两个参数都没写** —— 与 `header.tsx` 的 `isHome`、与侧栏 Home 行的
+   * `isActive` 是同一条判据，三处必须同批改。少改一处就是一处显眼的错：
+   * 这里会把 `?folder=` 当首页去渲染 `WikiHome`，文件夹视图根本不出现。
+   */
+  const explicitFolder = searchParams.get("folder");
   const explicitCollection = searchParams.get("collection");
+
+  // **`?folder=` 优先**：两者同时出现时按文件夹走。不这样定就得为"同时写"编第三种
+  // 语义，而没有任何 UI 会产出这种 URL（侧栏两个入口各自只拼一个参数）。
+  if (explicitFolder !== null)
+    return (
+      <>
+        <PageHead title="Wiki" />
+        <WikiListView workspaceSlug={workspaceSlug} collection={explicitFolder} isFolder />
+      </>
+    );
 
   if (explicitCollection === null)
     return (
@@ -43,20 +57,33 @@ function WikiPage({ params }: Route.ComponentProps) {
   );
 }
 
-const WikiListView = observer(function WikiListView(props: { workspaceSlug: string; collection: string }) {
-  const { workspaceSlug, collection } = props;
+const WikiListView = observer(function WikiListView(props: {
+  workspaceSlug: string;
+  collection: string;
+  isFolder?: boolean;
+}) {
+  const { workspaceSlug, collection, isFolder = false } = props;
   // store hooks
-  const { fetchPagesList } = usePageStore(EPageStoreType.WORKSPACE);
+  const { fetchPagesList, fetchFolderPages } = usePageStore(EPageStoreType.WORKSPACE);
 
+  // 两种视图**各用一条 SWR 键前缀**（`WIKI_FOLDER_` / `WIKI_PAGES_`）而不是共用一个：
+  // 键是字符串，而文件夹 uuid 与集合 uuid 都是 uuid —— 共用前缀就只能靠"它们不会撞"
+  // 这个假设。分成两个前缀，撞不撞都无所谓。
+  //
+  // **端点也随之分叉**：`?collection=` 打 collection 那条，`?folder=` 打 folder 那条。
   useSWR(
-    workspaceSlug && collection ? `WORKSPACE_PAGES_${workspaceSlug}_${collection}` : null,
-    workspaceSlug && collection ? () => fetchPagesList(workspaceSlug, collection) : null
+    workspaceSlug && collection
+      ? `${isFolder ? "WIKI_FOLDER_PAGES" : "WIKI_PAGES"}_${workspaceSlug}_${collection}`
+      : null,
+    workspaceSlug && collection
+      ? () => (isFolder ? fetchFolderPages(workspaceSlug, collection) : fetchPagesList(workspaceSlug, collection))
+      : null
   );
 
   return (
     <div className="relative flex h-full w-full flex-col overflow-hidden">
-      <WikiListMainContent collection={collection}>
-        <WikiListRoot collection={collection} />
+      <WikiListMainContent collection={collection} isFolder={isFolder}>
+        <WikiListRoot collection={collection} isFolder={isFolder} />
       </WikiListMainContent>
     </div>
   );

@@ -17,18 +17,28 @@ import type { TContextMenuItem } from "@plane/ui";
 import { ListLayout } from "@/components/core/list";
 import type { TPageActions } from "@/components/pages/dropdowns";
 import { PageListBlock } from "@/components/pages/list/block";
+import { FolderListRow } from "@/components/pages/wiki/folder-list-row";
 import { MoveToCollectionModal } from "@/components/pages/wiki/move-to-collection-modal";
 import { buildWikiTreeLines, wikiTreeIndentClass } from "@/components/pages/wiki/wiki-tree";
 // hooks
 import { EPageStoreType, usePageStore } from "@/hooks/store";
 import { useUserPermissions } from "@/hooks/store/user";
+// services
+import { PAGE_NODE_TYPE_FOLDER } from "@/services/page";
 
 type Props = {
+  /**
+   * 当前视图的键：预置分区键、自建集合 uuid，或**文件夹 uuid**（`isFolder` 时）。
+   * 三者共用一个值域是刻意的 —— 见 `wiki/store` 的 `collectionPageIds`（同一个键空间）
+   * 与 `fetchFolderPages` 的注释。
+   */
   collection: string;
+  /** 这个键是一个**文件夹**（`?folder=`）而不是集合/分区。 */
+  isFolder?: boolean;
 };
 
 export const WikiListRoot = observer(function WikiListRoot(props: Props) {
-  const { collection } = props;
+  const { collection, isFolder = false } = props;
   // router
   const { workspaceSlug } = useParams();
   // plane hooks
@@ -36,19 +46,28 @@ export const WikiListRoot = observer(function WikiListRoot(props: Props) {
   // states
   const [pageIdToMove, setPageIdToMove] = useState<string | null>(null);
   // store hooks
-  const { getFilteredPageIdsByCollection, fetchPagesList, removeFromWiki, pageParentIds } = usePageStore(
-    EPageStoreType.WORKSPACE
-  );
+  const {
+    getFilteredPageIdsByCollection,
+    fetchPagesList,
+    fetchFolderPages,
+    getPageNodeType,
+    removeFromWiki,
+    pageParentIds,
+  } = usePageStore(EPageStoreType.WORKSPACE);
   const { allowPermissions } = useUserPermissions();
   // derived values
   const filteredPageIds = getFilteredPageIdsByCollection(collection);
 
   /**
-   * 把当前分区的行排成树，只为拿到**层深**（设计 F-4）。
+   * 把当前视图的行排成树，只为拿到**层深**（设计 F-4）。
    *
-   * 喂进去的是 `filteredPageIds`（已按搜索/排序过滤过的集合），**不是**全部页面 ——
+   * 喂进去的是 `filteredPageIds`（已按搜索/排序过滤过），**不是**全部页面 ——
    * 名次因此保持列表自己的排序，只是子行会紧跟到它父行后面。
-   * 父页被过滤掉时子行按根渲染（`buildWikiTreeLines` 的兜底，设计 R-2）。
+   * 父行被过滤掉时子行按根渲染（`buildWikiTreeLines` 的兜底，设计 R-2）。
+   *
+   * **Round D 起这里也服务文件夹视图**：`?folder=` 返回的是整棵子树且**含子文件夹**
+   * （后端裁定 5），而"含子文件夹"正是为了让这一层的 `ancestorIds` 连得起来 ——
+   * 否则摆在子文件夹里的页面全都会拿到层深 0，设计 §10 第 4 条要的缩进直接落空。
    *
    * 与侧栏**同一套算法**，不引入第二套层级算法（设计 F-4 的硬要求）。
    */
@@ -71,8 +90,24 @@ export const WikiListRoot = observer(function WikiListRoot(props: Props) {
   );
 
   /**
+   * 重拉**当前这个视图**。两种视图的键都放在 `collectionPageIds` 里（同一个键空间），
+   * 所以查询那一半完全同形；分叉的只有**打哪个端点** —— `?collection=` 还是 `?folder=`。
+   *
+   * 这个分叉必须在**这里**做一次，不能让调用方各自记着：`?collection=<文件夹 uuid>`
+   * **不报错**，它会按 `collection_id` 过滤后静默返回空列表，把用户的右半边无声清空。
+   *
+   * **不 await、吞掉错误**：动作这时已经落库，让刷新失败把它报成错误是撒谎
+   * （store 自己会把失败记进 `this.error`）。与收录弹窗同款。
+   */
+  const refreshList = () => {
+    if (!workspaceSlug) return;
+    const request = isFolder ? fetchFolderPages(workspaceSlug, collection) : fetchPagesList(workspaceSlug, collection);
+    request.catch(() => {});
+  };
+
+  /**
    * 移出 Wiki（只取消收录，不删页面）。
-   * 与收录弹窗同款：落库后重拉当前分区（分区成员变了），**不 await、吞掉错误**。
+   * 落库后重拉当前视图（成员变了），**不 await、吞掉错误** —— 见 `refreshList`。
    */
   const handleRemoveFromWiki = async (pageId: string) => {
     if (!workspaceSlug) return;
@@ -87,7 +122,7 @@ export const WikiListRoot = observer(function WikiListRoot(props: Props) {
       });
       return;
     }
-    fetchPagesList(workspaceSlug, collection).catch(() => {});
+    refreshList();
   };
 
   /**
@@ -101,6 +136,9 @@ export const WikiListRoot = observer(function WikiListRoot(props: Props) {
    * （`apps/api/plane/app/views/page/collection.py` 的 partial_update/destroy）——
    * 这里不跟着收窄就会留下「看得见、点得动、一点就 403」的入口。
    * 同样用**隐藏**表达，而不是渲染成 disabled。
+   *
+   * **Round D：只给页面行**（裁定 11）。文件夹行走 `FolderListRow`，那里不传
+   * `extraActions` —— 这两个动作对文件夹的语义未定，本轮不给。
    */
   const buildRowActions = (pageId: string): (TContextMenuItem & { key: TPageActions })[] => [
     {
@@ -123,22 +161,33 @@ export const WikiListRoot = observer(function WikiListRoot(props: Props) {
   return (
     <>
       <ListLayout>
-        {treeLines.map((line) => (
-          // 缩进加在**外层 div** 上，不改共享的 `PageListBlock` ——
-          // 那个组件被项目页共用，它没有也不该有「层级」这个概念。
-          <div key={line.pageId} className={wikiTreeIndentClass(line.depth)}>
-            <PageListBlock
-              pageId={line.pageId}
-              storeType={EPageStoreType.WORKSPACE}
-              extraActions={canWriteWiki ? buildRowActions(line.pageId) : undefined}
-            />
-          </div>
-        ))}
+        {treeLines.map((line) => {
+          // **类型从 store 的旁挂索引拿**（裁定 6）：列表响应里**没有** `node_type`
+          // （`WikiPageSerializer` 一个字不动）。取不到 ⇒ 按页面渲染，那是**今天的
+          // 既有行为**（裁定 7 的已知后果，MobX 一变就自愈）。
+          const isFolderRow = getPageNodeType(line.pageId) === PAGE_NODE_TYPE_FOLDER;
+          return (
+            // 缩进加在**外层 div** 上，不改共享的 `PageListBlock` ——
+            // 那个组件被项目页共用，它没有也不该有「层级」这个概念。
+            <div key={line.pageId} className={wikiTreeIndentClass(line.depth)}>
+              {isFolderRow ? (
+                // 子文件夹：可点的行（下钻进它自己的 `?folder=`），**没有** `⋯`（裁定 11）。
+                <FolderListRow pageId={line.pageId} />
+              ) : (
+                <PageListBlock
+                  pageId={line.pageId}
+                  storeType={EPageStoreType.WORKSPACE}
+                  extraActions={canWriteWiki ? buildRowActions(line.pageId) : undefined}
+                />
+              )}
+            </div>
+          );
+        })}
       </ListLayout>
       <MoveToCollectionModal
         isOpen={!!pageIdToMove}
         pageId={pageIdToMove}
-        collection={collection}
+        onMoved={refreshList}
         handleClose={() => setPageIdToMove(null)}
       />
     </>
