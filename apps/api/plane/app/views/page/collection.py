@@ -97,11 +97,21 @@ class PageCollectionViewSet(BaseViewSet):
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
     def list(self, request, slug):
-        pages = list(_wiki_page_queryset(request, slug).values("id", "archived_at", "access", "collection_id"))
+        pages = list(
+            _wiki_page_queryset(request, slug).values("id", "archived_at", "access", "collection_id", "node_type")
+        )
 
         counts = {key: 0 for key in PREDEFINED_KEYS}
         per_collection = {}
         for page in pages:
+            # 文件夹**不进任何计数**（Confluence F14：它是一类，不是页面）。
+            #
+            # 用 `continue` 而不是在 queryset 上 `.exclude(node_type=...)`：后者会把
+            # 「哪些行该被排除」这条规则从它的**消费者**旁边挪到一处看不见的地方，
+            # 而本方法就是全仓唯一读 `node_type` 做过滤的计数点 —— 规则留在循环里，
+            # 读一遍循环就知道口径。这也是设计 §5.2 写的机制。
+            if page["node_type"] == Page.NODE_TYPE_FOLDER:
+                continue
             key = resolve_collection_key(
                 archived_at=page["archived_at"],
                 access=page["access"],

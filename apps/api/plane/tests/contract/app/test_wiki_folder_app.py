@@ -402,3 +402,43 @@ class TestFolderBodyGuard:
 
         assert response.status_code == status.HTTP_200_OK
         assert Page.objects.get(pk=folder_tree["t1"].id).description_html == "<p>正常正文</p>"
+
+
+@pytest.mark.contract
+class TestFolderCountsAsItsOwnKind:
+    """文件夹**不进任何计数**（Confluence F14：它是一类，不是页面）。
+
+    不做的话：根级文件夹会被算进「常规」的 `page_count` —— 侧栏显示「常规 (7)」
+    而点进去只有 6 行页面，正是本仓明确讨厌过的那类口径分裂（设计 §3.4）。
+
+    **注意这与 `test_wiki_pages_scope_app.py::test_partition_sizes_match_the_collection_counts`
+    不是同一条口径了**：「树里每分区的条数 == 该分区的计数」在本轮之后**有意**不再成立 ——
+    树列的是**节点**（含文件夹），计数算的是**页面**。那条既有测试用的 `pages` fixture
+    里一个文件夹都没有，所以它仍然绿；**别**为了"让两条口径一致"去改它。
+    """
+
+    @pytest.mark.django_db
+    def test_a_root_folder_is_not_counted_in_general(self, session_client, workspace, create_user):
+        _wiki_page(workspace, create_user, "唯一的页面")
+        _folder(workspace, create_user, "不该被算的文件夹")
+
+        response = session_client.get(f"/api/workspaces/{workspace.slug}/page-collections/")
+
+        assert response.status_code == status.HTTP_200_OK
+        general = next(row for row in response.data["predefined"] if row["key"] == "general")
+        assert general["page_count"] == 1
+
+    @pytest.mark.django_db
+    def test_a_folder_in_a_custom_collection_is_not_counted(self, session_client, workspace, create_user):
+        """自建集合那条分支**两样东西**都要对：页面算 1、文件夹不算。
+
+        只断言文件夹不算是不够的 —— 一个把整个循环 `continue` 掉的实现也会让它绿。
+        """
+        collection = PageCollection.objects.create(workspace=workspace, name="我的集合", owned_by=create_user)
+        _wiki_page(workspace, create_user, "集合里的页面", collection=collection)
+        _folder(workspace, create_user, "集合里的文件夹", collection=collection)
+
+        response = session_client.get(f"/api/workspaces/{workspace.slug}/page-collections/")
+
+        row = next(item for item in response.data["collections"] if item["name"] == "我的集合")
+        assert row["page_count"] == 1
