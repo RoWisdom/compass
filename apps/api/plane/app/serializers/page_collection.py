@@ -224,6 +224,27 @@ class WikiPageCreateSerializer(serializers.Serializer):
     # 与 ``project_id`` / ``collection_id`` 完全同一条纪律，原因也一样：
     # 归属是**跨表**的事实，序列化器拿不到 request，判不了。
     parent = serializers.UUIDField(required=False, allow_null=True)
+    # 建的是页面还是文件夹。缺省 `"doc"` —— **既有调用方一行不改**（前端今天发的
+    # 正是这条请求）。`ChoiceField` 而不是 `CharField`：合法集就是模型上那个
+    # `NODE_TYPE_CHOICES`，写死一遍等于存第二个真相源（与 `access` 同一条纪律）。
+    #
+    # 只读侧没有这个字段的写入口（`WikiPageTreeSerializer` / `WikiPageDetailSerializer`
+    # 都把它放在 `read_only_fields` 里，`WikiPageUpdateSerializer` 根本不声明它）——
+    # 这就是 F16「类型建时定死」在代码上的落点。
+    node_type = serializers.ChoiceField(
+        choices=Page.NODE_TYPE_CHOICES, required=False, default=Page.NODE_TYPE_DOC
+    )
+
+    def validate(self, attrs):
+        """折叠成单字段校验：文件夹 + ``project_id`` 是无意义的输入（裁定 8）。
+
+        理由链：文件夹没有正文 ⇒ 不写 vault 镜像 ⇒ 而「有没有项目」在镜像逻辑里
+        **唯一**的作用就是决定写到哪个项目目录（``_wiki_page_project_id`` 的 docstring）。
+        静默丢弃 ``project_id`` 比报错更坏 —— 调用方会以为挂上了。
+        """
+        if attrs.get("node_type") == Page.NODE_TYPE_FOLDER and attrs.get("project_id") is not None:
+            raise serializers.ValidationError({"project_id": "A folder cannot belong to a project."})
+        return attrs
 
     def create(self, validated_data):
         workspace = self.context["workspace"]
@@ -244,6 +265,7 @@ class WikiPageCreateSerializer(serializers.Serializer):
             # `parent_id` 而不是 `parent`：给 FK 赋 id 是 Django 的原生写法，
             # 不必为了拿一个实例再查一次库。
             parent_id=validated_data.get("parent"),
+            node_type=validated_data.get("node_type", Page.NODE_TYPE_DOC),
         )
 
         # 挂到项目下 —— 照 ``serializers/page.py:99-105`` 的写法逐字段对齐。

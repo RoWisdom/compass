@@ -422,11 +422,19 @@ class WikiPageViewSet(BaseViewSet):
 
         page = serializer.save()
 
-        # 把正文镜像成本地 ``.md``。**尽力而为**：无项目的页面由 ``_mirror_wiki_page``
-        # 自己 warn 后跳过（镜像根 ``MARKDOWN_STORAGE_PATH`` 指向「项目」那一层，
-        # 无项目页按定义无处可写 —— 见 ``_wiki_page_project_id`` 的 docstring）。
-        # 无项目的页面照样建成功，那才是本端点的重点。
-        _mirror_wiki_page(page, "<p></p>")
+        if page.node_type == Page.NODE_TYPE_FOLDER:
+            # 文件夹没有正文，也就没有可镜像的东西（设计 §5.2）。
+            #
+            # **不是**"镜像会失败"—— 是对一个没有正文的节点跑一遍 markdown 落盘，
+            # 会在用户的**真实笔记库**里凭空生出一个 `<文件夹名>.md` 空文件。
+            # 静默跳过，不 warn：这是**预期**路径，不是降级。
+            pass
+        else:
+            # 把正文镜像成本地 ``.md``。**尽力而为**：无项目的页面由 ``_mirror_wiki_page``
+            # 自己 warn 后跳过（镜像根 ``MARKDOWN_STORAGE_PATH`` 指向「项目」那一层，
+            # 无项目页按定义无处可写 —— 见 ``_wiki_page_project_id`` 的 docstring）。
+            # 无项目的页面照样建成功，那才是本端点的重点。
+            _mirror_wiki_page(page, "<p></p>")
 
         return Response(WikiPageSerializer(page).data, status=status.HTTP_201_CREATED)
 
