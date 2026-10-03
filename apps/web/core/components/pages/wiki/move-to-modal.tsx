@@ -49,8 +49,16 @@ type Props = {
  * **为什么只列这些集合**：`general` + 用户自建集合是有合法 `collection_id` 的两种；
  * `private`/`shared`/`archived` 是**派生**分区（页面落在哪儿由 `access`/`archived_at`
  * 决定），`collection_id` 指不过去 —— 把它们当目标只会把 `collection_id` 变成 `null`、
- * 页面落回 general，而 UI 在骗用户。派生分区里的**行**仍然可选：那不是「把页面放进某个
- * 派生分区」，而是「挂到某一行下面」，完全合法。
+ * 页面落回 general，而 UI 在骗用户。
+ *
+ * **派生分区里的行同样不列**（是不列，不是列出来再置灰）：分区键由服务端按优先级算
+ * （`resolve_collection_key`：archived > private > collection_id > general），一行落在哪个
+ * 分区与它自己的 `collection_id` 无关。把 `private`/`archived` 那一行当目标，被移动的页面
+ * 拿到的是那一行的 `collection_id` ⇒ 落回 general 或它所在的集合，而**父行仍在派生分区里**。
+ * 树是**按分区键分组建的**（下面 `linesFor`；侧栏同款，`sidebar.tsx:511`：「父页在别的
+ * 分区时，子行在本分区里当根渲染」），跨分区的父链接两边都认不出来 —— 页面会以「顶层
+ * 孤儿」的形态出现。用户点了「挂到这一行下面」，看起来却什么都没发生，正是上面那句
+ * 「UI 在骗用户」。「常规」不受影响：它的行与被移动页面同属 general，父链接落在组内。
  *
  * **不发新请求**：树与索引都在 store 里（`fetchWikiTree` 灌的），侧栏随 layout 常驻 ——
  * 打开这个弹窗是零网络。
