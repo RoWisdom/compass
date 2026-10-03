@@ -103,6 +103,7 @@ export interface IWorkspacePageStore {
     target: { collectionId: string | null; parentId: string | null }
   ) => Promise<void>;
   deleteFolder: (workspaceSlug: string, folderId: string) => Promise<void>;
+  renameFolder: (workspaceSlug: string, folderId: string, name: string) => Promise<void>;
   removeFromWiki: (workspaceSlug: string, pageId: string) => Promise<void>;
   removePage: (params: { pageId: string; shouldSync?: boolean }) => void;
 }
@@ -156,6 +157,7 @@ export class WorkspacePageStore implements IWorkspacePageStore {
       includePages: action,
       moveTo: action,
       deleteFolder: action,
+      renameFolder: action,
       removeFromWiki: action,
       removePage: action,
     });
@@ -625,6 +627,33 @@ export class WorkspacePageStore implements IWorkspacePageStore {
     } catch (error) {
       runInAction(() => {
         this.error = { title: "Failed", description: "Failed to delete the folder, Please try again later." };
+      });
+      throw error;
+    }
+  };
+
+  /**
+   * 重命名一个文件夹。**走的是与「改页面标题」同一个 PATCH 端点** —— 后端对文件夹只拦
+   * 正文三个键（`collection.py:529-552`），`name` 是放行的，所以这里是**纯前端**的新能力。
+   *
+   * 三点与 `deleteFolder` / `updateCollection` 逐字同形的纪律：
+   *   1. **异常不得吞掉** —— 弹窗靠「action 是否 reject」决定 toast 成败。
+   *   2. **重拉失败不冒泡成「重命名失败」** —— 写入这时已经落库，刷新失败只能记进
+   *      `this.error`（`updateCollection` 的注释：「弹窗靠这个异常决定 toast 的成败，报错即撒谎」）。
+   *   3. **不设 `loader`** —— 与 `moveTo` / `removeFromWiki` / `createPage` 同一惯例：
+   *      一个改名不该把整个主面板打回骨架。
+   *
+   * **不自己改本地 state**（对比 `deleteFolder` 要 `unset` 三处）：改名只动 `name` 一个字段，
+   * 而 `fetchWikiTree` 会重灌 `data`；列表面板读的 `getPageById` 是 `computedFn`，名字跟着
+   * 就变。多写一份乐观更新，只是多一处会与树不一致的副本。
+   */
+  renameFolder = async (workspaceSlug: string, folderId: string, name: string) => {
+    try {
+      await this.service.update(workspaceSlug, folderId, { name });
+      await this.fetchWikiTree(workspaceSlug).catch(() => {});
+    } catch (error) {
+      runInAction(() => {
+        this.error = { title: "Failed", description: "Failed to rename the folder, Please try again later." };
       });
       throw error;
     }
