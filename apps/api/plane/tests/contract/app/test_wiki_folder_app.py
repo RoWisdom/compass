@@ -58,6 +58,13 @@ def project(workspace, create_user):
 
 
 @pytest.fixture
+def collection(workspace, create_user):
+    """一个本工作区自建的集合。形状照 ``test_wiki_mirror_collection_move_app.py:56`` 抄 ——
+    契约测试模块各自定义自己需要的 fixture，`plane/tests/conftest.py` 里没有 `collection`。"""
+    return PageCollection.objects.create(workspace=workspace, name="不该落盘集合", owned_by=create_user)
+
+
+@pytest.fixture
 def folder_tree(workspace, create_user):
     """三层嵌套，覆盖后面每个 Task 需要的形状：
 
@@ -228,16 +235,22 @@ class TestCreatingAFolder:
         assert created.node_type == Page.NODE_TYPE_FOLDER
 
     @pytest.mark.django_db
-    def test_a_folder_writes_no_vault_mirror(self, session_client, workspace, isolate_markdown_mirror):
+    def test_a_folder_writes_no_vault_mirror(self, session_client, workspace, collection, isolate_markdown_mirror):
         """**这是本 Task 的核心不变量**（设计 §5.2）。
 
         镜像根指向 `MARKDOWN_STORAGE_PATH`（"项目"那一层）。对一个没有正文的节点跑一遍
         markdown 落盘，会在 vault 里凭空生出一个 `<文件夹名>.md` 空文件 —— 那是往用户的
         真实笔记库里写垃圾。
+
+        **`collection_id` 不是装饰，是这条测试的鉴别力所在**：`_mirror_wiki_page` 是
+        **集合优先**的（`collection_id is not None` 就先走集合分支并 return）。不带集合时，
+        无集合无项目的页会在"没有落脚点"那一步就 warn 返回 —— **与 `node_type` 无关** ——
+        于是把文件夹的跳过整个删掉，这条断言照样通过。带上集合之后，少了文件夹跳过就
+        **真的**会落一个 `<文件夹名>.md` 下来。
         """
         response = session_client.post(
             f"/api/workspaces/{workspace.slug}/wiki-pages/create/",
-            {"name": "不该落盘的文件夹", "node_type": "folder"},
+            {"name": "不该落盘的文件夹", "node_type": "folder", "collection_id": str(collection.id)},
             format="json",
         )
 
