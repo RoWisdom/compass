@@ -453,6 +453,28 @@ class WikiPageViewSet(BaseViewSet):
         """换集合（collection_id）、改标题（name）与/或写正文（description_*），可任意组合。"""
         page = get_object_or_404(_wiki_page_queryset(request, slug), pk=page_id)
 
+        if page.node_type == Page.NODE_TYPE_FOLDER:
+            # 文件夹没有正文（Confluence F2 / F4）。与正文端点
+            # （`WikiPageDescriptionViewSet.partial_update`）**同一条不变量、同一个错误码** ——
+            # 那条路径负责落 vault 镜像，这条不落；但"文件夹没有正文"两条都必须成立，
+            # 否则直连本端点就能给文件夹塞进一段正文。
+            #
+            # **只拦正文三个键，不拦整个端点**：本端点同时承载改名（name）与换集合
+            # （collection_id），这两件事对文件夹是**合法**的 —— 标题防抖同步发的正是
+            # `{ name }`（base-page.ts:200-220），换集合发的正是 `{ collection_id }`
+            # （workspace-page.store.ts:454）。一刀切成 400 会把这两条既有能力一起砍掉。
+            #
+            # 三个键都拦：协同编辑器走的是 `description_binary`（Yjs 全量二进制），
+            # 与 `description_html` / `description_json` 一样是正文（执行期裁定 3）。
+            if {"description_html", "description_json", "description_binary"} & set(request.data.keys()):
+                return Response(
+                    {
+                        "error_code": ERROR_CODES["PAGE_IS_FOLDER"],
+                        "error_message": "PAGE_IS_FOLDER",
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         serializer = WikiPageUpdateSerializer(page, data=request.data, partial=True)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

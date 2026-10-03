@@ -337,3 +337,68 @@ class TestFolderBodyGuard:
 
         assert response.status_code == status.HTTP_200_OK
         assert Page.objects.get(pk=folder_tree["t1"].id).description_html == "<p>正常正文</p>"
+
+    # 以上是**正文端点**（`…/description/`）。以下是**兄弟端点** —— **元数据路由**
+    # （`PATCH …/wiki-pages/<id>/`）。它同样接受 `WikiPageUpdateSerializer` 的正文三个键，
+    # 因此同一条不变量（文件夹没有正文）必须在这里再守一次；只守正文端点，
+    # 直连本端点就能给文件夹塞进一段正文。
+
+    @pytest.mark.django_db
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            {"description_html": "<p>偷写正文</p>"},
+            {"description_json": {"type": "doc", "content": []}},
+            {"description_binary": "AAECAwQ="},
+        ],
+    )
+    def test_the_metadata_route_rejects_every_body_key(self, session_client, workspace, folder_tree, payload):
+        """元数据路由与正文端点同一条不变量、同一个错误码、同一个信封。"""
+        response = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{folder_tree['a'].id}/",
+            payload,
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data["error_code"] == ERROR_CODES["PAGE_IS_FOLDER"]
+        assert response.data["error_message"] == "PAGE_IS_FOLDER"
+        assert Page.objects.get(pk=folder_tree["a"].id).description_html == "<p></p>", "被拒时一个字段都不该动"
+
+    @pytest.mark.django_db
+    def test_a_folder_can_still_be_renamed_via_the_metadata_route(self, session_client, workspace, folder_tree):
+        """标题防抖同步造访的正是这条路径（`base-page.ts` 只发 `{ name }`）—— 不许误伤。"""
+        response = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{folder_tree['a'].id}/",
+            {"name": "A 改名后"},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert Page.objects.get(pk=folder_tree["a"].id).name == "A 改名后"
+
+    @pytest.mark.django_db
+    def test_a_folder_can_still_move_to_another_collection_via_the_metadata_route(
+        self, session_client, workspace, collection, folder_tree
+    ):
+        """换集合走 `{ collection_id }`（`workspace-page.store.ts`）—— 必须放行。"""
+        response = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{folder_tree['a'].id}/",
+            {"collection_id": str(collection.id)},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert Page.objects.get(pk=folder_tree["a"].id).collection_id == collection.id
+
+    @pytest.mark.django_db
+    def test_an_ordinary_page_still_accepts_a_body_via_the_metadata_route(self, session_client, workspace, folder_tree):
+        """**反向断言**：漏了它，一个把 `node_type` 判反的实现也会全绿。"""
+        response = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{folder_tree['t1'].id}/",
+            {"description_html": "<p>正常正文</p>"},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert Page.objects.get(pk=folder_tree["t1"].id).description_html == "<p>正常正文</p>"
