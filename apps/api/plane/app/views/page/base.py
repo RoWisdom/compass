@@ -37,15 +37,19 @@ from plane.app.serializers import (
     PageBinaryUpdateSerializer,
 )
 from plane.db.models import (
+    FileAsset,
     Page,
     PageLog,
-    UserFavorite,
+    Project,
     ProjectMember,
     ProjectPage,
-    Project,
+    User,
+    UserFavorite,
     UserRecentVisit,
 )
 from plane.utils.error_codes import ERROR_CODES
+from plane.utils.html_to_markdown import html_to_markdown
+from plane.utils.markdown_storage import delete_page_markdown, move_page_markdown, write_page_markdown
 
 # Local imports
 from ..base import BaseAPIView, BaseViewSet
@@ -70,6 +74,65 @@ def unarchive_archive_page_and_descendants(page_id, archived_at):
     # Execute the SQL query
     with connection.cursor() as cursor:
         cursor.execute(sql, [page_id, archived_at])
+
+
+def _project_name(project_id):
+    """Return a project's human name, falling back to its id when absent."""
+    return Project.objects.filter(pk=project_id).values_list("name", flat=True).first() or str(project_id)
+
+
+def _page_ancestors(parent_id):
+    """Return a page's ancestor chain as [(name, id), ...], root-first.
+
+    Walks the ``parent`` self-FK upward; depth-capped as a safety net against a
+    malformed/cyclic parent graph.
+    """
+    ancestors = []
+    depth = 0
+    while parent_id and depth < 20:
+        parent = Page.objects.filter(pk=parent_id).only("id", "name", "parent_id").first()
+        if parent is None:
+            break
+        ancestors.append((parent.name or "", str(parent.id)))
+        parent_id = parent.parent_id
+        depth += 1
+    ancestors.reverse()
+    return ancestors
+
+
+def _resolve_user_display_name(user_id, cache):
+    if user_id not in cache:
+        user = User.objects.filter(pk=user_id).first()
+        name = None
+        if user:
+            name = user.display_name or (user.first_name + " " + user.last_name).strip() or user.email
+        cache[user_id] = name or None
+    return cache[user_id]
+
+
+def _resolve_asset_url(asset_id, cache):
+    if asset_id not in cache:
+        asset = FileAsset.objects.filter(pk=asset_id).first()
+        cache[asset_id] = asset.asset_url if asset else None
+    return cache[asset_id]
+
+
+def _write_page_mirror(project_id, page_id, name, ancestors, description_html):
+    """Convert a page's HTML to Markdown and mirror it locally (best-effort)."""
+    user_cache, asset_cache = {}, {}
+    markdown = html_to_markdown(
+        description_html,
+        resolve_user=lambda uid: _resolve_user_display_name(uid, user_cache),
+        resolve_asset_url=lambda aid: _resolve_asset_url(aid, asset_cache),
+    )
+    write_page_markdown(
+        project_name=_project_name(project_id),
+        project_id=str(project_id),
+        ancestors=ancestors,
+        page_id=str(page_id),
+        name=name,
+        markdown=markdown,
+    )
 
 
 class PageViewSet(BaseViewSet):
@@ -140,6 +203,14 @@ class PageViewSet(BaseViewSet):
 
         if serializer.is_valid():
             serializer.save()
+            # Mirror the page as a local Markdown file (best-effort)
+            _write_page_mirror(
+                project_id,
+                serializer.data["id"],
+                request.data.get("name"),
+                _page_ancestors(request.data.get("parent")),
+                request.data.get("description_html", "<p></p>"),
+            )
             # capture the page transaction
             page_transaction.delay(
                 new_description_html=request.data.get("description_html", "<p></p>"),
@@ -181,8 +252,21 @@ class PageViewSet(BaseViewSet):
 
             serializer = PageDetailSerializer(page, data=request.data, partial=True)
             page_description = page.description_html
+            old_name = page.name
+            old_parent_id = page.parent_id
             if serializer.is_valid():
                 serializer.save()
+                # Mirror a rename/reparent as a local Markdown move (best-effort)
+                if page.name != old_name or page.parent_id != old_parent_id:
+                    move_page_markdown(
+                        project_name=_project_name(project_id),
+                        project_id=str(project_id),
+                        old_ancestors=_page_ancestors(old_parent_id),
+                        new_ancestors=_page_ancestors(page.parent_id),
+                        page_id=str(page_id),
+                        old_name=old_name,
+                        new_name=page.name,
+                    )
                 # capture the page transaction
                 if request.data.get("description_html"):
                     page_transaction.delay(
@@ -393,6 +477,19 @@ class PageViewSet(BaseViewSet):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        # Mirror: capture the page location and direct children before deleting
+        page_name = page.name
+        ancestors = _page_ancestors(page.parent_id)
+        project_name = _project_name(project_id)
+        children = list(
+            Page.objects.filter(
+                parent_id=page_id,
+                projects__id=project_id,
+                workspace__slug=slug,
+                project_pages__deleted_at__isnull=True,
+            ).values_list("id", "name")
+        )
+
         # remove parent from all the children
         _ = Page.objects.filter(
             parent_id=page_id,
@@ -402,6 +499,25 @@ class PageViewSet(BaseViewSet):
         ).update(parent=None)
 
         page.delete()
+
+        # Mirror: delete the page's .md and lift its sub-pages one level up
+        delete_page_markdown(
+            project_name=project_name,
+            project_id=str(project_id),
+            ancestors=ancestors,
+            page_id=str(page_id),
+            name=page_name,
+        )
+        for child_id, child_name in children:
+            move_page_markdown(
+                project_name=project_name,
+                project_id=str(project_id),
+                old_ancestors=ancestors + [(page_name or "", str(page_id))],
+                new_ancestors=ancestors,
+                page_id=str(child_id),
+                old_name=child_name,
+                new_name=child_name,
+            )
         # Delete the user favorite page
         UserFavorite.objects.filter(
             project=project_id,
@@ -555,6 +671,16 @@ class PagesDescriptionViewSet(BaseViewSet):
         serializer = PageBinaryUpdateSerializer(page, data=request.data, partial=True)
         if serializer.is_valid():
             serializer.save()
+
+            # Mirror the page content as a local Markdown file (best-effort)
+            if request.data.get("description_html"):
+                _write_page_mirror(
+                    project_id,
+                    page_id,
+                    page.name,
+                    _page_ancestors(page.parent_id),
+                    request.data.get("description_html"),
+                )
 
             # Capture the page transaction
             if request.data.get("description_html"):
