@@ -43,7 +43,7 @@ const MAX_NAME_LENGTH = 255;
  * 「改名 A 后关掉、再打开 B」会带着 A 的残值。
  *
  * 依赖数组写 `[isOpen, folderId, getPageById]` 而**不**写当前名：`getPageById` 是
- * `computedFn`（`workspace-page.store.ts:173`），身份稳定，所以这个 effect 只在
+ * `computedFn`（`workspace-page.store.ts:175`），身份稳定，所以这个 effect 只在
  * 「打开」与「换目标」时跑。把它的**返回值**放进依赖，会让树一刷新就冲掉用户正在输入的字。
  *
  * **名字没改就不打请求**：后端对此会 200 而什么都不变（`partial_update` 只在

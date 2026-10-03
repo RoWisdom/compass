@@ -649,11 +649,14 @@ export class WorkspacePageStore implements IWorkspacePageStore {
    *     摘出后传 `mutateProperties(otherFields, false)`，而 `base-page.ts:548` 一句
    *     `if (key === "name" && !shouldUpdateName) return;` 就跳过了；能带上正确名字的
    *     `new WorkspacePage(...)` 分支（`:457`）**只在实例不存在时**走。
-   *   · `fetchFolderPages`（`:400`）与 `fetchPageDetails` 是同一款写法。
+   *   · `fetchFolderPages`（`:403`）同款：解构摘出 `name` 再传那个 `false`。
+   *   · `fetchPageDetails`（`:499`）**连解构都不用** —— 它只摘 `node_type`，`name` 是靠
+   *     上面那句 `false` 守卫挡下的，净效果与前两条相同。
    * 这是本仓的**既定约定**，不是疏漏：标题归协同编辑器所有，重拉树不该冲掉用户正在输入的
    * 字（`project-page.store.ts` 同款英文注释 `// …update all fields except name`）。
-   * 而侧栏与列表行读的**正是这个实例**（`sidebar.tsx:877` / `folder-list-row.tsx:67` 都取
-   * `getPageById(...)`），所以**只重拉树的话，改名在界面上根本不会发生** —— 要等一次硬刷新。
+   * 而侧栏与列表行读的**正是这个实例**（侧栏 `sidebar.tsx:791` 取、`:877` 渲染；
+   * 列表行 `folder-list-row.tsx:59` 经 `usePage` 取、`:68` 渲染），所以**只重拉树的话，
+   * 改名在界面上根本不会发生** —— 要等一次硬刷新。
    */
   renameFolder = async (workspaceSlug: string, folderId: string, name: string) => {
     try {
