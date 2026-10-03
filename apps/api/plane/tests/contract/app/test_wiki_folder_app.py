@@ -521,11 +521,15 @@ class TestFolderSubtree:
 
     @pytest.mark.django_db
     @pytest.mark.parametrize("value", ["2b0b7f60-0000-4000-8000-000000000000", "not-a-uuid", ""])
-    def test_a_unknown_or_malformed_folder_returns_an_empty_list(self, session_client, workspace, value):
+    def test_a_unknown_or_malformed_folder_returns_an_empty_list(self, session_client, workspace, folder_tree, value):
         """**畸形输入不能是 500**：`filter(id="abc")` 会在 Django 里抛 `ValidationError`。
 
         这条 URL 是**可以手改的**（`?folder=` 是新加的、`?collection=` 从没被手改过），
         所以畸形输入是必须自己兜住的现实路径。
+
+        **吃 `folder_tree` 是为了钉住「空 `folder` ≠ 没带 `folder`」**：在一个有内容的
+        工作区上，真把空串/畸形值当成"参数缺席"放行到默认列表分支，返回的会是**非空的**
+        general 列表，`== []` 立刻炸 —— 空工作区上做不到这个鉴别（两种实现都返回 `[]`）。
         """
         response = session_client.get(f"/api/workspaces/{workspace.slug}/wiki-pages/", {"folder": value})
 

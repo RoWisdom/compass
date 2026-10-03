@@ -586,6 +586,7 @@ export class WorkspacePageStore implements IWorkspacePageStore {
 
       runInAction(() => {
         unset(this.data, [pageId]);
+        unset(this.pageNodeTypes, [pageId]);
         for (const key of Object.keys(this.collectionPageIds)) {
           this.collectionPageIds[key] = this.collectionPageIds[key].filter((id) => id !== pageId);
         }

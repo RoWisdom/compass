@@ -326,6 +326,10 @@ class WikiPageViewSet(BaseViewSet):
             # `_descendant_ids` 只按 workspace 收窄（BFS + 去重 + 深度上限 20），
             # **不带可见性与收录过滤** —— 那两条由下面那次 `_wiki_page_queryset` 补上。
             # 两个条件各只写一处，不重复实现；别人的私有子页因此也不会漏出来。
+            #
+            # **有意不过滤归档后代**（与 `?collection=` 的分区路由不同源）：子树是
+            # **导航性下钻**，语义是「这个节点下的全部内容」，归档行到这里混列是刻意的 ——
+            # 静默省略反而会让用户以为后代丢了（分区路由才把归档行归到「已归档」）。别当 bug 修。
             descendant_ids = _descendant_ids(root=folder)
             if not descendant_ids:
                 return Response([], status=status.HTTP_200_OK)
