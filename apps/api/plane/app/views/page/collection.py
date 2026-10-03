@@ -989,6 +989,29 @@ class WikiPageDescriptionViewSet(BaseViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        if page.node_type == Page.NODE_TYPE_FOLDER:
+            # 文件夹没有正文（Confluence F2 / F4）。
+            #
+            # **只拦正文三个键，不拦整个端点**：这个端点同时承载改名与换集合
+            # （`WikiPageUpdateSerializer` 的字段），而这两件事对文件夹是**合法**的 ——
+            # 侧栏的文件夹行靠改名，`move-to-collection` 靠换集合。一刀切成 400
+            # 会把这两条既有能力一起砍掉。
+            #
+            # 三个键都拦：协同编辑器 PATCH 的是 `description_binary`（Yjs 全量二进制），
+            # 它和 `description_html` / `description_json` 一样是正文。设计 §5.2 只点名
+            # 了后两个 —— 那是设计漏了，见执行期裁定 3。
+            #
+            # 用集合求交而不是三个 `in` 串联：键名清单只有一份，将来正文键多一个
+            # （或改名）时改一处。
+            if {"description_html", "description_json", "description_binary"} & set(request.data.keys()):
+                return Response(
+                    {
+                        "error_code": ERROR_CODES["PAGE_IS_FOLDER"],
+                        "error_message": "PAGE_IS_FOLDER",
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         serializer = WikiPageUpdateSerializer(page, data=request.data, partial=True)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

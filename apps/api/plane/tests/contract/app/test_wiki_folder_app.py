@@ -23,6 +23,7 @@ import pytest
 from rest_framework import status
 
 from plane.db.models import Page, PageCollection, Project, User
+from plane.utils.error_codes import ERROR_CODES
 
 
 def _wiki_page(workspace, user, name, **kwargs):
@@ -256,3 +257,83 @@ class TestCreatingAFolder:
 
         assert response.status_code == status.HTTP_201_CREATED
         assert sorted(isolate_markdown_mirror.parent.rglob("*.md")) == []
+
+
+@pytest.mark.contract
+class TestFolderBodyGuard:
+    """文件夹没有正文（F2 / F4）—— 往它身上写正文必须被拒。
+
+    **只拦正文三个键**（裁定 3）：改名与换集合走同一个端点（`WikiPageUpdateSerializer`
+    的字段），而侧栏的文件夹行靠改名、`move-to-collection` 靠换集合 —— 一刀切成 400
+    会把这两条既有能力一起砍掉。
+
+    **三个键都拦**：协同编辑器 PATCH 的是 `description_binary`（Yjs 全量二进制），
+    它和 `description_html` / `description_json` 一样是正文。设计 §5.2 只点了后两个，
+    漏了它（见裁定 3）。
+    """
+
+    @pytest.mark.django_db
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            {"description_html": "<p>偷写正文</p>"},
+            {"description_json": {"type": "doc", "content": []}},
+            {"description_binary": "AAECAwQ="},
+        ],
+    )
+    def test_rejects_every_body_key(self, session_client, workspace, folder_tree, payload):
+        response = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{folder_tree['a'].id}/description/",
+            payload,
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data["error_code"] == ERROR_CODES["PAGE_IS_FOLDER"]
+        assert response.data["error_message"] == "PAGE_IS_FOLDER"
+        assert Page.objects.get(pk=folder_tree["a"].id).description_html == "<p></p>", "被拒时一个字段都不该动"
+
+    @pytest.mark.django_db
+    def test_the_error_code_is_4703(self):
+        """错误码本身是契约 —— 前端按它分支（`ERROR_CODES` 全仓只有一份）。"""
+        assert ERROR_CODES["PAGE_IS_FOLDER"] == 4703
+
+    @pytest.mark.django_db
+    def test_a_folder_can_still_be_renamed(self, session_client, workspace, folder_tree):
+        """侧栏的文件夹行靠改名（F7 的 `⋯` 里那一项）。"""
+        response = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{folder_tree['a'].id}/description/",
+            {"name": "A 改名后"},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert Page.objects.get(pk=folder_tree["a"].id).name == "A 改名后"
+
+    @pytest.mark.django_db
+    def test_a_folder_can_still_move_to_another_collection(
+        self, session_client, workspace, create_user, folder_tree
+    ):
+        """`move-to-collection` 走的是同一个端点、换的是 `collection_id` —— 必须放行。"""
+        collection = PageCollection.objects.create(workspace=workspace, name="新家", owned_by=create_user)
+
+        response = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{folder_tree['a'].id}/description/",
+            {"collection_id": str(collection.id)},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert Page.objects.get(pk=folder_tree["a"].id).collection_id == collection.id
+
+    @pytest.mark.django_db
+    def test_an_ordinary_page_still_accepts_a_body(self, session_client, workspace, folder_tree):
+        """**反向断言**：守卫不能误伤页面 —— 漏了它，一个把 `node_type` 判反的实现也会全绿。"""
+        response = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/wiki-pages/{folder_tree['t1'].id}/description/",
+            {"description_html": "<p>正常正文</p>"},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert Page.objects.get(pk=folder_tree["t1"].id).description_html == "<p>正常正文</p>"
