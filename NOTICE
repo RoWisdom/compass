@@ -1,0 +1,35 @@
+罗盘 / Compass — a modified version of Plane
+============================================
+
+This repository is a modified version of Plane.
+
+  This fork:      https://github.com/RoWisdom/compass
+  Upstream:       https://github.com/makeplane/plane
+  Upstream work:  Copyright (c) 2023-present Plane Software, Inc. and contributors
+  License:        GNU Affero General Public License, version 3 only (AGPL-3.0-only)
+
+Modifications
+-------------
+
+This fork carries modifications made since 2026 for the 罗盘 / Compass project, a
+project-management tool built on Plane. They are not part of upstream Plane, and
+they are not made by, reviewed by, or supported by Plane Software, Inc.
+
+  Date of modification: 2026-10-03
+
+Among other changes, this fork adds:
+
+  - a local Markdown mirror that dual-writes page and issue content to files
+  - Wiki collections, folders, sub-pages, and a "move to" picker
+  - a Wiki home view (recently edited pages / collection overview)
+  - Markdown backfill and cleanup management commands
+
+License notice
+--------------
+
+As required by section 5 of the AGPL, this file is the prominent notice that this
+is a modified version, and of the date of modification.
+
+The whole of this repository — upstream code and the modifications alike — is
+distributed under the AGPL-3.0-only. A copy of the license is included in
+LICENSE.txt at the root of this repository.
