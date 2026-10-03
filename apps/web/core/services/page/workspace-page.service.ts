@@ -342,19 +342,21 @@ export class WorkspacePageService extends APIService {
   }
 
   /**
-   * 换集合，以及（本阶段起）改标题。`collectionId = null` 表示移回 general。
+   * 改**位置**（`collection_id` 与/或 `parent`），以及改标题。
    *
-   * **不要用它改其它元数据**：`WikiPageUpdateSerializer` 只声明了
-   * `collection_id` / `name` / 三个 `description_*`，传别的键 DRF 会静默忽略 ——
+   * `parent` 的三种取值就是 PATCH 的三种语义，别混：
+   *   · `undefined`（不传这个键）—— 位置不动，只改标题；
+   *   · `null`               —— 移到**集合顶层**，落到 `collectionId` 指示的那个集合；
+   *   · uuid                 —— 挂到那一行下面，**集合由后端从目标推导**（位置决定集合）。
+   *
+   * **不要用它改别的元数据**：`WikiPageUpdateSerializer` 只声明了
+   * `collection_id` / `parent` / `name` / 三个 `description_*`，传别的键 DRF 会**静默忽略** ——
    * 返回 200 而什么都没变。
-   *
-   * （这条注释曾写着「不能改标题，因为序列化器没有 `name` 字段」。Phase 1B 给
-   *   序列化器加上了 `name`，协同服务器的标题同步依赖它，所以那句话不再成立。）
    */
   async update(
     workspaceSlug: string,
     pageId: string,
-    data: Partial<TPage> & { collection_id?: string | null }
+    data: Partial<TPage> & { collection_id?: string | null; parent?: string | null }
   ): Promise<TPage> {
     return this.patch(`/api/workspaces/${workspaceSlug}/wiki-pages/${pageId}/`, data)
       .then((response) => response?.data)
@@ -387,7 +389,13 @@ export class WorkspacePageService extends APIService {
       });
   }
 
-  /** 移出 Wiki。只取消收录，**不删页面**。 */
+  /**
+   * 移出 Wiki。只取消收录，**不删页面**。
+   *
+   * 同一个端点也承载**删文件夹**（`WikiPageViewSet.destroy` 按 `node_type` 分叉）：
+   * 页面走「移出 Wiki」，文件夹走「内容上浮一级 + 自己出 Wiki」。前端不需要第二个
+   * service 方法 —— 差别在**语义**不在**请求**（设计 §4.3）。
+   */
   async removeFromWiki(workspaceSlug: string, pageId: string): Promise<void> {
     return this.delete(`/api/workspaces/${workspaceSlug}/wiki-pages/${pageId}/`)
       .then((response) => response?.data)

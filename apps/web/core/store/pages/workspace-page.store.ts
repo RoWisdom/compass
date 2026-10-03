@@ -97,7 +97,12 @@ export interface IWorkspacePageStore {
     pageIds: string[],
     collectionId: string | null
   ) => Promise<TPageIncludeResponse>;
-  moveToCollection: (workspaceSlug: string, pageId: string, collectionId: string | null) => Promise<void>;
+  moveTo: (
+    workspaceSlug: string,
+    pageId: string,
+    target: { collectionId: string | null; parentId: string | null }
+  ) => Promise<void>;
+  deleteFolder: (workspaceSlug: string, folderId: string) => Promise<void>;
   removeFromWiki: (workspaceSlug: string, pageId: string) => Promise<void>;
   removePage: (params: { pageId: string; shouldSync?: boolean }) => void;
 }
@@ -149,7 +154,8 @@ export class WorkspacePageStore implements IWorkspacePageStore {
       fetchPageDetails: action,
       fetchCandidates: action,
       includePages: action,
-      moveToCollection: action,
+      moveTo: action,
+      deleteFolder: action,
       removeFromWiki: action,
       removePage: action,
     });
@@ -232,11 +238,11 @@ export class WorkspacePageStore implements IWorkspacePageStore {
   /**
    * 新建集合。
    *
-   * **不设 `loader`** —— 与 `moveToCollection` / `removeFromWiki` 同一惯例：
+   * **不设 `loader`** —— 与 `moveTo` / `removeFromWiki` 同一惯例：
    * `loader` 驱动的是整个主面板的加载骨架，而新建集合只是往侧栏多插一行；
    * 把整页打回骨架是过度反应。调用方（弹窗）自己有 submitting 态。
    *
-   * 成功后按本文件既有惯例重拉集合（`includePages` / `moveToCollection` / `removeFromWiki` 三处都这么做）。
+   * 成功后按本文件既有惯例重拉集合（`includePages` / `moveTo` / `removeFromWiki` 三处都这么做）。
    * 返回值**透传 service 的新集合** —— 调用方要拿它的 id 跳转。
    */
   createCollection = async (workspaceSlug: string, name: string) => {
@@ -253,7 +259,7 @@ export class WorkspacePageStore implements IWorkspacePageStore {
     // 重拉集合**移出写入的 try**：写入此刻已经落库，让刷新失败把它报成「创建失败」是撒谎。
     // 创建路径上这个谎还有第二个代价 —— 弹窗会留在原地诱导重试，而 `PageCollection.name`
     // 没有唯一约束，重试会真的建出第二个集合。失败由 `fetchCollections` 自己记进 `this.error`，
-    // 与 `move-to-collection-modal.tsx:66-68` 同一条规矩：刷新失败只记不报。
+    // 与 `move-to-modal.tsx` 同一条规矩：刷新失败只记不报。
     await this.fetchCollections(workspaceSlug).catch(() => {});
 
     return collection;
@@ -556,10 +562,24 @@ export class WorkspacePageStore implements IWorkspacePageStore {
     }
   };
 
-  /** 换集合。同时把该页面从旧分区的 id 列表里摘掉，避免侧栏计数与实际不一致。 */
-  moveToCollection = async (workspaceSlug: string, pageId: string, collectionId: string | null) => {
+  /**
+   * 把页面或文件夹移到指定位置。
+   *
+   * 载荷按目标分**两种**，不并发两个键 —— 后端「非空 parent 覆盖 collection_id」那条
+   * 规则是给直连 API 的调用方兜底的；UI 这条路走**明确**的那一种：
+   *   · 目标是**集合顶层** ⇒ `{ collection_id, parent: null }`
+   *   · 目标是**某一行**   ⇒ `{ parent }`（集合由后端从那一行推导）
+   */
+  moveTo = async (
+    workspaceSlug: string,
+    pageId: string,
+    target: { collectionId: string | null; parentId: string | null }
+  ) => {
     try {
-      const page = await this.service.update(workspaceSlug, pageId, { collection_id: collectionId });
+      const payload =
+        target.parentId !== null ? { parent: target.parentId } : { collection_id: target.collectionId, parent: null };
+
+      const page = await this.service.update(workspaceSlug, pageId, payload);
 
       runInAction(() => {
         const instance = this.getPageById(pageId);
@@ -570,10 +590,41 @@ export class WorkspacePageStore implements IWorkspacePageStore {
       });
 
       await this.fetchCollections(workspaceSlug);
+      // 整棵树都可能变了（子树的 parent 与集合都跟着走），所以重拉树，而不只是改本地索引。
       await this.fetchWikiTree(workspaceSlug).catch(() => {});
     } catch (error) {
       runInAction(() => {
         this.error = { title: "Failed", description: "Failed to move the page, Please try again later." };
+      });
+      throw error;
+    }
+  };
+
+  /**
+   * 删一个文件夹。**走的是与「移出 Wiki」同一个 HTTP 端点** —— 后端按 `node_type`
+   * 分叉（设计 §4.3），所以这里只是给它一个诚实的名字与一句诚实的错误提示。
+   *
+   * 与 `removeFromWiki` 的差别在**本地状态**：删文件夹会让它的直接子节点换父，那些
+   * `pageParentIds` 只有重拉树才修得对；而 `removeFromWiki` 的页面没有子节点要照顾
+   * （它不动子页，见后端 `destroy` 的 docstring）。
+   */
+  deleteFolder = async (workspaceSlug: string, folderId: string) => {
+    try {
+      await this.service.removeFromWiki(workspaceSlug, folderId);
+
+      runInAction(() => {
+        unset(this.data, [folderId]);
+        unset(this.pageNodeTypes, [folderId]);
+        for (const key of Object.keys(this.collectionPageIds)) {
+          this.collectionPageIds[key] = this.collectionPageIds[key].filter((id) => id !== folderId);
+        }
+      });
+
+      await this.fetchCollections(workspaceSlug);
+      await this.fetchWikiTree(workspaceSlug).catch(() => {});
+    } catch (error) {
+      runInAction(() => {
+        this.error = { title: "Failed", description: "Failed to delete the folder, Please try again later." };
       });
       throw error;
     }

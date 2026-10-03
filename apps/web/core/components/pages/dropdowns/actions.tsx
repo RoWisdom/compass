@@ -43,7 +43,7 @@ export type TPageActions =
   // 工作区（Wiki）行专属：由 `PageListBlock` 的 `extraActions` 传进来（见 `WikiListRoot`），
   // 项目页不会用到 —— 它们需要的是工作区 store 的分区概念，项目页没有。
   | "remove-from-wiki"
-  | "move-to-collection";
+  | "move-to";
 
 type Props = {
   extraOptions?: (TContextMenuItem & { key: TPageActions })[];

@@ -18,7 +18,7 @@ import { ListLayout } from "@/components/core/list";
 import type { TPageActions } from "@/components/pages/dropdowns";
 import { PageListBlock } from "@/components/pages/list/block";
 import { FolderListRow } from "@/components/pages/wiki/folder-list-row";
-import { MoveToCollectionModal } from "@/components/pages/wiki/move-to-collection-modal";
+import { MoveToModal } from "@/components/pages/wiki/move-to-modal";
 import { buildWikiTreeLines, wikiTreeIndentClass } from "@/components/pages/wiki/wiki-tree";
 // hooks
 import { EPageStoreType, usePageStore } from "@/hooks/store";
@@ -137,14 +137,16 @@ export const WikiListRoot = observer(function WikiListRoot(props: Props) {
    * 这里不跟着收窄就会留下「看得见、点得动、一点就 403」的入口。
    * 同样用**隐藏**表达，而不是渲染成 disabled。
    *
-   * **Round D：只给页面行**（裁定 11）。文件夹行走 `FolderListRow`，那里不传
-   * `extraActions` —— 这两个动作对文件夹的语义未定，本轮不给。
+   * **Round D：只给页面行**（裁定 11）。文件夹行有自己的 `•••`（Round E 起），里面的
+   * 动作是「移动到… / 删除」—— 与这里的两个**不是同一套**：本函数给页面的
+   * 「移出 Wiki」对文件夹没有对应物（文件夹的对应动作是删除，语义见后端 `destroy`），
+   * 所以两处各自构建，不合并。
    */
   const buildRowActions = (pageId: string): (TContextMenuItem & { key: TPageActions })[] => [
     {
-      key: "move-to-collection",
+      key: "move-to",
       action: () => setPageIdToMove(pageId),
-      title: t("wiki_collections.menu.move_to_collection"),
+      title: t("wiki_collections.menu.move_to"),
       icon: FileOutput,
     },
     {
@@ -184,7 +186,7 @@ export const WikiListRoot = observer(function WikiListRoot(props: Props) {
           );
         })}
       </ListLayout>
-      <MoveToCollectionModal
+      <MoveToModal
         isOpen={!!pageIdToMove}
         pageId={pageIdToMove}
         onMoved={refreshList}
