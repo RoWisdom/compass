@@ -484,6 +484,14 @@
         "heading": "Scripts",
         "new_script": "Novo Script",
         "description": "Automatize seus fluxos de trabalho com scripts personalizados e regras de automação."
+      },
+      "paths": {
+        "title": "Caminhos",
+        "description": "Onde os espelhos Markdown são gravados no servidor.",
+        "project_label": "Diretório de páginas de projeto",
+        "wiki_label": "Diretório de páginas Wiki",
+        "hint": "Deixe vazio para usar o padrão do servidor. Caminhos absolutos no servidor.",
+        "toast_updated": "Caminhos atualizados."
       }
     },
     "empty_state": {

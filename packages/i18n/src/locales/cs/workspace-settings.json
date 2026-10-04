@@ -484,6 +484,14 @@
         "heading": "Skripty",
         "new_script": "Nový skript",
         "description": "Automatizujte své pracovní postupy pomocí vlastních skriptů a pravidel automatizace."
+      },
+      "paths": {
+        "title": "Cesty",
+        "description": "Kam se na serveru zapisují Markdown zrcadla.",
+        "project_label": "Adresář stránek projektů",
+        "wiki_label": "Adresář stránek Wiki",
+        "hint": "Nechte prázdné pro výchozí hodnotu serveru. Absolutní cesty na serveru.",
+        "toast_updated": "Cesty byly aktualizovány."
       }
     },
     "empty_state": {

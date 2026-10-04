@@ -484,6 +484,14 @@
         "heading": "スクリプト",
         "new_script": "新しいスクリプト",
         "description": "カスタムスクリプトと自動化ルールでワークフローを自動化します。"
+      },
+      "paths": {
+        "title": "パス",
+        "description": "Markdown ミラーをサーバー上のどこに書き出すか。",
+        "project_label": "プロジェクトページのディレクトリ",
+        "wiki_label": "Wiki ページのディレクトリ",
+        "hint": "空欄にするとサーバーの既定値を使います。サーバー上の絶対パスを指定してください。",
+        "toast_updated": "パスを更新しました。"
       }
     },
     "empty_state": {

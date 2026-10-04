@@ -484,6 +484,14 @@
         "heading": "Script",
         "new_script": "Nuovo script",
         "description": "Automatizza i tuoi flussi di lavoro con script personalizzati e regole di automazione."
+      },
+      "paths": {
+        "title": "Percorsi",
+        "description": "Dove vengono scritti i mirror Markdown sul server.",
+        "project_label": "Directory delle pagine di progetto",
+        "wiki_label": "Directory delle pagine Wiki",
+        "hint": "Lascia vuoto per usare il valore predefinito del server. Percorsi assoluti sul server.",
+        "toast_updated": "Percorsi aggiornati."
       }
     },
     "empty_state": {

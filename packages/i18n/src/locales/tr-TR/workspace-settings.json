@@ -484,6 +484,14 @@
         "heading": "Komut Dosyaları",
         "new_script": "Yeni Komut Dosyası",
         "description": "İş akışlarınızı özel komut dosyaları ve otomasyon kurallarıyla otomatikleştirin."
+      },
+      "paths": {
+        "title": "Yollar",
+        "description": "Markdown yansımalarının sunucuda nereye yazılacağı.",
+        "project_label": "Proje sayfaları dizini",
+        "wiki_label": "Wiki sayfaları dizini",
+        "hint": "Sunucu varsayılanını kullanmak için boş bırakın. Sunucudaki mutlak yollar.",
+        "toast_updated": "Yollar güncellendi."
       }
     },
     "empty_state": {

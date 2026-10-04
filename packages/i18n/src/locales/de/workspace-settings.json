@@ -484,6 +484,14 @@
         "heading": "Skripte",
         "new_script": "Neues Skript",
         "description": "Automatisieren Sie Ihre Workflows mit benutzerdefinierten Skripten und Automatisierungsregeln."
+      },
+      "paths": {
+        "title": "Pfade",
+        "description": "Wohin Markdown-Spiegel auf dem Server geschrieben werden.",
+        "project_label": "Verzeichnis der Projektseiten",
+        "wiki_label": "Verzeichnis der Wiki-Seiten",
+        "hint": "Leer lassen für den Serverstandard. Absolute Pfade auf dem Server.",
+        "toast_updated": "Pfade aktualisiert."
       }
     },
     "empty_state": {

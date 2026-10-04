@@ -484,6 +484,14 @@
         "heading": "Script-uri",
         "new_script": "Script nou",
         "description": "Automatizează fluxurile tale de lucru cu scripturi personalizate și reguli de automatizare."
+      },
+      "paths": {
+        "title": "Căi",
+        "description": "Unde sunt scrise oglinzile Markdown pe server.",
+        "project_label": "Directorul paginilor de proiect",
+        "wiki_label": "Directorul paginilor Wiki",
+        "hint": "Lăsați gol pentru valoarea implicită a serverului. Căi absolute pe server.",
+        "toast_updated": "Căi actualizate."
       }
     },
     "empty_state": {

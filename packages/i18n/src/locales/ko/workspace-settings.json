@@ -484,6 +484,14 @@
         "heading": "스크립트",
         "new_script": "새 스크립트",
         "description": "커스텀 스크립트와 자동화 규칙으로 워크플로우를 자동화하세요."
+      },
+      "paths": {
+        "title": "경로",
+        "description": "Markdown 미러를 서버의 어디에 쓸지.",
+        "project_label": "프로젝트 페이지 디렉터리",
+        "wiki_label": "Wiki 페이지 디렉터리",
+        "hint": "비워 두면 서버 기본값을 사용합니다. 서버의 절대 경로입니다.",
+        "toast_updated": "경로가 업데이트되었습니다."
       }
     },
     "empty_state": {

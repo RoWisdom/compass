@@ -484,6 +484,14 @@
         "heading": "Script",
         "new_script": "Script mới",
         "description": "Tự động hóa quy trình làm việc của bạn với các script và quy tắc tự động hóa tùy chỉnh."
+      },
+      "paths": {
+        "title": "Đường dẫn",
+        "description": "Nơi các bản sao Markdown được ghi trên máy chủ.",
+        "project_label": "Thư mục trang dự án",
+        "wiki_label": "Thư mục trang Wiki",
+        "hint": "Để trống để dùng mặc định của máy chủ. Đường dẫn tuyệt đối trên máy chủ.",
+        "toast_updated": "Đã cập nhật đường dẫn."
       }
     },
     "empty_state": {

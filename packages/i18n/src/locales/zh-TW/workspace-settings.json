@@ -484,6 +484,14 @@
         "heading": "指令碼",
         "new_script": "新指令碼",
         "description": "使用自訂指令碼和自動化規則，自動化您的工作流程。"
+      },
+      "paths": {
+        "title": "目錄",
+        "description": "Markdown 鏡像在伺服器上寫到哪兒。",
+        "project_label": "專案頁面目錄",
+        "wiki_label": "Wiki 頁面目錄",
+        "hint": "留空則用伺服器預設。填的是伺服器上的絕對路徑。",
+        "toast_updated": "目錄已更新。"
       }
     },
     "empty_state": {

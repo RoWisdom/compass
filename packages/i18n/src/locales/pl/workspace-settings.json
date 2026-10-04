@@ -484,6 +484,14 @@
         "heading": "Skrypty",
         "new_script": "Nowy skrypt",
         "description": "Automatyzuj swoje przepływy pracy za pomocą niestandardowych skryptów i reguł automatyzacji."
+      },
+      "paths": {
+        "title": "Ścieżki",
+        "description": "Gdzie na serwerze zapisywane są kopie Markdown.",
+        "project_label": "Katalog stron projektów",
+        "wiki_label": "Katalog stron Wiki",
+        "hint": "Pozostaw puste, aby użyć domyślnej wartości serwera. Ścieżki absolutne na serwerze.",
+        "toast_updated": "Ścieżki zaktualizowane."
       }
     },
     "empty_state": {

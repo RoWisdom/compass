@@ -484,6 +484,14 @@
         "heading": "Scripts",
         "new_script": "Nuevo script",
         "description": "Automatiza tus flujos de trabajo con scripts personalizados y reglas de automatización."
+      },
+      "paths": {
+        "title": "Rutas",
+        "description": "Dónde se escriben los espejos Markdown en el servidor.",
+        "project_label": "Directorio de páginas de proyecto",
+        "wiki_label": "Directorio de páginas Wiki",
+        "hint": "Déjalo vacío para usar el valor predeterminado del servidor. Rutas absolutas en el servidor.",
+        "toast_updated": "Rutas actualizadas."
       }
     },
     "empty_state": {

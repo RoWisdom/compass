@@ -484,6 +484,14 @@
         "heading": "脚本",
         "new_script": "新建脚本",
         "description": "使用自定义脚本和自动化规则自动化您的工作流程。"
+      },
+      "paths": {
+        "title": "目录",
+        "description": "Markdown 镜像在服务器上写到哪儿。",
+        "project_label": "项目页面目录",
+        "wiki_label": "Wiki 页面目录",
+        "hint": "留空则用服务器默认。填的是服务器上的绝对路径。",
+        "toast_updated": "目录已更新。"
       }
     },
     "empty_state": {

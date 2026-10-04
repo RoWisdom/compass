@@ -484,6 +484,14 @@
         "heading": "Scripts",
         "new_script": "Nouveau script",
         "description": "Automatisez vos flux de travail avec des scripts personnalisés et des règles d’automatisation."
+      },
+      "paths": {
+        "title": "Chemins",
+        "description": "Où les miroirs Markdown sont écrits sur le serveur.",
+        "project_label": "Répertoire des pages de projet",
+        "wiki_label": "Répertoire des pages Wiki",
+        "hint": "Laissez vide pour utiliser la valeur par défaut du serveur. Chemins absolus sur le serveur.",
+        "toast_updated": "Chemins mis à jour."
       }
     },
     "empty_state": {

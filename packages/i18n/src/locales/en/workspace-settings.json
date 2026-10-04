@@ -484,6 +484,14 @@
         "heading": "Scripts",
         "new_script": "New Script",
         "description": "Automate your workflows with custom scripts and automation rules."
+      },
+      "paths": {
+        "title": "Paths",
+        "description": "Where Markdown mirrors are written on the server.",
+        "project_label": "Project pages directory",
+        "wiki_label": "Wiki pages directory",
+        "hint": "Leave empty to use the server default. Absolute paths on the server.",
+        "toast_updated": "Paths updated successfully."
       }
     },
     "empty_state": {
