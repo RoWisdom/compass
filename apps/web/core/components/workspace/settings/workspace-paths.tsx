@@ -137,7 +137,7 @@ export const WorkspacePaths = observer(function WorkspacePaths() {
             }}
             loading={isLoading}
           >
-            {isLoading ? t("updating") : t("workspace_settings.settings.paths.title")}
+            {isLoading ? t("updating") : t("workspace_settings.settings.general.update_workspace")}
           </Button>
         </div>
       )}
