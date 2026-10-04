@@ -34,6 +34,10 @@ export interface IWorkspace {
   total_projects?: number;
   role: number;
   timezone: string;
+  /** Markdown 镜像根：项目页面。`null` / `""` = 用服务器默认。 */
+  project_markdown_path: string | null;
+  /** Markdown 镜像根：Wiki 页面。`null` / `""` = 用服务器默认。 */
+  wiki_markdown_path: string | null;
 }
 
 export interface IWorkspaceLite {
