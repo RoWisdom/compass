@@ -75,7 +75,7 @@ type Props = {
  * 找不到自己那一页）。状态存**展开**集、空集即全收起，与侧栏 `expandedPartitionKeys`
  * 同一口径。**只折集合层**，树内部不再每层可折 —— 知情的取舍，见设计 §5。
  *
- * 图标照侧栏 `sidebar.tsx:668-670` 的约定：集合 `Box` / 文件夹 `Folder` / 页面 `PageIcon`，
+ * 图标照侧栏集合行那段约定：集合 `Box` / 文件夹 `Folder` / 页面 `PageIcon`，
  * 三个层级各一颗、互不复用。
  */
 export const MoveToModal = observer(function MoveToModal(props: Props) {
@@ -129,7 +129,7 @@ export const MoveToModal = observer(function MoveToModal(props: Props) {
 
   /**
    * 哪些集合是**展开**的。存展开集、空集 ⇒ 全收起 —— 与侧栏 `expandedPartitionKeys`
-   * （`sidebar.tsx:385`）同一口径。理由见 `wiki-tree.ts:150-163`：存折叠集的话默认值得是
+   * 同一口径。理由见 `wiki-tree.ts:150-163`：存折叠集的话默认值得是
    * 「全部集合键」，而集合是异步来的、之后还会新增，那个默认值每加一个就要补一次，
    * 漏一处就成了「新集合默认展开」，与「默认收起」自相矛盾（设计 G-2 / G-8）。
    */
@@ -137,8 +137,8 @@ export const MoveToModal = observer(function MoveToModal(props: Props) {
 
   /**
    * 被移动的节点落在哪个集合 —— 弹窗一打开就把它展开（设计 G-10）。不这么做的话，
-   * 「默认收起」会让用户**找不到自己那一页在哪儿**。同源：侧栏 `sidebar.tsx:570-586`
-   * 自动展开锚点的祖先链。
+   * 「默认收起」会让用户**找不到自己那一页在哪儿**。同源：侧栏那段自动展开锚点祖先链的
+   * effect（锚点是 `activePageId ?? explicitFolder`）。
    *
    * **先压成字符串再进依赖**：`treeRows` 是 store 上的数组，引用一变 effect 就重跑，
    * 而 effect 里又 setState —— 把数组本身放进依赖是**死循环**（设计 §8 那条风险）。
@@ -150,7 +150,7 @@ export const MoveToModal = observer(function MoveToModal(props: Props) {
 
   /**
    * **只在「打开」与「锚点真的换了」时跑**。用户手动开合改的是 `expandedGroupKeys`，
-   * 它**不在**依赖里 —— 所以手动状态不会被程序掰回去（侧栏 `sidebar.tsx:587` 同款
+   * 它**不在**依赖里 —— 所以手动状态不会被程序掰回去（侧栏同一个 effect 同款
    * 「**不强行掰回来**」：那颗箭头不该变成一个点了没反应的死控件）。设计 G-6。
    */
   useEffect(() => {
@@ -191,7 +191,7 @@ export const MoveToModal = observer(function MoveToModal(props: Props) {
               <div key={group.key} className="flex flex-col">
                 {/* **两个热区**（设计 G-4）：标签 = 移到该集合顶层（行为与改动前**逐字不变**），
                     箭头 = 展开/收起。与侧栏的分组标题**刻意不同** —— 那边点标题也折叠
-                    （`sidebar.tsx:251-252`），因为这边的整行是一个**动作**。 */}
+                    （`renderGroupHeader` 的标题按钮），因为这边的整行是一个**动作**。 */}
                 <div className="flex items-center gap-2 rounded-md px-2 py-1.5 text-13 hover:bg-layer-1">
                   <button
                     type="button"
@@ -202,26 +202,27 @@ export const MoveToModal = observer(function MoveToModal(props: Props) {
                     className="flex min-w-0 flex-1 items-center gap-2 text-left disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     {/* 集合那一行是 `Box`（lucide），**不是**页面行那颗 `PageIcon` ——
-                        侧栏 `sidebar.tsx:668-670` 写死的约定：集合 `Box` / 文件夹 `Folder` /
+                        侧栏写死的约定：集合 `Box` / 文件夹 `Folder` /
                         页面 `PageIcon`，三个层级各一颗、互不复用（设计 G-1）。 */}
                     <Box className="h-4 w-4 flex-shrink-0 text-tertiary" />
                     <span className="truncate">{group.label}</span>
                   </button>
-                  {/* 箭头**常显**，不做「悬停才浮出」（设计 G-3）—— 这是侧栏
-                      `sidebar.tsx:556-561` 对「分组标题」那一档的口径：收起后它是横躺的、
-                      一眼能看见也能点开。没有子行就不给箭头（G-9），留**等宽占位**保对齐。 */}
+                  {/* 箭头**常显**，不做「悬停才浮出」（设计 G-3）—— 这是侧栏对
+                      「分组标题」那一档的口径：收起后它是横躺的、
+                      一眼能看见也能点开。没有子行就不给箭头（G-9），留**等宽占位**保对齐
+                      —— 按钮现在是 `p-1` + `size-3` 图标 = 20px，占位用 `size-5`。 */}
                   {group.lines.length > 0 ? (
                     <button
                       type="button"
                       onClick={() => toggleGroup(group.key)}
                       aria-expanded={isExpanded}
                       aria-label={group.label}
-                      className="flex-shrink-0 text-tertiary"
+                      className="flex-shrink-0 p-1 text-tertiary"
                     >
                       <ChevronRightIcon className={cn("size-3 transition-transform", { "rotate-90": isExpanded })} />
                     </button>
                   ) : (
-                    <span className="size-3 flex-shrink-0" />
+                    <span className="size-5 flex-shrink-0" />
                   )}
                 </div>
                 {isExpanded &&

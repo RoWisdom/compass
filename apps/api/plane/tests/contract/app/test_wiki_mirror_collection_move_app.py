@@ -14,7 +14,7 @@
 
 两种结局一样：文件留在旧文件夹，下一次写正文在新集合下**再建一份**，
 同一个 `frontmatter.id` 出现两份。这条缺陷从 UI 一击可达（`wiki-list-root.tsx`
-的行菜单有 `move-to-collection`）。
+的行菜单有 `move-to`）。
 
 这里把「旧状态 × 新状态」全表锁住：
 

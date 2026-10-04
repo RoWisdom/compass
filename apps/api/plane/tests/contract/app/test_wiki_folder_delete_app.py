@@ -151,12 +151,22 @@ class TestDeletingAPageIsUnchanged:
         assert folder_tree["t3"].parent_id == folder_tree["a"].id
 
     @pytest.mark.django_db
-    def test_deleting_a_page_does_not_touch_its_children(self, session_client, workspace, folder_tree):
-        """页面没有「上浮」语义 —— 它的子页留在原地当孤儿渲染（既有行为）。"""
+    def test_deleting_a_page_does_not_touch_its_children(
+        self, session_client, workspace, folder_tree, create_user
+    ):
+        """页面没有「上浮」语义 —— 它的子页留在原地当孤儿渲染（既有行为）。
+
+        `t1` 在夹具里没有子节点，所以必须现给它挂一个：否则这条只验到 `is_global`，
+        名字承诺的「不碰子节点」根本没被碰到。
+        """
+        child = _wiki_page(workspace, create_user, "t1 的子页", parent=folder_tree["t1"])
+
         session_client.delete(_url(workspace, folder_tree["t1"]))
 
         folder_tree["t1"].refresh_from_db()
         assert folder_tree["t1"].is_global is False
+        child.refresh_from_db()
+        assert child.parent_id == folder_tree["t1"].id
 
 
 @pytest.mark.contract

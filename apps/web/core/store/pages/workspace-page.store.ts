@@ -606,9 +606,10 @@ export class WorkspacePageStore implements IWorkspacePageStore {
    * 删一个文件夹。**走的是与「移出 Wiki」同一个 HTTP 端点** —— 后端按 `node_type`
    * 分叉（设计 §4.3），所以这里只是给它一个诚实的名字与一句诚实的错误提示。
    *
-   * 与 `removeFromWiki` 的差别在**本地状态**：删文件夹会让它的直接子节点换父，那些
-   * `pageParentIds` 只有重拉树才修得对；而 `removeFromWiki` 的页面没有子节点要照顾
-   * （它不动子页，见后端 `destroy` 的 docstring）。
+   * 与 `removeFromWiki` 的差别在**服务端语义**：删文件夹会让它的直接子节点换父（后端
+   * `destroy`），`removeFromWiki` 则不动子页。落到本地状态，差别只有一件 —— 那些子节点的
+   * `pageParentIds` 变了、非重拉树修不对；而两个方法**上面那段本地状态处理逐字相同**
+   * （同一套 `unset` + 过滤 `collectionPageIds` + 重拉集合与树），别指望从那里读出差别。
    */
   deleteFolder = async (workspaceSlug: string, folderId: string) => {
     try {

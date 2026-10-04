@@ -883,21 +883,34 @@ export const WikiSidebar = observer(function WikiSidebar() {
         {/* 文件夹行的 `•••`（Round E）。页面行**不加** —— 侧栏的页面行今天就没有 `⋯`
             （它的两个动作在列表视图的行菜单上），本轮不扩大侧栏的动作面。
 
-            权限判据与上面那颗 `＋` **是同一个**（`canCreateIn(partitionKey)`，
-            :421 `canManageCollections && partitionKey !== "archived"`）：两者都是写操作，
-            后端也是同一条 WORKSPACE 收窄。不新引入谓词。
+            权限判据是 `canManageCollections`（:397），**不是**上面那颗 `＋` 的
+            `canCreateIn(partitionKey)`（:421）。两者只差 `partitionKey !== "archived"` 那半句，
+            而那半句的理由是「新建的页面不可能是归档的」（:403-405）—— 只对**新建**成立。
+            改名 / 移动 / 删除一个**已归档**的文件夹是正当操作，后端也放行（partial_update /
+            destroy 只有 WORKSPACE 级 ADMIN/MEMBER，没有归档检查），所以这里不跟着排除。
+            列表视图的同一个组件用的正是不含排除的谓词（`wiki-list-root.tsx` 的 `canWriteWiki`）——
+            同一个对象在两处能做的动作必须一样。
 
             **悬停才浮出**（与**同一行**那颗 `＋` 一致，`renderCreateMenu` 的
             `className="opacity-0 group-hover:opacity-100"`）：`group` 在
             `TREE_ROW_BASE_CLASS`（:143）里，所以这一格直接可用。
+            只差键盘那一路：这一格还带 `group-focus-within:opacity-100`，整行获得焦点即浮出
+            （`＋` 没有这一条）。菜单里有可聚焦的子项，少了它键盘用户就永远打不开这个 `•••`。
             注意与**集合行**那颗 `•••`（:1011，`variant="ghost" size="sm"` 无 reveal）
             并不一致 —— 那是**刻意**的：集合行是分区标题、常驻显示；树行里的动作格
             要跟同一行的 `＋` 对齐，否则窄侧栏里每个文件夹行都会常亮一颗 `•••`。
 
             `onChanged` 传空函数是**有意的**：侧栏这棵树来自 `fetchWikiTree`，而
             `deleteFolder` / `moveTo` 内部**已经**调了它（见 store），树会自己刷新 ——
-            这里再补一次请求就是第二次取数。 */}
-        {isFolder && canCreateIn(partitionKey) && (
+            这里再补一次请求就是第二次取数。
+
+            **但它只管这棵树，不管右边的列表视图**：列表读的是 `collectionPageIds`，而
+            store 的 `moveTo` 只把被移动的 id 从**所有**集合键里剔掉、不往目标键里补。所以
+            从侧栏「移动」之后，正显示**目标集合**的列表要等它自己重拉才会出现那一行
+            （移出方向没问题，本地过滤就把行去掉了）。列表视图自己的 `•••` 没这个问题 ——
+            它把 `refreshList` 传了进去。要在侧栏这处修得让 store 广播一次刷新，是接口改动，
+            **不在本轮**；先如实记在这里，别当成已解决。 */}
+        {isFolder && canManageCollections && (
           <span className="opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
             <FolderRowActions folderId={line.pageId} onChanged={() => undefined} />
           </span>

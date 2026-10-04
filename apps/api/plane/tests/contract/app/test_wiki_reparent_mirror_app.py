@@ -158,3 +158,26 @@ class TestReparentMovesTheMirror:
 
         assert (root / "C" / "新名.md").is_file()
         assert not (root / "C" / "旧名.md").exists()
+
+    @pytest.mark.django_db
+    def test_a_nested_rename_still_moves_as_before(
+        self, session_client, isolate_markdown_mirror, workspace, create_user
+    ):
+        """护栏的另一半：页面**嵌在文件夹里**时改名，路径中间那段祖先链也要算对。
+
+        上一条只覆盖顶层页（祖先链为空，`_page_ancestors` 回 `[]`）；这一条让
+        祖先链**非空**，把「改名时旧链原样沿用」的那一支也钉住。
+        """
+        root = _wiki_root(isolate_markdown_mirror)
+        c = _collection(workspace, create_user, "C")
+        folder = _folder(workspace, create_user, "夹", collection=c)
+        page = _wiki_page(workspace, create_user, "旧名", parent=folder, collection=c)
+
+        _write_mirror(page)
+        assert (root / "C" / "夹" / "旧名.md").is_file()
+
+        response = _move(session_client, workspace, page, {"name": "新名"})
+        assert response.status_code == status.HTTP_200_OK
+
+        assert (root / "C" / "夹" / "新名.md").is_file()
+        assert not (root / "C" / "夹" / "旧名.md").exists()

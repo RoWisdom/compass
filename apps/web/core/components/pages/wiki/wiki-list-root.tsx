@@ -130,7 +130,7 @@ export const WikiListRoot = observer(function WikiListRoot(props: Props) {
    * 工作区专属的**行内**动作。经由 `PageListBlock` 的 `extraActions` 传进去 ——
    * 它们是**工作区 store 的分区概念**（`collection` 查询参数 + `wiki-pages/` 端点），
    * 项目页没有对应物，所以由 wiki 侧构建、而不是在共享的 `PageListBlock` 里按 `storeType` 分支。
-   * 放在这里而不是 `MoveToCollectionModal` 里，是因为「移到集合」需要把被点的**行**记下来。
+   * 放在这里而不是 `MoveToModal` 里，是因为「移到集合」需要把被点的**行**记下来。
    *
    * 权限：**只在 ADMIN/MEMBER 时传给行菜单**（调用处 `canWriteWiki ? … : undefined`）。
    * 两个动作都是写操作，后端在 2026-09-27 按用户裁定收窄到 `[ADMIN, MEMBER]`

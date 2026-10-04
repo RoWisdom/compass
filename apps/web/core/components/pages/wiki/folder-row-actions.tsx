@@ -47,9 +47,11 @@ export const FolderRowActions = observer(function FolderRowActions(props: Props)
 
   return (
     <>
+      {/* 文件夹不是集合 —— 用「集合选项」会念错对象；`common.options` 是通用键，
+          也省掉为一条 aria-label 去动 19 个语言文件。 */}
       <CustomMenu
         customButton={<IconButton icon={MoreHorizontal} variant="ghost" size="sm" />}
-        ariaLabel={t("wiki_collections.menu.collection_options")}
+        ariaLabel={t("common.options")}
         closeOnSelect
       >
         <CustomMenu.MenuItem onClick={() => setIsMoveOpen(true)}>

@@ -264,7 +264,7 @@ class TestFolderBodyGuard:
     """文件夹没有正文（F2 / F4）—— 往它身上写正文必须被拒。
 
     **只拦正文三个键**（裁定 3）：改名与换集合走同一个端点（`WikiPageUpdateSerializer`
-    的字段），而侧栏的文件夹行靠改名、`move-to-collection` 靠换集合 —— 一刀切成 400
+    的字段），而侧栏的文件夹行靠改名、`move-to` 靠换集合 —— 一刀切成 400
     会把这两条既有能力一起砍掉。
 
     **三个键都拦**：协同编辑器 PATCH 的是 `description_binary`（Yjs 全量二进制），
@@ -314,7 +314,7 @@ class TestFolderBodyGuard:
     def test_a_folder_can_still_move_to_another_collection(
         self, session_client, workspace, create_user, folder_tree
     ):
-        """`move-to-collection` 走的是同一个端点、换的是 `collection_id` —— 必须放行。"""
+        """`move-to` 走的是同一个端点、换的是 `collection_id` —— 必须放行。"""
         collection = PageCollection.objects.create(workspace=workspace, name="新家", owned_by=create_user)
 
         response = session_client.patch(

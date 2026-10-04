@@ -125,12 +125,15 @@ class TestMovingIntoAPosition:
         assert tree["t1"].parent_id is None
 
     @pytest.mark.django_db
-    def test_a_folder_can_be_moved_under_another_folder(self, session_client, workspace, tree):
-        response = session_client.patch(_url(workspace, tree["b"]), {"parent": None}, format="json")
+    def test_a_folder_can_be_moved_under_another_folder(self, session_client, workspace, tree, create_user):
+        """文件夹也是合法容器：B 从 A 挪到一个与它无关的宿主文件夹下。"""
+        host = _folder(workspace, create_user, "宿主")
+
+        response = session_client.patch(_url(workspace, tree["b"]), {"parent": str(host.id)}, format="json")
 
         assert response.status_code == status.HTTP_200_OK
         tree["b"].refresh_from_db()
-        assert tree["b"].parent_id is None
+        assert tree["b"].parent_id == host.id
 
     @pytest.mark.django_db
     def test_omitting_parent_leaves_it_alone(self, session_client, workspace, tree):
@@ -150,6 +153,7 @@ class TestMoveRejectsTheImpossible:
         response = session_client.patch(_url(workspace, tree["a"]), {"parent": str(tree["a"].id)}, format="json")
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data["error"] == "Cannot move a page into itself or its own descendant."
         tree["a"].refresh_from_db()
         assert tree["a"].parent_id is None
 
@@ -159,6 +163,7 @@ class TestMoveRejectsTheImpossible:
         response = session_client.patch(_url(workspace, tree["a"]), {"parent": str(tree["b"].id)}, format="json")
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data["error"] == "Cannot move a page into itself or its own descendant."
         tree["a"].refresh_from_db()
         assert tree["a"].parent_id is None
 
@@ -167,6 +172,7 @@ class TestMoveRejectsTheImpossible:
         response = session_client.patch(_url(workspace, tree["outside"]), {"parent": str(uuid4())}, format="json")
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.data["error"] == "Parent page not found."
         tree["outside"].refresh_from_db()
         assert tree["outside"].parent_id is None
 
@@ -179,6 +185,7 @@ class TestMoveRejectsTheImpossible:
         response = session_client.patch(_url(workspace, tree["t1"]), {"parent": str(tree["outside"].id)}, format="json")
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.data["error"] == "Parent page not found."
         tree["t1"].refresh_from_db()
         assert tree["t1"].parent_id == tree["b"].id
 
@@ -193,6 +200,7 @@ class TestMoveRejectsTheImpossible:
         response = session_client.patch(_url(workspace, tree["outside"]), {"parent": str(foreign.id)}, format="json")
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert response.data["error"] == "Parent page not found."
         foreign.refresh_from_db()
         assert foreign.parent_id is None
 
@@ -225,6 +233,7 @@ class TestTheBodyRouteWillNotMoveAnything:
         )
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data["error"] == "Use the wiki-pages endpoint to move a page."
         tree["outside"].refresh_from_db()
         assert tree["outside"].parent_id is None
 

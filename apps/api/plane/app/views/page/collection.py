@@ -523,7 +523,7 @@ class WikiPageViewSet(BaseViewSet):
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
     def partial_update(self, request, slug, page_id):
-        """换集合（collection_id）、改标题（name）与/或写正文（description_*），可任意组合。"""
+        """换集合（collection_id）、换位置（parent）、改标题（name）与/或写正文（description_*），可任意组合。"""
         page = get_object_or_404(_wiki_page_queryset(request, slug), pk=page_id)
 
         if page.node_type == Page.NODE_TYPE_FOLDER:
@@ -583,8 +583,8 @@ class WikiPageViewSet(BaseViewSet):
             # **位置决定集合**（E-10）：给了非空 parent，目标那一行的集合说了算，
             # 同一请求里的 `collection_id` 被它覆盖。与建页时的继承同一条规则
             # （子页跟随父页的集合，`create_page` 的 :484-488）。
-            # 写回 `validated_data` 之后再 `save()`，于是既有的集合归属校验**顺带把
-            # 推导出来的值也验了** —— 不必写第二遍。
+            # 推导出来的值不必再验归属：`target_parent` 取自 `_wiki_page_queryset`
+            # （工作区作用域），它的 `collection_id` 天然是本工作区的集合或 None。
             serializer.validated_data["collection_id"] = target_parent.collection_id
 
         # 旧名与旧集合都必须在 save() **之前**记下来：serializer.update() 就地改
@@ -977,10 +977,10 @@ def _move_wiki_page_mirror(page, old_name, old_collection_id, old_ancestors=None
     file that is not ours. Closing that gap is its own round — see
     `罗盘-Wiki文件夹删除与移动-设计.md` §2.2 / §7 (E-16).
     """
+    new_ancestors = _page_ancestors(page.parent_id)
     if old_ancestors is None:
         # 祖先链**没变**（只改名 / 只换集合）：新旧共用一条链，与加这个参数之前逐字相同。
-        old_ancestors = _page_ancestors(page.parent_id)
-    new_ancestors = _page_ancestors(page.parent_id)
+        old_ancestors = new_ancestors
     old_path = _wiki_mirror_path(page, collection_id=old_collection_id, name=old_name, ancestors=old_ancestors)
     new_path = _wiki_mirror_path(page, collection_id=page.collection_id, name=page.name, ancestors=new_ancestors)
 
@@ -1153,9 +1153,10 @@ def _snapshot_children_mirror_state(folder):
             "id", "name", "parent_id", "collection_id"
         )
     )
-    state = {
-        str(row["id"]): (row["name"], row["collection_id"], _page_ancestors(row["parent_id"])) for row in children
-    }
+    # 每行都是 folder 的直接子节点（上面的 filter 就是 parent_id=folder.id），
+    # 祖先链**同一个值**，只算一次。
+    ancestors = _page_ancestors(folder.id)
+    state = {str(row["id"]): (row["name"], row["collection_id"], ancestors) for row in children}
     return [str(row["id"]) for row in children], state
 
 
@@ -1230,7 +1231,7 @@ class WikiPageDescriptionViewSet(BaseViewSet):
             #
             # **只拦正文三个键，不拦整个端点**：这个端点同时承载改名与换集合
             # （`WikiPageUpdateSerializer` 的字段），而这两件事对文件夹是**合法**的 ——
-            # 侧栏的文件夹行靠改名，`move-to-collection` 靠换集合。一刀切成 400
+            # 侧栏的文件夹行靠改名，`move-to` 靠换集合。一刀切成 400
             # 会把这两条既有能力一起砍掉。
             #
             # 三个键都拦：协同编辑器 PATCH 的是 `description_binary`（Yjs 全量二进制），
