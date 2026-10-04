@@ -166,13 +166,72 @@ class TestMarkdownPathValidation:
             getattr(serializer, f"validate_{name}")(value)
 
     @pytest.mark.parametrize("name", FIELD_NAMES)
-    def test_rejects_filesystem_root(self, name):
+    @pytest.mark.parametrize("value", ["/", "//"])
+    def test_rejects_filesystem_root(self, name, value):
+        """`//` is the filesystem root too even though `Path("//") != Path("/")`."""
         serializer = WorkSpaceSerializer()
         with pytest.raises(serializers.ValidationError):
-            getattr(serializer, f"validate_{name}")("/")
+            getattr(serializer, f"validate_{name}")(value)
 
     @pytest.mark.parametrize("name", FIELD_NAMES)
     def test_rejects_nul(self, name):
         serializer = WorkSpaceSerializer()
         with pytest.raises(serializers.ValidationError):
             getattr(serializer, f"validate_{name}")("/srv/a\x00b")
+
+
+@pytest.mark.unit
+class TestInstanceWorkspaceSerializerMarkdownPathValidation:
+    """The instance/license workspace create path must reject the same invalid
+    markdown roots as the app-level WorkSpaceSerializer. The license serializer
+    sets ``fields = "__all__"``, so both ``*_markdown_path`` fields are writable
+    there and must be validated before they persist (validator-level coverage:
+    this exercises ``validate_*`` directly, the same way the app-level tests do).
+    """
+
+    @pytest.mark.parametrize("name", FIELD_NAMES)
+    @pytest.mark.parametrize(
+        "value",
+        ["relative/path", "3-Wiki", "./wiki", "../wiki", "~/../wiki-x"],
+    )
+    def test_rejects_relative_paths(self, name, value):
+        serializer = InstanceWorkspaceSerializer()
+        with pytest.raises(serializers.ValidationError):
+            getattr(serializer, f"validate_{name}")(value)
+
+    @pytest.mark.parametrize("name", FIELD_NAMES)
+    @pytest.mark.parametrize("value", ["/", "//"])
+    def test_rejects_filesystem_root(self, name, value):
+        serializer = InstanceWorkspaceSerializer()
+        with pytest.raises(serializers.ValidationError):
+            getattr(serializer, f"validate_{name}")(value)
+
+    @pytest.mark.parametrize("name", FIELD_NAMES)
+    @pytest.mark.parametrize("value", ["/srv/vault/3-Wiki", "~/wiki", "~", "", None])
+    def test_accepts_valid_paths(self, name, value):
+        serializer = InstanceWorkspaceSerializer()
+        assert getattr(serializer, f"validate_{name}")(value) == value
+
+    @pytest.mark.django_db
+    @pytest.mark.parametrize(
+        "field,value",
+        [
+            ("project_markdown_path", "relative/path"),
+            ("project_markdown_path", "//"),
+            ("wiki_markdown_path", "relative/path"),
+            ("wiki_markdown_path", "//"),
+        ],
+    )
+    def test_is_valid_rejects_invalid_path(self, field, value):
+        """The create path calls ``is_valid()``; prove the field validators are
+        actually wired there, not merely defined."""
+        serializer = InstanceWorkspaceSerializer(data={"name": "Acme", "slug": "acme", field: value})
+        assert not serializer.is_valid()
+        assert field in serializer.errors
+
+    @pytest.mark.django_db
+    def test_is_valid_accepts_valid_path(self):
+        serializer = InstanceWorkspaceSerializer(
+            data={"name": "Acme", "slug": "acme", "project_markdown_path": "/srv/vault"}
+        )
+        assert serializer.is_valid(), serializer.errors

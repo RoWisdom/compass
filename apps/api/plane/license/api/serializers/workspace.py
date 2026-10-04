@@ -8,6 +8,7 @@ from rest_framework import serializers
 # Module imports
 from .base import BaseSerializer
 from .user import UserLiteSerializer
+from plane.app.serializers.workspace import WorkSpaceSerializer
 from plane.db.models import Workspace
 from plane.utils.constants import RESTRICTED_WORKSPACE_SLUGS
 from plane.utils.content_validator import has_alphanumeric
@@ -42,6 +43,17 @@ class WorkspaceSerializer(BaseSerializer):
         if Workspace.objects.filter(slug__iexact=value).exists():
             raise serializers.ValidationError("Slug is already in use")
         return value
+
+    # `fields = "__all__"` makes both markdown-root fields writable on the
+    # instance-admin create path too, so reuse the app-level rule instead of
+    # letting this endpoint accept (and persist) an unvalidated path. Delegating
+    # to the shared helper keeps a single implementation (see
+    # `WorkSpaceSerializer._validate_markdown_path`).
+    def validate_project_markdown_path(self, value):
+        return WorkSpaceSerializer._validate_markdown_path(value, "Project pages directory")
+
+    def validate_wiki_markdown_path(self, value):
+        return WorkSpaceSerializer._validate_markdown_path(value, "Wiki pages directory")
 
     class Meta:
         model = Workspace

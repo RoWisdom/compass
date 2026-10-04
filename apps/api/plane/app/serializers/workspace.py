@@ -72,7 +72,9 @@ class WorkSpaceSerializer(DynamicBaseSerializer):
 
     @staticmethod
     def _validate_markdown_path(value, label):
-        """共享的三条规则，见 `test_workspace_paths_validation` 的模块 docstring。"""
+        """共享的镜像根路径规则。规则本体见
+        `plane/tests/unit/serializers/test_workspace.py` 中 `FIELD_NAMES` 上方的
+        模块注释，覆盖测试为 `TestMarkdownPathValidation`。"""
         if value in (None, ""):
             # 空 = 回落环境变量 / 内置默认。字段可空，空不是错误。
             return value
@@ -88,7 +90,9 @@ class WorkSpaceSerializer(DynamicBaseSerializer):
         expanded = Path(value).expanduser()
         if ".." in expanded.parts:
             raise serializers.ValidationError(f"{label} must not contain '..'")
-        if expanded == Path("/"):
+        # `Path("//") != Path("/")`，但两者都是文件系统根，所以除了比 Path
+        # 对象还要认下双斜杠这一种写法（`//`、`//.` 的 parts 都是 `("//",)`）。
+        if expanded == Path("/") or expanded.parts == ("//",):
             raise serializers.ValidationError(f"{label} must not be the filesystem root")
         return value
 
