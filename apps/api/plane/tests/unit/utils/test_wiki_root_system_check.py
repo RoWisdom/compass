@@ -97,6 +97,22 @@ def test_check_is_silent_when_the_database_is_unreachable(monkeypatch, workspace
             raise OperationalError("the database is unreachable")
 
     monkeypatch.setattr(Page, "objects", _Down())
-    # No exception, and no finding invented from a database it could not read:
-    # ``[]`` means the guard swallowed a finding it could not verify.
+    # No exception, and no finding invented from a database it could not read.
+    # (That the guard *preserves* a finding it computed before the outage is a
+    # separate property — see the next test.)
     assert _ids(_run()) == []
+
+
+def test_a_finding_computed_before_the_outage_survives_it(monkeypatch, tmp_path):
+    # A misnamed env var appends ``plane.W001`` *before* the first ORM call (that
+    # branch runs inside the guard, ahead of the queries). With the database down,
+    # an ``except`` that returned ``[]`` instead of ``findings`` would discard it —
+    # so this pins that choice: the handler returns what it had already computed.
+    monkeypatch.setenv(checks.WIKI_ROOT_ENV, str(tmp_path / "wiki-not-three"))
+
+    class _Down:
+        def filter(self, *args, **kwargs):
+            raise OperationalError("the database is unreachable")
+
+    monkeypatch.setattr(Page, "objects", _Down())
+    assert _ids(_run()) == ["plane.W001"]
