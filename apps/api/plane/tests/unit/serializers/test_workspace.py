@@ -127,3 +127,52 @@ class TestInstanceWorkspaceSerializerNameValidation:
         serializer = InstanceWorkspaceSerializer()
         with pytest.raises(serializers.ValidationError):
             serializer.validate_name(name)
+
+
+# ─── 镜像根路径（罗盘：Workspace 目录配置）───────────────────────────────
+# 三条规则：必须绝对（或 `~` 开头）、展开后不得是 `/`、长度 ≤ 500 且不含 NUL。
+# **不做「目录是否存在」** —— 镜像写入本来就是 best-effort（`OSError` 只记日志、
+# 从不抛），预先探活会把「以后会建出来的目录」误判成非法。
+
+FIELD_NAMES = ("project_markdown_path", "wiki_markdown_path")
+
+
+@pytest.mark.unit
+class TestMarkdownPathValidation:
+    @pytest.mark.parametrize("name", FIELD_NAMES)
+    @pytest.mark.parametrize(
+        "value",
+        ["/srv/vault/3-Wiki", "~/wiki", "~", "/tmp/空间/目录"],
+    )
+    def test_accepts_absolute_and_tilde_paths(self, name, value):
+        serializer = WorkSpaceSerializer()
+        assert getattr(serializer, f"validate_{name}")(value) == value
+
+    @pytest.mark.parametrize("name", FIELD_NAMES)
+    @pytest.mark.parametrize("value", ["", None])
+    def test_accepts_empty(self, name, value):
+        """空 = 回落环境变量 / 内置默认，是合法输入（字段可空）。"""
+        serializer = WorkSpaceSerializer()
+        assert getattr(serializer, f"validate_{name}")(value) == value
+
+    @pytest.mark.parametrize("name", FIELD_NAMES)
+    @pytest.mark.parametrize(
+        "value",
+        ["relative/path", "3-Wiki", "./wiki", "../wiki", "~/../wiki-x"],
+    )
+    def test_rejects_relative_paths(self, name, value):
+        serializer = WorkSpaceSerializer()
+        with pytest.raises(serializers.ValidationError):
+            getattr(serializer, f"validate_{name}")(value)
+
+    @pytest.mark.parametrize("name", FIELD_NAMES)
+    def test_rejects_filesystem_root(self, name):
+        serializer = WorkSpaceSerializer()
+        with pytest.raises(serializers.ValidationError):
+            getattr(serializer, f"validate_{name}")("/")
+
+    @pytest.mark.parametrize("name", FIELD_NAMES)
+    def test_rejects_nul(self, name):
+        serializer = WorkSpaceSerializer()
+        with pytest.raises(serializers.ValidationError):
+            getattr(serializer, f"validate_{name}")("/srv/a\x00b")

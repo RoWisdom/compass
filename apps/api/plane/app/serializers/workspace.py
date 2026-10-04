@@ -38,6 +38,7 @@ from plane.utils.content_validator import (
 from django.core.validators import URLValidator
 from django.core.exceptions import ValidationError
 import re
+from pathlib import Path
 
 
 class WorkSpaceSerializer(DynamicBaseSerializer):
@@ -68,6 +69,34 @@ class WorkSpaceSerializer(DynamicBaseSerializer):
                 "Slug can only contain letters, numbers, hyphens (-), and underscores (_)"
             )
         return value
+
+    @staticmethod
+    def _validate_markdown_path(value, label):
+        """共享的三条规则，见 `test_workspace_paths_validation` 的模块 docstring。"""
+        if value in (None, ""):
+            # 空 = 回落环境变量 / 内置默认。字段可空，空不是错误。
+            return value
+        if "\x00" in value:
+            raise serializers.ValidationError(f"{label} must not contain NUL characters")
+        if len(value) > 500:
+            raise serializers.ValidationError(f"{label} must be at most 500 characters")
+        if not (value.startswith("/") or value == "~" or value.startswith("~/")):
+            raise serializers.ValidationError(
+                f"{label} must be an absolute path or start with ~"
+            )
+        # 归一化后再判：`/` 是「把镜像铺满整个盘」，`~` 单写等于家目录（允许）。
+        expanded = Path(value).expanduser()
+        if ".." in expanded.parts:
+            raise serializers.ValidationError(f"{label} must not contain '..'")
+        if expanded == Path("/"):
+            raise serializers.ValidationError(f"{label} must not be the filesystem root")
+        return value
+
+    def validate_project_markdown_path(self, value):
+        return self._validate_markdown_path(value, "Project pages directory")
+
+    def validate_wiki_markdown_path(self, value):
+        return self._validate_markdown_path(value, "Wiki pages directory")
 
     class Meta:
         model = Workspace
