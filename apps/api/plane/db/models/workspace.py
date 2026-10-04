@@ -137,6 +137,12 @@ class Workspace(BaseModel):
     organization_size = models.CharField(max_length=20, blank=True, null=True)
     timezone = models.CharField(max_length=255, default="UTC", choices=TIMEZONE_CHOICES)
     background_color = models.CharField(max_length=255, default=get_random_color)
+    #: 项目页面 Markdown 镜像的根目录。空 = 回落到环境变量 / 内置默认
+    #: （`MARKDOWN_STORAGE_PATH` → `~/projects`）。见 `markdown_storage.get_markdown_root`。
+    project_markdown_path = models.CharField(max_length=500, null=True, blank=True)
+    #: Wiki 页面 Markdown 镜像的根目录。空 = 回落到环境变量 / 内置默认
+    #: （`WIKI_MARKDOWN_STORAGE_PATH` → `~/wiki`）。见 `markdown_storage.get_wiki_markdown_root`。
+    wiki_markdown_path = models.CharField(max_length=500, null=True, blank=True)
 
     def __str__(self):
         """Return name of the Workspace"""
