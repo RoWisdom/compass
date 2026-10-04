@@ -39,14 +39,16 @@ def isolate_markdown_mirror(tmp_path, monkeypatch):
     """
     mirror_root = tmp_path / "markdown-mirror"
     monkeypatch.setenv("MARKDOWN_STORAGE_PATH", str(mirror_root))
-    # The Wiki tree is a **second** mirror root. When ``WIKI_MARKDOWN_STORAGE_PATH``
-    # is unset it falls back to ``get_markdown_root().parent / "3-Wiki"``, i.e. it
-    # rides along on the line above and is isolated for free — but ``apps/api/.env``
-    # now **does** set it (to the developer's real vault, for the real import run), so
-    # any DB-touching test run that sources ``.env`` bypasses the line above and writes
-    # into the user's notes. It has already happened once. Pin it explicitly, and
-    # assert both roots landed under ``tmp_path``: the failure mode here is *silent*,
-    # so the guard has to be loud.
+    # The Wiki tree is a **second** mirror root, configured independently of the
+    # projects root — production no longer derives it from ``get_markdown_root()``.
+    # This fixture pins it explicitly instead of relying on any fallback:
+    # ``apps/api/.env`` sets ``WIKI_MARKDOWN_STORAGE_PATH`` to the developer's real
+    # vault (for the real import run), so any DB-touching test run that sources
+    # ``.env`` would otherwise write into the user's notes. It has already happened
+    # once. Pinning both variables at a ``tmp_path`` subdirectory isolates the two
+    # roots for free, and this fixture's behaviour does not depend on how
+    # production resolves a root. Assert both landed under ``tmp_path``: the
+    # failure mode here is *silent*, so the guard has to be loud.
     monkeypatch.setenv("WIKI_MARKDOWN_STORAGE_PATH", str(tmp_path / "3-Wiki"))
 
     # Imported here rather than at module scope: this fixture is autouse, so it runs
