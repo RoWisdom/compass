@@ -74,13 +74,29 @@ def test_conforming_env_root_is_not_warned_about(monkeypatch, tmp_path):
     assert _ids(_run()) == []
 
 
-def test_check_is_silent_when_the_database_is_unreachable(monkeypatch, tmp_path):
+def test_check_is_silent_when_the_database_is_unreachable(monkeypatch, workspace, tmp_path):
+    # Pin the env var at a *conforming* root, so the Warning branch contributes
+    # nothing and the seeded workspace below is the only thing that could fire.
     monkeypatch.setenv(checks.WIKI_ROOT_ENV, str(tmp_path / "3-Wiki"))
+
+    # Seed a row the check *would* flag: a misnamed workspace root plus a Page
+    # whose external_id depends on the ``3-Wiki/`` prefix. Read, this is a
+    # ``plane.E001``. That makes the ``== []`` below positive proof — if the
+    # monkeypatch had failed to bind, the real query would surface the Error.
+    workspace.wiki_markdown_path = str(tmp_path / "wiki-not-three")
+    workspace.save(update_fields=["wiki_markdown_path"])
+    Page.objects.create(
+        workspace=workspace,
+        name="笔记",
+        owned_by=workspace.owner,
+        external_id="3-Wiki/集合/笔记.md",
+    )
 
     class _Down:
         def filter(self, *args, **kwargs):
             raise OperationalError("the database is unreachable")
 
     monkeypatch.setattr(Page, "objects", _Down())
-    # No exception, and no finding invented from a database it could not read.
+    # No exception, and no finding invented from a database it could not read:
+    # ``[]`` means the guard swallowed a finding it could not verify.
     assert _ids(_run()) == []
