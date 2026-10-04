@@ -4,19 +4,24 @@
 
 """wiki 侧的第二条落盘路径。
 
-项目页面镜像在 `MARKDOWN_STORAGE_PATH`（`…/ObsidianVault/2-项目`）下，
-wiki 集合页面镜像在 `WIKI_MARKDOWN_STORAGE_PATH`（`…/ObsidianVault/3-Wiki`）下。
-两者是**并列的两棵树**，不是一棵树的两个子目录：目录改号过（`2-项目`/`3-Wiki`），
-把根写死成同一个相对位置会让改一次要动两处语义。
+项目页面镜像与 wiki 页面镜像**各自**有一个根，二者按工作区独立配置
+（`Workspace.project_markdown_path` / `wiki_markdown_path`），再往下才是环境变量
+`MARKDOWN_STORAGE_PATH` / `WIKI_MARKDOWN_STORAGE_PATH`，最后是内置默认
+`~/projects` / `~/wiki`。**wiki 根不再从 projects 根推导**（原先是
+`get_markdown_root().parent / "3-Wiki"`）—— 那条耦合会让「改了项目目录、wiki 目录
+跟着变」成为一个真实困惑。
 
-`markdown_storage.get_wiki_markdown_root` 在没有该环境变量时回落到
-`get_markdown_root().parent / "3-Wiki"` —— 这样测试里那个 autouse 的
-`isolate_markdown_mirror` 夹具（把 `MARKDOWN_STORAGE_PATH` 指到 tmp_path）
-自动把 wiki 根也隔离到 tmp_path 下，不会有测试写到真实 vault。"""
+测试隔离靠 conftest 那个 autouse 的 `isolate_markdown_mirror`，它**显式**给两个
+环境变量都指到 tmp_path（故意的，曾挡住一次把镜像写进用户真实 vault 的事故，
+不要动它）。"""
+
+from pathlib import Path
 
 import pytest
 
 from plane.utils.markdown_storage import (
+    DEFAULT_WIKI_MARKDOWN_PATH,
+    MARKDOWN_STORAGE_PATH_ENV,
     WIKI_MARKDOWN_STORAGE_PATH_ENV,
     get_markdown_root,
     get_wiki_markdown_root,
@@ -32,30 +37,20 @@ class TestGetWikiMarkdownRoot:
         monkeypatch.setenv(WIKI_MARKDOWN_STORAGE_PATH_ENV, str(tmp_path / "3-Wiki"))
         assert get_wiki_markdown_root() == tmp_path / "3-Wiki"
 
-    def test_falls_back_next_to_the_projects_root(self, monkeypatch, tmp_path):
-        """真正走回落分支：没有 `WIKI_MARKDOWN_STORAGE_PATH` 时，
-        `get_wiki_markdown_root` 必须等于 `get_markdown_root().parent / "3-Wiki"`
-        （父目录的兄弟，不是它的子目录）。
+    def test_falls_back_to_the_builtin_default(self, monkeypatch):
+        """真正走回落分支：两个 env 都没有时，wiki 根 = 内置默认 `~/wiki`。
 
         autouse 的 `isolate_markdown_mirror` 夹具**总是**设了 wiki env（钉住两个根是
         故意的，曾挡住一次把镜像写进用户真实 vault 的事故，不要动它）。所以这里必须由
-        **测试自己**删掉那个变量、再走回落——否则该函数永远走 env 分支，这条断言两侧
+        **测试自己**删掉那两个变量、再走回落——否则该函数永远走 env 分支，断言两侧
         都来自同一个 env 值，会退化成恒真的空转。
         """
-        mirror_root = tmp_path / "markdown-mirror"
-        monkeypatch.setenv("MARKDOWN_STORAGE_PATH", str(mirror_root))
+        monkeypatch.delenv(MARKDOWN_STORAGE_PATH_ENV, raising=False)
         monkeypatch.delenv(WIKI_MARKDOWN_STORAGE_PATH_ENV, raising=False)
 
-        # 守卫就是**下面这一句**：它要求 `get_wiki_markdown_root()` 等于
-        # `get_markdown_root().parent / "3-Wiki"`，只有走了回落分支才成立。若将来有人
-        # 又把 wiki env 塞回夹具/环境（或删掉这里的 delenv），本句会红 —— 原先它上方
-        # 还有一句 `assert ... not in os.environ`，但那句在刚 delenv 之后恒真、抓不到任何
-        # 东西，已删除。
-        assert get_wiki_markdown_root() == get_markdown_root().parent / "3-Wiki"
-        # 实测确认（不靠推理）：删掉 wiki env 后回落值仍落在 tmp_path 之下，
-        # 夹具那条 `root.is_relative_to(tmp_path)` 守卫不受影响。
-        assert get_wiki_markdown_root() == tmp_path / "3-Wiki"
-        assert get_wiki_markdown_root().is_relative_to(tmp_path)
+        assert get_wiki_markdown_root() == Path(DEFAULT_WIKI_MARKDOWN_PATH).expanduser()
+        # 与 projects 根**没有**父子关系 —— 这条正是删掉推导的那个决定。
+        assert get_wiki_markdown_root() != get_markdown_root().parent / "3-Wiki"
 
     def test_the_two_roots_are_independent(self, monkeypatch, tmp_path):
         monkeypatch.setenv("MARKDOWN_STORAGE_PATH", str(tmp_path / "2-项目"))
@@ -66,27 +61,69 @@ class TestGetWikiMarkdownRoot:
 @pytest.mark.unit
 class TestWikiPageMarkdownPath:
     def test_top_level_page_sits_under_the_collection_folder(self, isolate_markdown_mirror):
-        path = wiki_page_markdown_path("Claude Code", "col-1", [], "安装与更新", "page-1")
+        path = wiki_page_markdown_path(
+            collection_name="Claude Code",
+            collection_id="col-1",
+            ancestors=[],
+            name="安装与更新",
+            page_id="page-1",
+            root=get_wiki_markdown_root(),
+        )
         assert path == isolate_markdown_mirror.parent / "3-Wiki" / "Claude Code" / "安装与更新.md"
 
     def test_collection_name_is_sanitized(self, isolate_markdown_mirror):
-        path = wiki_page_markdown_path("a/b:c", "col-1", [], "页", "page-1")
+        path = wiki_page_markdown_path(
+            collection_name="a/b:c",
+            collection_id="col-1",
+            ancestors=[],
+            name="页",
+            page_id="page-1",
+            root=get_wiki_markdown_root(),
+        )
         assert path.parent.name == "a-b-c"
 
     def test_missing_name_falls_back_to_the_id(self, isolate_markdown_mirror):
-        path = wiki_page_markdown_path("C", "col-1", [], "", "page-1")
+        path = wiki_page_markdown_path(
+            collection_name="C",
+            collection_id="col-1",
+            ancestors=[],
+            name="",
+            page_id="page-1",
+            root=get_wiki_markdown_root(),
+        )
         assert path.name == "page-1.md"
 
     def test_ancestors_become_folders(self, isolate_markdown_mirror):
-        path = wiki_page_markdown_path("C", "col-1", [("父页", "p-0")], "子页", "p-1")
+        path = wiki_page_markdown_path(
+            collection_name="C",
+            collection_id="col-1",
+            ancestors=[("父页", "p-0")],
+            name="子页",
+            page_id="p-1",
+            root=get_wiki_markdown_root(),
+        )
         assert path.parent.name == "父页"
         assert path.name == "子页.md"
 
     def test_name_collision_with_a_different_page_does_not_overwrite(self, isolate_markdown_mirror, tmp_path):
-        first = wiki_page_markdown_path("C", "col-1", [], "同名", "aaaaaaaa-1")
+        first = wiki_page_markdown_path(
+            collection_name="C",
+            collection_id="col-1",
+            ancestors=[],
+            name="同名",
+            page_id="aaaaaaaa-1",
+            root=get_wiki_markdown_root(),
+        )
         first.parent.mkdir(parents=True, exist_ok=True)
         first.write_text("---\nid: bbbbbbbb-2\n---\n\n别人的正文\n", encoding="utf-8")
-        second = wiki_page_markdown_path("C", "col-1", [], "同名", "cccccccc-3")
+        second = wiki_page_markdown_path(
+            collection_name="C",
+            collection_id="col-1",
+            ancestors=[],
+            name="同名",
+            page_id="cccccccc-3",
+            root=get_wiki_markdown_root(),
+        )
         assert second.name == "同名-cccccccc.md"
 
 
@@ -100,6 +137,7 @@ class TestWriteWikiPageMarkdown:
             page_id="p-1",
             name="页",
             markdown="正文。",
+            root=get_wiki_markdown_root(),
         )
         written = isolate_markdown_mirror.parent / "3-Wiki" / "C" / "页.md"
         lines = written.read_text(encoding="utf-8").split("\n")
@@ -127,6 +165,7 @@ class TestWriteWikiPageMarkdown:
             page_id="p-1",
             name="剪藏",
             markdown="新正文",
+            root=get_wiki_markdown_root(),
             own_path=target,
         )
         text = target.read_text(encoding="utf-8")
@@ -157,6 +196,7 @@ class TestProjectTreeLeavesAHandwrittenNoteAlone:
             page_id="aaaaaaaa-1111-2222-3333-444444444444",
             name="剪藏",
             markdown="Plane 正文",
+            root=get_markdown_root(),
         )
 
         assert target.read_text(encoding="utf-8") == original, "手写笔记必须逐字未动"
