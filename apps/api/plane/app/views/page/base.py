@@ -49,7 +49,12 @@ from plane.db.models import (
 )
 from plane.utils.error_codes import ERROR_CODES
 from plane.utils.html_to_markdown import html_to_markdown
-from plane.utils.markdown_storage import delete_page_markdown, move_page_markdown, write_page_markdown
+from plane.utils.markdown_storage import (
+    delete_page_markdown,
+    get_markdown_root,
+    move_page_markdown,
+    write_page_markdown,
+)
 
 # Local imports
 from ..base import BaseAPIView, BaseViewSet
@@ -79,6 +84,18 @@ def unarchive_archive_page_and_descendants(page_id, archived_at):
 def _project_name(project_id):
     """Return a project's human name, falling back to its id when absent."""
     return Project.objects.filter(pk=project_id).values_list("name", flat=True).first() or str(project_id)
+
+
+def _project_mirror_root(project_id):
+    """Return the Markdown mirror root for a project's pages.
+
+    One query, the same shape as ``_project_name`` above: the workspace a project
+    belongs to carries the configured root. Falls back to ``None`` (which
+    ``get_markdown_root`` reads as "use the env var / built-in default") when the
+    project row is gone, so a deleted project can never crash a mirror call.
+    """
+    project = Project.objects.select_related("workspace").filter(pk=project_id).first()
+    return get_markdown_root(project.workspace if project else None)
 
 
 def _page_ancestors(parent_id):
@@ -132,6 +149,7 @@ def _write_page_mirror(project_id, page_id, name, ancestors, description_html):
         page_id=str(page_id),
         name=name,
         markdown=markdown,
+        root=_project_mirror_root(project_id),
     )
 
 
@@ -266,6 +284,7 @@ class PageViewSet(BaseViewSet):
                         page_id=str(page_id),
                         old_name=old_name,
                         new_name=page.name,
+                        root=_project_mirror_root(project_id),
                     )
                 # capture the page transaction
                 if request.data.get("description_html"):
@@ -507,6 +526,7 @@ class PageViewSet(BaseViewSet):
             ancestors=ancestors,
             page_id=str(page_id),
             name=page_name,
+            root=_project_mirror_root(project_id),
         )
         for child_id, child_name in children:
             move_page_markdown(
@@ -517,6 +537,7 @@ class PageViewSet(BaseViewSet):
                 page_id=str(child_id),
                 old_name=child_name,
                 new_name=child_name,
+                root=_project_mirror_root(project_id),
             )
         # Delete the user favorite page
         UserFavorite.objects.filter(
