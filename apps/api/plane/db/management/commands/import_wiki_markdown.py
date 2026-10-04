@@ -56,7 +56,7 @@ class Command(BaseCommand):
         if owner is None:
             raise CommandError(f"User not found: {options['owner']}")
 
-        root = get_wiki_markdown_root()
+        root = get_wiki_markdown_root(workspace)
         if not root.is_dir():
             raise CommandError(f"Wiki Markdown root is not a directory: {root}")
 

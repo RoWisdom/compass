@@ -12,10 +12,11 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-# Environment variable pointing to the root directory where Markdown mirrors of
-# Plane content are written.
+# Environment variables pointing at the root directories where Markdown mirrors
+# of Plane content are written. They are the **middle** priority: a workspace's
+# own setting wins, and these win over the built-in defaults.
 MARKDOWN_STORAGE_PATH_ENV = "MARKDOWN_STORAGE_PATH"
-DEFAULT_MARKDOWN_STORAGE_PATH = "~/Documents/work-compass/plane-descriptions"
+DEFAULT_PROJECT_MARKDOWN_PATH = "~/projects"
 
 # Characters that are illegal in a file name on common filesystems, plus control
 # characters. Replaced with "-" so the file name stays human-readable.
@@ -25,29 +26,36 @@ _INVALID_FILENAME_CHARS = re.compile(r'[\\/:*?"<>|\x00-\x1f]')
 _MAX_FILENAME_CHARS = 80
 
 
-def get_markdown_root() -> Path:
-    """Return the root directory for mirrored Markdown files."""
-    root = os.environ.get(MARKDOWN_STORAGE_PATH_ENV) or DEFAULT_MARKDOWN_STORAGE_PATH
+def get_markdown_root(workspace=None) -> Path:
+    """Return the root directory for mirrored project-page Markdown files.
+
+    Resolution is ``workspace.project_markdown_path`` > ``MARKDOWN_STORAGE_PATH``
+    > the built-in default. ``workspace`` is duck-typed (``getattr``, not an
+    import) because this module has no ORM dependency and is also called from
+    management commands and unit tests where no request context exists.
+    """
+    field = getattr(workspace, "project_markdown_path", None)
+    root = field or os.environ.get(MARKDOWN_STORAGE_PATH_ENV) or DEFAULT_PROJECT_MARKDOWN_PATH
     return Path(root).expanduser()
 
 
 WIKI_MARKDOWN_STORAGE_PATH_ENV = "WIKI_MARKDOWN_STORAGE_PATH"
+DEFAULT_WIKI_MARKDOWN_PATH = "~/wiki"
 
 
-def get_wiki_markdown_root() -> Path:
+def get_wiki_markdown_root(workspace=None) -> Path:
     """Return the root directory for wiki page mirrors.
 
-    A *separate* tree from ``get_markdown_root()``, not a subdirectory of it:
-    the two point at sibling folders of the vault (``2-项目`` and ``3-Wiki``)
-    and the numbers have already changed once. Defaulting to the sibling keeps
-    the layout working without the env var, and keeps tests isolated for free —
-    the autouse mirror fixture moves ``MARKDOWN_STORAGE_PATH`` into tmp_path,
-    which moves this root there too.
+    A *separate* tree from ``get_markdown_root()`` — the two are configured
+    independently, so this does **not** derive from the projects root. (It used
+    to fall back to ``get_markdown_root().parent / "3-Wiki"``; that coupling made
+    "I changed the projects dir and the wiki dir moved too" a real surprise.)
+
+    Same precedence as ``get_markdown_root``: workspace field > env > default.
     """
-    root = os.environ.get(WIKI_MARKDOWN_STORAGE_PATH_ENV)
-    if root:
-        return Path(root).expanduser()
-    return get_markdown_root().parent / "3-Wiki"
+    field = getattr(workspace, "wiki_markdown_path", None)
+    root = field or os.environ.get(WIKI_MARKDOWN_STORAGE_PATH_ENV) or DEFAULT_WIKI_MARKDOWN_PATH
+    return Path(root).expanduser()
 
 
 def _sanitize_name(name: str) -> str:
@@ -332,14 +340,16 @@ def move_mirror_file(
 
 
 def page_markdown_path(
+    *,
     project_name: Optional[str],
     project_id: str,
     ancestors: list,
     name: Optional[str],
     page_id: str,
+    root: Path,
 ) -> Path:
     """Resolve the absolute path of a project page's Markdown file."""
-    directory = get_markdown_root() / _project_directory_name(project_name, project_id)
+    directory = root / _project_directory_name(project_name, project_id)
     return _resolve_page_path(directory, ancestors, name, page_id)
 
 
@@ -351,6 +361,7 @@ def write_page_markdown(
     page_id: str,
     name: Optional[str],
     markdown: str,
+    root: Path,
 ) -> None:
     """Write a page's content to a local Markdown file (best-effort).
 
@@ -359,7 +370,14 @@ def write_page_markdown(
     frontmatter) keeps them.
     """
     try:
-        path = page_markdown_path(project_name, project_id, ancestors, name, page_id)
+        path = page_markdown_path(
+            project_name=project_name,
+            project_id=project_id,
+            ancestors=ancestors,
+            name=name,
+            page_id=page_id,
+            root=root,
+        )
         _write_page_file(path, page_id, name, markdown)
     except (OSError, UnicodeDecodeError) as exc:
         logger.warning("Failed to write page markdown mirror %s: %s", page_id, exc)
@@ -374,11 +392,26 @@ def move_page_markdown(
     page_id: str,
     old_name: Optional[str],
     new_name: Optional[str],
+    root: Path,
 ) -> None:
     """Move a page's .md (and its sub-page folder) after a rename/reparent."""
     try:
-        old_path = page_markdown_path(project_name, project_id, old_ancestors, old_name, page_id)
-        new_path = page_markdown_path(project_name, project_id, new_ancestors, new_name, page_id)
+        old_path = page_markdown_path(
+            project_name=project_name,
+            project_id=project_id,
+            ancestors=old_ancestors,
+            name=old_name,
+            page_id=page_id,
+            root=root,
+        )
+        new_path = page_markdown_path(
+            project_name=project_name,
+            project_id=project_id,
+            ancestors=new_ancestors,
+            name=new_name,
+            page_id=page_id,
+            root=root,
+        )
         _move_page_file(old_path, new_path, old_name, new_name, page_id)
     except (OSError, UnicodeDecodeError) as exc:
         logger.warning("Failed to move page markdown mirror %s: %s", page_id, exc)
@@ -391,10 +424,18 @@ def delete_page_markdown(
     ancestors: list,
     page_id: str,
     name: Optional[str],
+    root: Path,
 ) -> None:
     """Delete a page's local Markdown file (best-effort)."""
     try:
-        page_markdown_path(project_name, project_id, ancestors, name, page_id).unlink(missing_ok=True)
+        page_markdown_path(
+            project_name=project_name,
+            project_id=project_id,
+            ancestors=ancestors,
+            name=name,
+            page_id=page_id,
+            root=root,
+        ).unlink(missing_ok=True)
     except OSError as exc:
         logger.warning("Failed to delete page markdown mirror %s: %s", page_id, exc)
 
@@ -407,8 +448,11 @@ def delete_page_markdown(
 # implementation, two roots.
 
 
-def wiki_collection_directory(collection_name: Optional[str], collection_id: str) -> Path:
+def wiki_collection_directory(*, collection_name: Optional[str], collection_id: str, root: Path) -> Path:
     """The folder a collection's mirrors live in, under the wiki vault root.
+
+    ``root`` is resolved by the caller and passed in — this module does no
+    resolution here.
 
     One definition, two callers: ``wiki_page_markdown_path`` resolves a page's file
     inside it, and a collection rename moves it. Having the two disagree about the
@@ -416,15 +460,17 @@ def wiki_collection_directory(collection_name: Optional[str], collection_id: str
     the raw name put ``3-Wiki/C  D/`` and ``3-Wiki/C D/`` on disk at once, which is
     exactly the split-folder bug the rename exists to prevent.
     """
-    return get_wiki_markdown_root() / (_sanitize_name(collection_name or "") or str(collection_id))
+    return root / (_sanitize_name(collection_name or "") or str(collection_id))
 
 
 def wiki_page_markdown_path(
+    *,
     collection_name: Optional[str],
     collection_id: str,
     ancestors: list,
     name: Optional[str],
     page_id: str,
+    root: Path,
     own_path: Optional[Path] = None,
 ) -> Path:
     """Resolve the absolute path of a wiki page's Markdown file.
@@ -437,7 +483,9 @@ def wiki_page_markdown_path(
     ``-{id[:8]}`` sibling instead — a change from the pre-W2 behaviour, which
     overwrote it.
     """
-    directory = wiki_collection_directory(collection_name, collection_id)
+    directory = wiki_collection_directory(
+        collection_name=collection_name, collection_id=collection_id, root=root
+    )
     return _resolve_page_path(directory, ancestors, name, page_id, own_path=own_path)
 
 
@@ -449,6 +497,7 @@ def write_wiki_page_markdown(
     page_id: str,
     name: Optional[str],
     markdown: str,
+    root: Path,
     own_path: Optional[Path] = None,
 ) -> None:
     """Write a wiki page's content to its local Markdown file (best-effort).
@@ -463,7 +512,15 @@ def write_wiki_page_markdown(
     sibling instead.
     """
     try:
-        path = wiki_page_markdown_path(collection_name, collection_id, ancestors, name, page_id, own_path=own_path)
+        path = wiki_page_markdown_path(
+            collection_name=collection_name,
+            collection_id=collection_id,
+            ancestors=ancestors,
+            name=name,
+            page_id=page_id,
+            root=root,
+            own_path=own_path,
+        )
         _write_page_file(path, page_id, name, markdown)
     except (OSError, UnicodeDecodeError) as exc:
         logger.warning("Failed to write wiki page markdown mirror %s: %s", page_id, exc)
@@ -478,6 +535,7 @@ def move_wiki_page_markdown(
     page_id: str,
     old_name: Optional[str],
     new_name: Optional[str],
+    root: Path,
     own_path: Optional[Path] = None,
 ) -> None:
     """Move a wiki page's .md (and its sub-page folder) after a rename/reparent.
@@ -501,10 +559,22 @@ def move_wiki_page_markdown(
     """
     try:
         old_path = wiki_page_markdown_path(
-            collection_name, collection_id, old_ancestors, old_name, page_id, own_path=own_path
+            collection_name=collection_name,
+            collection_id=collection_id,
+            ancestors=old_ancestors,
+            name=old_name,
+            page_id=page_id,
+            root=root,
+            own_path=own_path,
         )
         new_path = wiki_page_markdown_path(
-            collection_name, collection_id, new_ancestors, new_name, page_id, own_path=own_path
+            collection_name=collection_name,
+            collection_id=collection_id,
+            ancestors=new_ancestors,
+            name=new_name,
+            page_id=page_id,
+            root=root,
+            own_path=own_path,
         )
         _move_page_file(old_path, new_path, old_name, new_name, page_id)
     except (OSError, UnicodeDecodeError) as exc:

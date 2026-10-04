@@ -12,7 +12,7 @@ from django.core.management.base import BaseCommand
 # Module imports
 from plane.db.models import FileAsset, Page, ProjectPage, User
 from plane.utils.html_to_markdown import html_to_markdown
-from plane.utils.markdown_storage import write_page_markdown
+from plane.utils.markdown_storage import get_markdown_root, write_page_markdown
 
 
 class Command(BaseCommand):
@@ -35,14 +35,16 @@ class Command(BaseCommand):
         dry_run = options["dry_run"]
 
         # Map each page to the projects it is (still) linked to.
-        links = ProjectPage.objects.filter(deleted_at__isnull=True).select_related("project")
+        links = ProjectPage.objects.filter(deleted_at__isnull=True).select_related("project", "project__workspace")
         if workspace_slug:
             links = links.filter(project__workspace__slug=workspace_slug)
 
         project_index = {}
         page_ids = []
         for link in links.iterator():
-            project_index.setdefault(str(link.page_id), []).append((str(link.project_id), link.project.name))
+            project_index.setdefault(str(link.page_id), []).append(
+                (str(link.project_id), link.project.name, link.project.workspace)
+            )
             page_ids.append(link.page_id)
 
         pages = Page.objects.filter(id__in=page_ids, archived_at__isnull=True).order_by(
@@ -94,7 +96,7 @@ class Command(BaseCommand):
                 depth += 1
             ancestors.reverse()
 
-            for project_id, project_name in project_index.get(str(page.id), []):
+            for project_id, project_name, project_workspace in project_index.get(str(page.id), []):
                 if dry_run:
                     prefix = "/".join(a[0] for a in ancestors)
                     self.stdout.write(
@@ -109,6 +111,7 @@ class Command(BaseCommand):
                         page_id=str(page.id),
                         name=page.name,
                         markdown=markdown,
+                        root=get_markdown_root(project_workspace),
                     )
             written += 1
 

@@ -35,6 +35,7 @@ from plane.app.serializers.page_collection import WikiPageTreeSerializer
 from plane.db.models import Page, PageCollection, Project, ProjectPage, Workspace
 from plane.utils.error_codes import ERROR_CODES
 from plane.utils.markdown_storage import (
+    get_markdown_root,
     get_wiki_markdown_root,
     move_mirror_file,
     page_markdown_path,
@@ -178,7 +179,9 @@ class PageCollectionViewSet(BaseViewSet):
         三份必须一起动 —— 搬目录与重写 ``external_id`` 前缀都由
         ``_rename_collection_mirror`` 完成，理由见它的 docstring。
         """
-        collection = get_object_or_404(PageCollection.objects.filter(workspace__slug=slug), pk=pk)
+        collection = get_object_or_404(
+            PageCollection.objects.filter(workspace__slug=slug).select_related("workspace"), pk=pk
+        )
 
         old_name = collection.name
 
@@ -723,9 +726,13 @@ def _rename_collection_mirror(collection, old_name):
     overwrite it. The failure direction is therefore "a stale folder / a duplicate
     file", never "someone else's file was written".
     """
-    old_dir = wiki_collection_directory(old_name, collection.id)
-    new_dir = wiki_collection_directory(collection.name, collection.id)
-    vault_root = get_wiki_markdown_root().parent
+    old_dir = wiki_collection_directory(
+        collection_name=old_name, collection_id=collection.id, root=get_wiki_markdown_root(collection.workspace)
+    )
+    new_dir = wiki_collection_directory(
+        collection_name=collection.name, collection_id=collection.id, root=get_wiki_markdown_root(collection.workspace)
+    )
+    vault_root = get_wiki_markdown_root(collection.workspace).parent
     old_rel = old_dir.relative_to(vault_root).as_posix()
     new_rel = new_dir.relative_to(vault_root).as_posix()
 
@@ -836,7 +843,7 @@ def _wiki_page_own_path(page):
     """
     if not page.external_id:
         return None
-    return get_wiki_markdown_root().parent / page.external_id
+    return get_wiki_markdown_root(page.workspace).parent / page.external_id
 
 
 def _write_collection_page_mirror(page, collection, description_html):
@@ -864,6 +871,7 @@ def _write_collection_page_mirror(page, collection, description_html):
         page_id=str(page.id),
         name=page.name,
         markdown=markdown,
+        root=get_wiki_markdown_root(collection.workspace),
         own_path=_wiki_page_own_path(page),
     )
 
@@ -880,7 +888,7 @@ def _mirror_wiki_page(page, description_html):
     location is worse than writing nothing.
     """
     if page.collection_id is not None:
-        collection = PageCollection.objects.filter(id=page.collection_id).first()
+        collection = PageCollection.objects.filter(id=page.collection_id).select_related("workspace").first()
         if collection is not None:
             _write_collection_page_mirror(page, collection, description_html)
             return
@@ -918,7 +926,7 @@ def _wiki_mirror_path(page, *, collection_id, name, ancestors):
     ``_wiki_page_project_id``). Returns ``None`` rather than a guessed path.
     """
     if collection_id is not None:
-        collection = PageCollection.objects.filter(id=collection_id).first()
+        collection = PageCollection.objects.filter(id=collection_id).select_related("workspace").first()
         if collection is not None:
             return wiki_page_markdown_path(
                 collection_name=collection.name,
@@ -926,6 +934,7 @@ def _wiki_mirror_path(page, *, collection_id, name, ancestors):
                 ancestors=ancestors,
                 name=name,
                 page_id=str(page.id),
+                root=get_wiki_markdown_root(collection.workspace),
                 own_path=_wiki_page_own_path(page),
             )
         # collection_id set but the row is gone — fall through to the project
@@ -940,6 +949,7 @@ def _wiki_mirror_path(page, *, collection_id, name, ancestors):
         ancestors=ancestors,
         name=name,
         page_id=str(page.id),
+        root=get_markdown_root(page.workspace),
     )
 
 
@@ -1055,7 +1065,7 @@ def _repoint_page_external_id(page, old_path, new_path):
     if not page.external_id or page.external_source != EXTERNAL_SOURCE:
         return
 
-    vault_root = get_wiki_markdown_root().parent
+    vault_root = get_wiki_markdown_root(page.workspace).parent
     try:
         old_rel = old_path.relative_to(vault_root).as_posix()
         new_rel = new_path.relative_to(vault_root).as_posix()
@@ -1064,7 +1074,7 @@ def _repoint_page_external_id(page, old_path, new_path):
     if page.external_id != old_rel:
         return
     try:
-        new_path.relative_to(get_wiki_markdown_root())
+        new_path.relative_to(get_wiki_markdown_root(page.workspace))
     except ValueError:
         return
 
