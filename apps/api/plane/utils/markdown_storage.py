@@ -448,6 +448,24 @@ def delete_page_markdown(
 # implementation, two roots.
 
 
+#: 「常规」分区（无集合、无项目的页面）在 wiki 树里的目录名。
+#: 它是一个**目录名**，不是一个集合 —— 预置四分区一律不建 `PageCollection` 行
+#: （`utils/wiki_collections.py` 从页面自身字段推导归属），所以常规既没有名字也没有 id，
+#: 只能靠这个常量落成一个与集合目录同级的文件夹。
+GENERAL_DIRECTORY = "常规"
+
+
+def wiki_general_directory(*, root: Path) -> Path:
+    """「常规」分区在 wiki 树里的目录 —— 与集合目录同级。
+
+    存在的理由：`wiki_collection_directory(collection_name=None, collection_id="")`
+    会退化成 `root / str(collection_id)`（本文件 `wiki_collection_directory`），
+    那是给「无名字的集合」用的兜底，不是常规该有的形状。常规既没有名字也没有 id，
+    所以它需要自己的一行。
+    """
+    return root / GENERAL_DIRECTORY
+
+
 def wiki_collection_directory(*, collection_name: Optional[str], collection_id: str, root: Path) -> Path:
     """The folder a collection's mirrors live in, under the wiki vault root.
 
@@ -489,6 +507,29 @@ def wiki_page_markdown_path(
     return _resolve_page_path(directory, ancestors, name, page_id, own_path=own_path)
 
 
+def wiki_general_page_markdown_path(
+    *,
+    ancestors: list,
+    name: Optional[str],
+    page_id: str,
+    root: Path,
+    own_path: Optional[Path] = None,
+) -> Path:
+    """Resolve the absolute path of a 「常规」 wiki page's Markdown file.
+
+    **不能**用 `wiki_page_markdown_path(collection_name="", collection_id="", ...)`
+    顶替：那会经 `wiki_collection_directory` 解析成 `root / ("" or "")`，而 pathlib
+    把 `root / ""` 折叠成 `root` 本身 —— 落点是 wiki 根，不是 `常规/`。
+    真正要做的是**换掉 `wiki_collection_directory` 那一步**，之后与集合版逐字相同。
+
+    `own_path` 的语义与 `wiki_page_markdown_path` 逐字相同（无 `id:` 的文件只有
+    正好是它时才被认作本页自己的来源文件）。
+    """
+    return _resolve_page_path(
+        wiki_general_directory(root=root), ancestors, name, page_id, own_path=own_path
+    )
+
+
 def write_wiki_page_markdown(
     *,
     collection_name: Optional[str],
@@ -515,6 +556,35 @@ def write_wiki_page_markdown(
         path = wiki_page_markdown_path(
             collection_name=collection_name,
             collection_id=collection_id,
+            ancestors=ancestors,
+            name=name,
+            page_id=page_id,
+            root=root,
+            own_path=own_path,
+        )
+        _write_page_file(path, page_id, name, markdown)
+    except (OSError, UnicodeDecodeError) as exc:
+        logger.warning("Failed to write wiki page markdown mirror %s: %s", page_id, exc)
+
+
+def write_wiki_general_page_markdown(
+    *,
+    ancestors: list,
+    page_id: str,
+    name: Optional[str],
+    markdown: str,
+    root: Path,
+    own_path: Optional[Path] = None,
+) -> None:
+    """Write a 「常规」 wiki page's content to its local Markdown file (best-effort).
+
+    与 `write_wiki_page_markdown` 逐字相同，只少两个集合参数、并把
+    `wiki_page_markdown_path` 换成 `wiki_general_page_markdown_path`。
+    语义（合并 frontmatter、`own_path` 的归属守卫、只吞 `OSError` / `UnicodeDecodeError`）
+    一条不动 —— 只读 vault 不得让一次页面保存失败。
+    """
+    try:
+        path = wiki_general_page_markdown_path(
             ancestors=ancestors,
             name=name,
             page_id=page_id,
