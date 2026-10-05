@@ -19,6 +19,7 @@ import { CustomMenu } from "@plane/ui";
 import { cn, getPageName } from "@plane/utils";
 // components
 import { CollectionFormModal } from "@/components/pages/wiki/collection-form-modal";
+import { DeleteCollectionModal } from "@/components/pages/wiki/delete-collection-modal";
 import { FolderRowActions } from "@/components/pages/wiki/folder-row-actions";
 import { PageFormModal } from "@/components/pages/wiki/page-form-modal";
 import {
@@ -325,6 +326,7 @@ export const WikiSidebar = observer(function WikiSidebar() {
     predefined,
     collections,
     fetchCollections,
+    fetchPagesList,
     fetchWikiTree,
     treeRows,
     pageParentIds,
@@ -336,6 +338,8 @@ export const WikiSidebar = observer(function WikiSidebar() {
   const [isFormOpen, setIsFormOpen] = useState(false);
   /** `null` = 新建模式；有值 = 重命名这个。弹窗的两种模式由它一个变量分叉。 */
   const [editingCollection, setEditingCollection] = useState<TPageCollection | null>(null);
+  /** `null` = 没有要删的集合（弹窗只是被关着）。与 `editingCollection` 同一形状。 */
+  const [deletingCollection, setDeletingCollection] = useState<TPageCollection | null>(null);
   const [isPageFormOpen, setIsPageFormOpen] = useState(false);
   /**
    * **展开着的页面 id。空集 ⇒ 整棵树默认收起**，只露顶层页面（用户 2026-10-01：
@@ -616,6 +620,32 @@ export const WikiSidebar = observer(function WikiSidebar() {
   const openEdit = (collection: TPageCollection) => {
     setEditingCollection(collection);
     setIsFormOpen(true);
+  };
+
+  /**
+   * 集合删掉之后的收尾。
+   *
+   * 只有一件事必须做：**删的是 URL 正指着的那一个**时，那一屏已经没有对应的集合了
+   * （`?collection=<uuid>` 指向一个不存在的集合 ⇒ 列表恒空），跳回「常规」。
+   * 判据用**重拉之后**的 store 状态：`deleteCollection` 内部已经重拉过集合列表，
+   * 所以不必把「刚删了哪个」再传进来 —— 那会让弹窗多一个只为跳转存在的参数，
+   * 而 `DeleteCollectionModal` 与 `DeleteFolderModal` 的 props 保持不变才有对照价值。
+   *
+   * 再有就是右侧列表：`fetchWikiTree` **不写** `collectionPageIds`（列表读的是
+   * `fetchPagesList`）。用户正看着**常规**时去删另一个集合，被删集合的页面此刻正
+   * 应该出现在那一屏里 —— 不补这一刀，那几行要等下一次取数才冒出来。
+   * 侧栏这棵树不用管：`deleteCollection` 内部已经重拉（同 `FolderRowActions` 传空
+   * 函数的理由，见 `renderPageRow` 里那段注释）。
+   */
+  const handleCollectionDeleted = () => {
+    if (!workspaceSlug) return;
+    const isPredefined = predefined.some((item) => item.key === explicitCollection);
+    const stillExists = collections.some((collection) => collection.id === explicitCollection);
+    if (explicitCollection && !isPredefined && !stillExists) {
+      router.push(`/${workspaceSlug}/wiki/?collection=general`);
+      return;
+    }
+    fetchPagesList(workspaceSlug, activeCollection).catch(() => {});
   };
 
   /**
@@ -1028,6 +1058,9 @@ export const WikiSidebar = observer(function WikiSidebar() {
                         <CustomMenu.MenuItem onClick={() => openEdit(collection)}>
                           {t("wiki_collections.menu.edit_collection")}
                         </CustomMenu.MenuItem>
+                        <CustomMenu.MenuItem onClick={() => setDeletingCollection(collection)}>
+                          {t("wiki_collections.menu.delete_collection")}
+                        </CustomMenu.MenuItem>
                       </CustomMenu>
                     ) : undefined
                   )}
@@ -1065,6 +1098,13 @@ export const WikiSidebar = observer(function WikiSidebar() {
         collection={editingCollection}
         handleClose={() => setIsFormOpen(false)}
         onCreated={(created) => router.push(`/${workspaceSlug}/wiki/?collection=${created.id}`)}
+      />
+
+      <DeleteCollectionModal
+        isOpen={deletingCollection !== null}
+        collectionId={deletingCollection?.id ?? null}
+        onDeleted={handleCollectionDeleted}
+        handleClose={() => setDeletingCollection(null)}
       />
 
       <PageFormModal
