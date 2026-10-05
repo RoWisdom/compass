@@ -761,10 +761,26 @@ def _destroy_collection(collection):
     `WHERE collection_id = A` 覆盖页面、文件夹、嵌套页面全部。`Page.parent` 一个都不动
     ⇒ 结构自动正确。
     """
-    # ① 顶层节点快照 —— ③ 需要它，而它**必须**发生在 ② 之前（② 之后这些行就不再挂在
-    #    集合下面了）。取法与「为什么判据得写在 Python 里而不是 SQL 里」见 Task 5 Step 4。
-    #    **本步先不落地它**：只做 ②④ 的中间态下它是个没人读的局部变量，而 ①③⑤ 进的是
-    #    同一个 commit（② 是纯 SQL，不搬文件，磁盘与库会分叉 —— 中间态没有意义）。
+    # ① 顶层节点快照 —— **必须**在 ② 之前（② 之后这些行就不再挂在集合下面了）。
+    #
+    #    判据刻意用 Python 而不是 SQL 的 `~Q(parent__collection_id=collection.id)`：
+    #    三值逻辑下，父节点**不属于任何集合**（`collection_id IS NULL`）时
+    #    `parent.collection_id = A` 求值为 NULL、`NOT NULL` 仍是 NULL ⇒ 那一行被判成
+    #    非顶层，而它的镜像其实在 `3-Wiki/<A>/<父页名>/…` 下 —— `_page_ancestors`
+    #    **不看集合边界**，只沿 parent 链往上走。
+    #
+    #    键统一成 `str(uuid)`：③ 要按 id 查回名字，而 `Page.id` 是 `UUID` 对象、
+    #    `values()` 吐出来的也是 `UUID` —— 字符串键同时服务 `id__in` 过滤与查表。
+    rows = list(
+        Page.objects.filter(workspace_id=collection.workspace_id, collection_id=collection.id).values(
+            "id", "name", "parent_id"
+        )
+    )
+    old_names = {str(row["id"]): row["name"] for row in rows}
+    in_collection = {str(row["id"]) for row in rows}
+    top_ids = [
+        str(row["id"]) for row in rows if row["parent_id"] is None or str(row["parent_id"]) not in in_collection
+    ]
 
     # ② 整棵子树出集合。
     # `QuerySet.update()` 绕过 auto_now ⇒ `updated_at` 必须显式刷新（与 `create` /
@@ -772,12 +788,40 @@ def _destroy_collection(collection):
     # `updated_by` **不写** —— 刷新时间戳，不把执行者盖到「最后编辑人」上。
     Page.objects.filter(collection_id=collection.id).update(collection=None, updated_at=timezone.now())
 
-    # ③ 搬顶层节点的镜像 —— Task 5 Step 4 在同一处插入，不换函数。
+    # ③ 只搬**顶层**节点的镜像，逐一 best-effort。
+    #    **重新取行**，不重用 ① 的 values 结果：搬移要读 `page.collection_id` 算**新**路径，
+    #    而那个字段刚被 ② 改成 None，内存里必须也是 None。
+    #    `_move_wiki_page_mirror(node, old_name, old_collection_id)` —— 第四个参数省略即
+    #    `old_ancestors=None`，语义是「祖先链没变」，正是这里的情形（② 不动 `parent`）。
+    #    文件夹节点没有 `.md`（`old_path.exists()` 为假、文件分支空转），真正干活的是
+    #    `_move_page_file` 后面那段**同名目录搬移**：`old_dir.replace(new_dir)` 把整棵
+    #    子树一次带走，所以后代不需要单独搬。
+    for node in Page.objects.filter(id__in=top_ids):
+        try:
+            _move_wiki_page_mirror(node, old_names[str(node.id)], collection.id)
+        except OSError as exc:
+            # 兜底：`move_mirror_file` 自己已经吞 OSError 了，这里是第二层保险 ——
+            # 「永远不能让一次删除因为磁盘问题失败」是设计 §8 写死的失败方向。
+            logger.warning("Failed to move the mirror of page %s: %s", node.id, exc)
 
     # ④ 软删集合行。此时 Celery 那条 SET_NULL 级联已经无事可做（② 清空了）。
     collection.delete()
 
-    # ⑤ 空目录 rmdir —— Task 5 Step 4 补。
+    # ⑤ 目录空了就删，非空原样留下 —— `os.rmdir` 非空即抛（`ENOTEMPTY`），一个字都不碰。
+    #    目录名用**写侧同一套拼法**（`wiki_collection_directory` 会过 `_sanitize_name`），
+    #    否则集合名里有连续空格这类差别时会找一个不存在的目录、静默 no-op
+    #    （`test_wiki_collection_rename_app.py` 的 F2 那条锁是同一个坑）。
+    directory = wiki_collection_directory(
+        collection_name=collection.name,
+        collection_id=str(collection.id),
+        root=get_wiki_markdown_root(collection.workspace),
+    )
+    try:
+        os.rmdir(directory)
+    except OSError as exc:
+        # 三种正常结局：目录本来就不存在、非空（还有孤儿文件）、只读盘。
+        # 这是「wiki 永不主动删 vault 内容」（设计 §243）唯一的一次例外，且**只删空目录**。
+        logger.info("Not removing the collection directory %s: %s", directory, exc)
 
 
 def _wiki_page_project_id(page):

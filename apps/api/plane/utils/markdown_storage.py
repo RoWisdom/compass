@@ -275,7 +275,6 @@ def _move_page_file(
     moved = False
     if old_path == new_path:
         return False
-    new_path.parent.mkdir(parents=True, exist_ok=True)
     if old_path.exists():
         old_id = _frontmatter_id(old_path)
         target_taken = new_path.exists() and _frontmatter_id(new_path) not in (None, page_id)
@@ -292,6 +291,11 @@ def _move_page_file(
                 new_path,
             )
         else:
+            # 目录**只在真的搬文件时**建。搬到这儿之前的每一步（没有源文件、来源不是本页、
+            # 目标被占）都是「什么都不动」，凭空建出目标目录会在 vault 里留下一片空文件夹
+            # —— 删一个从没落过盘的集合时尤其明显（`_destroy_collection` 的 ③ 会对每个
+            # 顶层节点调用本函数，其中就有镜像从未落盘的那些）。
+            new_path.parent.mkdir(parents=True, exist_ok=True)
             old_path.replace(new_path)
             moved = True
     # Move the sub-page folder (named after this page) when its location or

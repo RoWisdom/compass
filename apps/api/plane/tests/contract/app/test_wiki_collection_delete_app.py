@@ -296,3 +296,112 @@ class TestPermissions:
         assert response.status_code == status.HTTP_403_FORBIDDEN
         collection.refresh_from_db()
         assert collection.deleted_at is None
+
+
+@pytest.mark.contract
+class TestDeletingACollectionMovesTheMirrors:
+    """文件必须跟着浮升 —— ② 是**纯 SQL**，磁盘上不会自己动。
+
+    ⚠️ 这里的页面必须挂在**真实集合**里，并且先用 `_mirror_wiki_page` 落一份文件：
+    镜像是 best-effort，前置没落盘的话后面那些断言就成了空转。
+    """
+
+    @pytest.fixture
+    def mirrored(self, workspace, create_user, isolate_markdown_mirror):
+        """一棵带集合的树 + 已经落好的镜像：
+
+            集合 A / 3-Wiki/A/
+            ├── page            page.md
+            └── F（文件夹）      F/child.md
+        """
+        from plane.app.views.page.collection import _mirror_wiki_page
+
+        collection = _collection(workspace, create_user, "A")
+        page = _wiki_page(workspace, create_user, "page", collection=collection)
+        folder = _folder(workspace, create_user, "F", collection=collection)
+        child = _wiki_page(workspace, create_user, "child", parent=folder, collection=collection)
+        for row in (page, child):
+            _mirror_wiki_page(Page.objects.get(id=row.id), f"<p>{row.name} 的正文</p>")
+
+        root = isolate_markdown_mirror.parent / "3-Wiki"
+        assert (root / "A" / "page.md").is_file(), "前置：page 的镜像在 A/ 下"
+        assert (root / "A" / "F" / "child.md").is_file(), "前置：child 的镜像在 A/F/ 下"
+        return {"collection": collection, "page": page, "folder": folder, "child": child, "root": root}
+
+    @pytest.mark.django_db
+    def test_a_pages_file_moves_into_the_general_folder(self, session_client, workspace, mirrored, no_celery):
+        before = (mirrored["root"] / "A" / "page.md").read_text(encoding="utf-8")
+
+        response = session_client.delete(_url(workspace, mirrored["collection"]))
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+
+        moved = mirrored["root"] / "常规" / "page.md"
+        assert moved.is_file(), "文件搬到 3-Wiki/常规/ 下"
+        assert moved.read_text(encoding="utf-8") == before, "内容逐字不变（os.replace，不是重写）"
+
+    @pytest.mark.django_db
+    def test_a_folder_takes_its_whole_subtree_along(self, session_client, workspace, mirrored, no_celery):
+        session_client.delete(_url(workspace, mirrored["collection"]))
+
+        assert (mirrored["root"] / "常规" / "F" / "child.md").is_file(), "文件夹整棵跟着走"
+        assert not (mirrored["root"] / "A").exists(), "旧目录空了就该被删掉"
+
+    @pytest.mark.django_db
+    def test_a_non_empty_source_directory_is_left_alone(
+        self, session_client, workspace, mirrored, no_celery
+    ):
+        """孤儿文件（用户手写、或页面行已不在）挡着 ⇒ **不删目录**，一个字都不碰。"""
+        orphan = mirrored["root"] / "A" / "用户手写的.md"
+        orphan_text = "---\ntags:\n  - 手写\n---\n\n这是我自己的笔记。\n"
+        orphan.write_text(orphan_text, encoding="utf-8")
+
+        session_client.delete(_url(workspace, mirrored["collection"]))
+
+        assert (mirrored["root"] / "A").is_dir(), "非空目录必须原样留下"
+        assert orphan.read_text(encoding="utf-8") == orphan_text, "孤儿文件一字未动"
+        assert (mirrored["root"] / "常规" / "page.md").is_file(), "搬移照常进行"
+
+    @pytest.mark.django_db
+    def test_an_occupied_target_is_not_clobbered(self, session_client, workspace, mirrored, no_celery):
+        """目标重名 ⇒ 不覆盖，落 `-{id8}` 兄弟；别人的笔记一字不动。"""
+        clash = mirrored["root"] / "常规" / "page.md"
+        clash.parent.mkdir(parents=True, exist_ok=True)
+        clash_text = "---\ntags:\n  - 手写\n---\n\n常规里这篇是我手写的，Plane 不认识它。\n"
+        clash.write_text(clash_text, encoding="utf-8")
+
+        session_client.delete(_url(workspace, mirrored["collection"]))
+
+        assert clash.read_text(encoding="utf-8") == clash_text, "别人的文件一字未动"
+        sibling = mirrored["root"] / "常规" / f"page-{str(mirrored['page'].id)[:8]}.md"
+        assert sibling.is_file(), "本页的文件落成 -{id8} 兄弟"
+
+    @pytest.mark.django_db
+    def test_a_read_only_vault_does_not_fail_the_delete(
+        self, session_client, workspace, mirrored, no_celery, monkeypatch
+    ):
+        """best-effort：磁盘问题**永远不得**让一次删除失败（失败方向是「多一个孤儿文件」）。"""
+        import os
+
+        def _boom(*args, **kwargs):
+            raise OSError("read-only vault")
+
+        monkeypatch.setattr(os, "replace", _boom)
+
+        response = session_client.delete(_url(workspace, mirrored["collection"]))
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        Page.objects.get(id=mirrored["page"].id)  # 不只是 204：行确实还在
+        assert (mirrored["root"] / "A" / "page.md").is_file(), "搬移失败，文件留原处"
+
+    @pytest.mark.django_db
+    def test_a_collection_with_no_mirror_directory_is_fine(
+        self, session_client, workspace, create_user, isolate_markdown_mirror, no_celery
+    ):
+        """226 上 11 个集合里有 3 个是空的 ⇒ 「删空集合」是高频路径，必须干净。"""
+        collection = _collection(workspace, create_user, "从没落过盘的")
+        _wiki_page(workspace, create_user, "页", collection=collection)
+
+        response = session_client.delete(_url(workspace, collection))
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert not (isolate_markdown_mirror.parent / "3-Wiki").exists(), "不得凭空造目录"
