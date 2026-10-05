@@ -35,7 +35,7 @@
     },
     "delete_folder_modal": {
       "title": "Klasör silinsin mi?",
-      "description": "İçindeki sayfalar ve alt klasörler bir üst seviyeye taşınır — silinmez."
+      "description": "İçindeki sayfalar ve alt klasörler de silinir. Bu işlem geri alınamaz."
     },
     "rename_folder_modal": {
       "name_placeholder": "Klasör adı"

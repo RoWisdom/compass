@@ -25,15 +25,21 @@ type Props = {
 };
 
 /**
- * 删集合的二次确认。形状逐字照抄 `delete-folder-modal.tsx` —— 同一个交互问题
- * （「删了容器，里面的东西却没删」），同一套解法。
+ * 删集合的二次确认。形状与 `delete-folder-modal.tsx` 同源 —— 同一个交互问题
+ * （「删了容器，里面的东西怎么办」），同一套解法。
  *
- * **正文那句不是客套，是这个功能的地基**：这个操作唯一反直觉的地方就是
- * 「集合没了，里面的页面和文件夹却都在」—— 不说清楚，用户会以为自己在删整棵树。
- * 所以它必须说**移到哪**（常规），而不只是说「不会被删除」。
+ * **正文那句不是客套，是这个功能的地基**：它必须把「连页面一起删掉、且没有后悔药」
+ * 说清楚。Round I 起语义就是**连删**（设计 §4.2），所以复用 Round H 时就写好、
+ * 却一直没用上的两把键 `delete_with_pages_title` / `delete_with_pages_description`
+ * —— 19 个语言里都已经有译文，**零新翻译**。
+ *
+ * 「Permanently」/「永久」与后端其实是**软删**（`deleted_at`）看起来矛盾 —— 不是
+ * 写错：Wiki 侧**没有任何恢复入口**（URL / view / service / store 里都没有 restore，
+ * `ProjectPageService.restore` 是项目页归档用的另一回事）。对**用户**而言它确实
+ * 无法撤销，文案就该说无法撤销。不要把它改成「可恢复」来「对齐实现」。
  *
  * 成功分支**不需要 toast**：侧栏刷新本身就是反馈（与删文件夹一致）；
- * 失败分支走 `toasts.delete_error`（19 语言的现成键，上游 SaaS 词汇表里本来就有）。
+ * 失败分支走 `toasts.delete_error`（19 语言的现成键）。
  */
 export const DeleteCollectionModal = observer(function DeleteCollectionModal(props: Props) {
   const { isOpen, collectionId, onDeleted, handleClose } = props;
@@ -68,8 +74,8 @@ export const DeleteCollectionModal = observer(function DeleteCollectionModal(pro
   return (
     <ModalCore isOpen={isOpen} handleClose={handleClose} width={EModalWidth.LG}>
       <div className="flex flex-col gap-4 p-5">
-        <h3 className="text-16 font-medium">{t("wiki_collections.delete_modal.title")}</h3>
-        <p className="text-13 text-secondary">{t("wiki_collections.delete_modal.float_description")}</p>
+        <h3 className="text-16 font-medium">{t("wiki_collections.delete_modal.delete_with_pages_title")}</h3>
+        <p className="text-13 text-secondary">{t("wiki_collections.delete_modal.delete_with_pages_description")}</p>
         <div className="flex justify-end gap-2">
           <Button variant="secondary" size="lg" onClick={handleClose}>
             {t("common.cancel")}

@@ -35,7 +35,7 @@
     },
     "delete_folder_modal": {
       "title": "刪除資料夾？",
-      "description": "資料夾裡的頁面和子資料夾會移到上一層，不會被刪除。"
+      "description": "資料夾裡的頁面和子資料夾會被一併刪除，且無法還原。"
     },
     "rename_folder_modal": {
       "name_placeholder": "資料夾名稱"

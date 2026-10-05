@@ -35,7 +35,7 @@
     },
     "delete_folder_modal": {
       "title": "¿Eliminar carpeta?",
-      "description": "Las páginas y subcarpetas que contiene suben un nivel; no se eliminan."
+      "description": "Las páginas y subcarpetas que contiene también se eliminarán. Esta acción no se puede deshacer."
     },
     "rename_folder_modal": {
       "name_placeholder": "Nombre de la carpeta"

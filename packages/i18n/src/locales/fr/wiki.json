@@ -35,7 +35,7 @@
     },
     "delete_folder_modal": {
       "title": "Supprimer le dossier ?",
-      "description": "Les pages et sous-dossiers qu'il contient remontent d'un niveau ; ils ne sont pas supprimés."
+      "description": "Les pages et sous-dossiers qu'il contient seront également supprimés. Cette action est irréversible."
     },
     "rename_folder_modal": {
       "name_placeholder": "Nom du dossier"

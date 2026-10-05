@@ -35,7 +35,7 @@
     },
     "delete_folder_modal": {
       "title": "Xóa thư mục?",
-      "description": "Các trang và thư mục con bên trong sẽ di chuyển lên một cấp — chúng không bị xóa."
+      "description": "Các trang và thư mục con bên trong cũng sẽ bị xóa. Hành động này không thể hoàn tác."
     },
     "rename_folder_modal": {
       "name_placeholder": "Tên thư mục"

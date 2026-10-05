@@ -35,7 +35,7 @@
     },
     "delete_folder_modal": {
       "title": "Eliminare la cartella?",
-      "description": "Le pagine e le sottocartelle all'interno salgono di un livello: non vengono eliminate."
+      "description": "Anche le pagine e le sottocartelle all'interno verranno eliminate. Questa azione non può essere annullata."
     },
     "rename_folder_modal": {
       "name_placeholder": "Nome della cartella"

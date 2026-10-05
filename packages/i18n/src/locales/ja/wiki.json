@@ -35,7 +35,7 @@
     },
     "delete_folder_modal": {
       "title": "フォルダを削除しますか？",
-      "description": "中のページとサブフォルダは1つ上の階層に移動します。削除はされません。"
+      "description": "中のページとサブフォルダも削除されます。この操作は元に戻せません。"
     },
     "rename_folder_modal": {
       "name_placeholder": "フォルダー名"

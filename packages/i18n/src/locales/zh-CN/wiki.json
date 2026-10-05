@@ -35,7 +35,7 @@
     },
     "delete_folder_modal": {
       "title": "删除文件夹？",
-      "description": "文件夹里的页面和子文件夹会移到上一级，不会被删除。"
+      "description": "文件夹里的页面和子文件夹会被一并删除，且无法撤销。"
     },
     "rename_folder_modal": {
       "name_placeholder": "文件夹名称"

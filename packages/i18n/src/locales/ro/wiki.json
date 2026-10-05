@@ -35,7 +35,7 @@
     },
     "delete_folder_modal": {
       "title": "Ștergi folderul?",
-      "description": "Paginile și subfolderele din interior urcă un nivel — nu sunt șterse."
+      "description": "Paginile și subfolderele din interior vor fi și ele șterse. Această acțiune nu poate fi anulată."
     },
     "rename_folder_modal": {
       "name_placeholder": "Numele folderului"

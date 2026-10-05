@@ -35,7 +35,7 @@
     },
     "delete_folder_modal": {
       "title": "Odstrániť priečinok?",
-      "description": "Stránky a podpriečinky vnútri sa presunú o úroveň vyššie — nebudú odstránené."
+      "description": "Stránky a podpriečinky vnútri budú tiež odstránené. Túto akciu nie je možné vrátiť späť."
     },
     "rename_folder_modal": {
       "name_placeholder": "Názov priečinka"

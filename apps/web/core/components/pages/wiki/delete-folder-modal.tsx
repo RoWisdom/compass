@@ -25,10 +25,16 @@ type Props = {
 };
 
 /**
- * 删文件夹的二次确认（Confluence Cloud：`••• → Delete` 之后还要再确认一次）。
+ * 删文件夹的二次确认（`••• → 删除` 之后还要再确认一次）。
  *
- * **正文那句不是客套，是这个功能的地基**：它唯一反直觉的地方就是「删了文件夹，
- * 里面的东西却没删」—— 不说清楚，用户会以为自己在删整棵树。
+ * **正文那句不是客套，是这个功能的地基**：Round I 起这个动作会**连里面的页面与
+ * 子文件夹一起删掉**（设计 §4.1），而且 Wiki 侧**没有任何恢复入口**（见
+ * `delete-collection-modal.tsx` 那段关于「软删但不可撤销」的说明）。
+ * 所以文案必须把「一并删除」「无法撤销」两句都说了 —— 少一句，用户就会以为
+ * 自己在删一个空壳。
+ *
+ * 文案**值**在 19 个语言包里（`wiki_collections.delete_folder_modal.description`），
+ * 本组件只读键，不改值。
  */
 export const DeleteFolderModal = observer(function DeleteFolderModal(props: Props) {
   const { isOpen, folderId, onDeleted, handleClose } = props;

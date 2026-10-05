@@ -35,7 +35,7 @@
     },
     "delete_folder_modal": {
       "title": "Hapus folder?",
-      "description": "Halaman dan subfolder di dalamnya naik satu tingkat — tidak dihapus."
+      "description": "Halaman dan subfolder di dalamnya juga akan dihapus. Tindakan ini tidak dapat dibatalkan."
     },
     "rename_folder_modal": {
       "name_placeholder": "Nama folder"

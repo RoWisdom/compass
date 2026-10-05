@@ -35,7 +35,7 @@
     },
     "delete_folder_modal": {
       "title": "Smazat složku?",
-      "description": "Stránky a podsložky uvnitř se přesunou o úroveň výš — nebudou smazány."
+      "description": "Stránky a podsložky uvnitř budou také smazány. Tuto akci nelze vrátit zpět."
     },
     "rename_folder_modal": {
       "name_placeholder": "Název složky"

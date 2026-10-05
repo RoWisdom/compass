@@ -35,7 +35,7 @@
     },
     "delete_folder_modal": {
       "title": "Excluir pasta?",
-      "description": "As páginas e subpastas dentro dela sobem um nível — não são excluídas."
+      "description": "As páginas e subpastas dentro dela também serão excluídas. Esta ação não pode ser desfeita."
     },
     "rename_folder_modal": {
       "name_placeholder": "Nome da pasta"

@@ -35,7 +35,7 @@
     },
     "delete_folder_modal": {
       "title": "Delete folder?",
-      "description": "Pages and subfolders inside move up one level — they are not deleted."
+      "description": "Pages and subfolders inside will be deleted too. This action can't be undone."
     },
     "rename_folder_modal": {
       "name_placeholder": "Folder name"

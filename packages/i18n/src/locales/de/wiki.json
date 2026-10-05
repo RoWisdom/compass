@@ -35,7 +35,7 @@
     },
     "delete_folder_modal": {
       "title": "Ordner löschen?",
-      "description": "Seiten und Unterordner darin werden eine Ebene nach oben verschoben – sie werden nicht gelöscht."
+      "description": "Seiten und Unterordner darin werden ebenfalls gelöscht. Diese Aktion kann nicht rückgängig gemacht werden."
     },
     "rename_folder_modal": {
       "name_placeholder": "Ordnername"
