@@ -36,10 +36,12 @@ from plane.db.models import Page, PageCollection, Project, ProjectPage, Workspac
 from plane.utils.error_codes import ERROR_CODES
 from plane.utils.markdown_storage import (
     GENERAL_DIRECTORY,
+    delete_page_file,
     get_markdown_root,
     get_wiki_markdown_root,
     move_mirror_file,
     page_markdown_path,
+    prune_empty_directories,
     wiki_collection_directory,
     wiki_general_page_markdown_path,
     wiki_page_markdown_path,
@@ -1075,6 +1077,70 @@ def _mirror_wiki_page(page, description_html):
     )
 
 
+def _wiki_mirror_target(page, *, collection_id, name, ancestors):
+    """这一页的镜像落在**哪条路径、哪棵树** —— 三档路由的**唯一一份**判定。
+
+    返回 ``(path, root)``：``root`` 是这条路径所属那棵树的根部（wiki 树给自己那份，
+    项目树给 ``get_markdown_root``）。删除要用它当「自底向上收目录」的**止步点**
+    （``prune_empty_directories`` 的 ``stop_at``）—— 少了它，`rmdir` 会顺着父目录
+    一路爬出 vault。
+
+    路由与 ``_mirror_wiki_page`` 逐字同源（集合 → 项目 → 「常规」），``own_path``
+    的传法也逐字照抄它：集合档与常规档传 ``_wiki_page_own_path(page)``、项目档不传
+    （``_write_page_mirror`` 自己那侧也不传）。
+
+    ⚠️ **改这里必须同时看 ``_mirror_wiki_page``**：写侧那份是两个独立的 if/return，
+    本函数是它的取路径版本。两者的分档条件（集合行在不在、项目链接在不在）必须一直
+    一样，否则「写在哪、删在哪」会分叉 —— 那正是 Round F 那次改名搬错目录的同款事故。
+    """
+    if collection_id is not None:
+        collection = PageCollection.objects.filter(id=collection_id).select_related("workspace").first()
+        if collection is not None:
+            root = get_wiki_markdown_root(collection.workspace)
+            return (
+                wiki_page_markdown_path(
+                    collection_name=collection.name,
+                    collection_id=str(collection.id),
+                    ancestors=ancestors,
+                    name=name,
+                    page_id=str(page.id),
+                    root=root,
+                    own_path=_wiki_page_own_path(page),
+                ),
+                root,
+            )
+        # collection_id 有值但行没了 —— 与 _mirror_wiki_page 一样往下落到项目档。
+
+    project_id = _wiki_page_project_id(page)
+    if project_id is None:
+        # 第三档（Round H）：无集合、无项目 ⇒ 「常规」。返回 None 会让**搬移**把这类
+        # 页面判成「没有家」而原地不动（`_move_wiki_page_mirror` 的 `new_path is None`
+        # 分支），删集合时它们会永远留在 `3-Wiki/<集合>/` 下面。
+        root = get_wiki_markdown_root(page.workspace)
+        return (
+            wiki_general_page_markdown_path(
+                ancestors=ancestors,
+                name=name,
+                page_id=str(page.id),
+                root=root,
+                own_path=_wiki_page_own_path(page),
+            ),
+            root,
+        )
+    root = get_markdown_root(page.workspace)
+    return (
+        page_markdown_path(
+            project_name=_project_name(project_id),
+            project_id=str(project_id),
+            ancestors=ancestors,
+            name=name,
+            page_id=str(page.id),
+            root=root,
+        ),
+        root,
+    )
+
+
 def _wiki_mirror_path(page, *, collection_id, name, ancestors):
     """Resolve where ``page``'s mirror lives when keyed by ``collection_id``/``name``.
 
@@ -1085,42 +1151,12 @@ def _wiki_mirror_path(page, *, collection_id, name, ancestors):
 
     Routing is the same three-way, collection-first rule as ``_mirror_wiki_page``:
     collection root, else project root, else the 「常规」 folder (Round H).
-    """
-    if collection_id is not None:
-        collection = PageCollection.objects.filter(id=collection_id).select_related("workspace").first()
-        if collection is not None:
-            return wiki_page_markdown_path(
-                collection_name=collection.name,
-                collection_id=str(collection.id),
-                ancestors=ancestors,
-                name=name,
-                page_id=str(page.id),
-                root=get_wiki_markdown_root(collection.workspace),
-                own_path=_wiki_page_own_path(page),
-            )
-        # collection_id set but the row is gone — fall through to the project
-        # branch, exactly as _mirror_wiki_page does.
 
-    project_id = _wiki_page_project_id(page)
-    if project_id is None:
-        # 第三档（Round H）：无集合、无项目 ⇒ 「常规」。返回 None 会让**搬移**把这类
-        # 页面判成「没有家」而原地不动（`_move_wiki_page_mirror` 的 `new_path is None`
-        # 分支），删集合时它们会永远留在 `3-Wiki/<集合>/` 下面。
-        return wiki_general_page_markdown_path(
-            ancestors=ancestors,
-            name=name,
-            page_id=str(page.id),
-            root=get_wiki_markdown_root(page.workspace),
-            own_path=_wiki_page_own_path(page),
-        )
-    return page_markdown_path(
-        project_name=_project_name(project_id),
-        project_id=str(project_id),
-        ancestors=ancestors,
-        name=name,
-        page_id=str(page.id),
-        root=get_markdown_root(page.workspace),
-    )
+    Round I made this a one-line delegate to ``_wiki_mirror_target``, which is
+    now the single definition of that routing — the delete path needs the same
+    answer *plus* the tree root it belongs to, so it cannot be duplicated.
+    """
+    return _wiki_mirror_target(page, collection_id=collection_id, name=name, ancestors=ancestors)[0]
 
 
 def _move_wiki_page_mirror(page, old_name, old_collection_id, old_ancestors=None):
@@ -1308,6 +1344,77 @@ def _move_descendants_to_collection(page, collection_id):
     # `updated_by` **不写**：与 include / remove 两条路径同一裁定 ——
     # 刷新时间戳，不把执行者盖到「最后编辑人」上。
     Page.objects.filter(id__in=descendant_ids).update(collection=collection_id, updated_at=timezone.now())
+
+
+def _cascade_delete_pages(nodes):
+    """把一棵子树**整棵软删**，并把我们写过的镜像收掉（罗盘 Round I，设计 §4.1/§4.2）。
+
+    ``nodes`` 是**已经读出来的** ``Page`` 实例（页面与文件夹都要，文件夹没有镜像、
+    在下面第 ① 步被跳过）。文件夹那条路径用 ``_descendant_ids`` 取，集合那条用
+    ``collection_id`` 取 —— 两个调用方共用**这一份**实现，没有第二份级联。
+
+    **顺序是载荷**（设计 §4.4）：
+
+      ① 读行 + 算镜像路径   ← 必须在 ② 之前
+      ② 软删整棵子树
+      ③ 删镜像（best-effort）
+      ④ 自底向上收空目录（best-effort）
+
+    ① 为什么必须在 ② 之前：``Page.objects`` 是 ``SoftDeletionManager``（滤
+    ``deleted_at__isnull=True``）。``deleted_at`` 一落值，这些行就**再也查不出来**、
+    路径也就再也算不出来 —— 磁盘上会留下一整棵再也没人认领的镜像。
+
+    ③④ 为什么绝不影响 ② 的成败：它们全部 best-effort。允许的结局是
+    「**页面已删、文件残留**」（人工可清），**不是**「文件先没了、页面还在」
+    （设计 §7 写死的失败方向）。所以 ③ 里每一行都单独 try，一行炸不影响其余行。
+
+    某一行读不到 / 算路径抛错（并发、已软删、非 UTF-8 文件）⇒ **跳过它**，
+    其余照删 —— 不允许一行把整次删除拖失败（设计 §7 第四行）。
+    """
+    rows = list(nodes)
+    if not rows:
+        return
+
+    # ① 读行 + 算路径（软删之前！）。
+    #    文件夹行没有正文、也就没有自己的 .md —— 直接跳过，它的**目录**由 ④ 里
+    #    从它后代的文件往上爬的那条链收掉。
+    targets = []
+    for row in rows:
+        if row.node_type != Page.NODE_TYPE_DOC:
+            continue
+        try:
+            path, root = _wiki_mirror_target(
+                row,
+                collection_id=row.collection_id,
+                name=row.name,
+                ancestors=_page_ancestors(row.parent_id),
+            )
+        except (OSError, UnicodeDecodeError) as exc:
+            logger.warning("Skipping the mirror of page %s: %s", row.id, exc)
+            continue
+        targets.append((row.id, path, root))
+
+    # ② 软删整棵子树，**一条 SQL**。
+    #    `QuerySet.update()` 绕过 auto_now ⇒ `updated_at` 显式刷新（与 create /
+    #    destroy / `_move_descendants_to_collection` 三条既有路径同一条纪律）；
+    #    `updated_by` **不写** —— 刷新时间戳，不把执行者盖到「最后编辑人」上。
+    #
+    #    不经 `SoftDeleteModel.delete()`：那个会 `.delay()` 一个 Celery 任务
+    #    （`bgtasks/deletion_task.py`），worker 不在时留下半个状态，而这里一条 SQL
+    #    就已经覆盖整棵子树，不需要它（与 `_destroy_collection` 的既有论证同源）。
+    now = timezone.now()
+    Page.objects.filter(id__in=[row.id for row in rows]).update(deleted_at=now, updated_at=now)
+
+    # ③ 删镜像 —— 只删我们自己写的（`delete_page_file` 逐字守住 §4.3 规则一）。
+    #    按 root 分组，给 ④ 当止步点：页面可能落在 wiki 树**或**项目树里。
+    by_root = {}
+    for page_id, path, root in targets:
+        if delete_page_file(path, str(page_id)):
+            by_root.setdefault(root, []).append(path)
+
+    # ④ 收空掉的那几段目录，非空即停（§4.3 规则二/三，`prune_empty_directories` 里）。
+    for root, paths in by_root.items():
+        prune_empty_directories(paths, stop_at=root)
 
 
 def _snapshot_children_mirror_state(folder):
