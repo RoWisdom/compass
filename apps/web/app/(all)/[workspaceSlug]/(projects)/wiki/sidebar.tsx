@@ -675,11 +675,17 @@ export const WikiSidebar = observer(function WikiSidebar() {
    * （`?folder=` 只认集合或文件夹，父级可能已经不存在）。落回集合是安全的 ——
    * 用户至少还能看见同一个集合里的其他内容。
    */
-  const handleFolderDeleted = () => {
+  const handleFolderDeleted = (fallbackCollection: string) => {
     if (!workspaceSlug) return;
     const stillExists = pageStore.treeRows.some((row) => row.pageId === explicitFolder);
+    // 两个分支故意读**不同**的来源，不是笔误：
+    //   * 跳转要的是**被删文件夹所在的集合**（`fallbackCollection`）—— 用户正站在
+    //     `?folder=<id>`，那个 URL 不携带 `collection`，读 `activeCollection` 只会拿到
+    //     兜底的 `"general"`，把自定义集合里的用户甩进「常规」；
+    //   * 重拉要的是**当前正在看的集合**（`activeCollection`）—— 它才是主面板此刻渲染的
+    //     那一个，没站在被删文件夹里时它并没有变。
     if (explicitFolder && !stillExists) {
-      router.push(`/${workspaceSlug}/wiki/?collection=${activeCollection ?? "general"}`);
+      router.push(`/${workspaceSlug}/wiki/?collection=${fallbackCollection}`);
       return;
     }
     // 没站在被删的文件夹里 —— 与删文件夹之前一样，重拉当前视图。
@@ -985,7 +991,7 @@ export const WikiSidebar = observer(function WikiSidebar() {
             改动，**不在本轮**；先如实记在这里，别当成已解决。 */}
         {isFolder && canManageCollections && (
           <span className="opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
-            <FolderRowActions folderId={line.pageId} onChanged={handleFolderDeleted} />
+            <FolderRowActions folderId={line.pageId} onChanged={() => handleFolderDeleted(partitionKey)} />
           </span>
         )}
       </div>
