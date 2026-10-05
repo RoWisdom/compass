@@ -30,7 +30,8 @@
       "transfer_target_placeholder": "컬렉션 선택",
       "delete_with_pages_title": "페이지와 함께 컬렉션 삭제",
       "delete_with_pages_description": "컬렉션과 모든 페이지를 영구적으로 삭제합니다. 이 작업은 되돌릴 수 없습니다.",
-      "submit": "컬렉션 삭제"
+      "submit": "컬렉션 삭제",
+      "float_description": "컬렉션이 삭제됩니다. 안에 있는 페이지와 폴더는 \"일반\"으로 이동하며 내용은 삭제되지 않습니다."
     },
     "delete_folder_modal": {
       "title": "폴더를 삭제할까요?",
@@ -50,7 +51,8 @@
       "collection_options": "컬렉션 옵션",
       "move_to": "이동 위치",
       "rename": "이름 바꾸기",
-      "remove_from_wiki": "위키에서 제거"
+      "remove_from_wiki": "위키에서 제거",
+      "delete_collection": "컬렉션 삭제"
     },
     "add_existing_page_modal": {
       "search_placeholder": "페이지 검색",

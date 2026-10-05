@@ -30,7 +30,8 @@
       "transfer_target_placeholder": "Seleziona una raccolta",
       "delete_with_pages_title": "Elimina la raccolta con le pagine",
       "delete_with_pages_description": "Elimina definitivamente la raccolta e tutte le sue pagine. Questa azione non può essere annullata.",
-      "submit": "Elimina raccolta"
+      "submit": "Elimina raccolta",
+      "float_description": "La raccolta verrà eliminata. Le sue pagine e cartelle vengono spostate in «Generale» — nulla al suo interno viene eliminato."
     },
     "delete_folder_modal": {
       "title": "Eliminare la cartella?",
@@ -50,7 +51,8 @@
       "collection_options": "Opzioni della raccolta",
       "move_to": "Sposta in",
       "rename": "Rinomina",
-      "remove_from_wiki": "Rimuovi dal Wiki"
+      "remove_from_wiki": "Rimuovi dal Wiki",
+      "delete_collection": "Elimina raccolta"
     },
     "add_existing_page_modal": {
       "search_placeholder": "Cerca pagine",

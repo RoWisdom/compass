@@ -30,7 +30,8 @@
       "transfer_target_placeholder": "コレクションを選択",
       "delete_with_pages_title": "ページごとコレクションを削除",
       "delete_with_pages_description": "コレクションとすべてのページを完全に削除します。この操作は元に戻せません。",
-      "submit": "コレクションを削除"
+      "submit": "コレクションを削除",
+      "float_description": "コレクションは削除されます。中のページとフォルダは「一般」に移動します — 中身は削除されません。"
     },
     "delete_folder_modal": {
       "title": "フォルダを削除しますか？",
@@ -50,7 +51,8 @@
       "collection_options": "コレクションのオプション",
       "move_to": "移動先",
       "rename": "名前を変更",
-      "remove_from_wiki": "Wikiから削除"
+      "remove_from_wiki": "Wikiから削除",
+      "delete_collection": "コレクションを削除"
     },
     "add_existing_page_modal": {
       "search_placeholder": "ページを検索",

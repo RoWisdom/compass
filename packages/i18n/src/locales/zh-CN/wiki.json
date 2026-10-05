@@ -30,7 +30,8 @@
       "transfer_target_placeholder": "选择一个集合",
       "delete_with_pages_title": "连同页面一起删除集合",
       "delete_with_pages_description": "永久删除集合及其所有页面。此操作无法撤销。",
-      "submit": "删除集合"
+      "submit": "删除集合",
+      "float_description": "集合会被删除，里面的页面和文件夹会移到「常规」—— 内容不会被删除。"
     },
     "delete_folder_modal": {
       "title": "删除文件夹？",
@@ -50,7 +51,8 @@
       "collection_options": "集合选项",
       "move_to": "移动到",
       "rename": "重命名",
-      "remove_from_wiki": "从 Wiki 中移除"
+      "remove_from_wiki": "从 Wiki 中移除",
+      "delete_collection": "删除集合"
     },
     "add_existing_page_modal": {
       "search_placeholder": "搜索页面",

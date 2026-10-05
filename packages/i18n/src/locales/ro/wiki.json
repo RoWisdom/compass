@@ -30,7 +30,8 @@
       "transfer_target_placeholder": "Selectează o colecție",
       "delete_with_pages_title": "Șterge colecția împreună cu paginile",
       "delete_with_pages_description": "Șterge definitiv colecția și toate paginile ei. Această acțiune nu poate fi anulată.",
-      "submit": "Șterge colecția"
+      "submit": "Șterge colecția",
+      "float_description": "Colecția va fi ștearsă. Paginile și folderele ei se mută în „General“ — nimic din interior nu este șters."
     },
     "delete_folder_modal": {
       "title": "Ștergi folderul?",
@@ -50,7 +51,8 @@
       "collection_options": "Opțiuni colecție",
       "move_to": "Mută în",
       "rename": "Redenumește",
-      "remove_from_wiki": "Elimină din Wiki"
+      "remove_from_wiki": "Elimină din Wiki",
+      "delete_collection": "Șterge colecția"
     },
     "add_existing_page_modal": {
       "search_placeholder": "Caută pagini",

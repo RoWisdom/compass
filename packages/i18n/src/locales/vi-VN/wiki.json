@@ -30,7 +30,8 @@
       "transfer_target_placeholder": "Chọn một bộ sưu tập",
       "delete_with_pages_title": "Xóa bộ sưu tập cùng các trang",
       "delete_with_pages_description": "Xóa vĩnh viễn bộ sưu tập và tất cả các trang của nó. Hành động này không thể hoàn tác.",
-      "submit": "Xóa bộ sưu tập"
+      "submit": "Xóa bộ sưu tập",
+      "float_description": "Bộ sưu tập sẽ bị xóa. Các trang và thư mục bên trong sẽ chuyển sang \"Chung\" — nội dung không bị xóa."
     },
     "delete_folder_modal": {
       "title": "Xóa thư mục?",
@@ -50,7 +51,8 @@
       "collection_options": "Tùy chọn bộ sưu tập",
       "move_to": "Di chuyển đến",
       "rename": "Đổi tên",
-      "remove_from_wiki": "Xóa khỏi Wiki"
+      "remove_from_wiki": "Xóa khỏi Wiki",
+      "delete_collection": "Xóa bộ sưu tập"
     },
     "add_existing_page_modal": {
       "search_placeholder": "Tìm kiếm trang",

@@ -30,7 +30,8 @@
       "transfer_target_placeholder": "Виберіть колекцію",
       "delete_with_pages_title": "Видалити колекцію разом зі сторінками",
       "delete_with_pages_description": "Назавжди видаляє колекцію та всі її сторінки. Цю дію не можна скасувати.",
-      "submit": "Видалити колекцію"
+      "submit": "Видалити колекцію",
+      "float_description": "Колекція буде видалена. Її сторінки та теки перемістяться до «Загальні» — вміст не видаляється."
     },
     "delete_folder_modal": {
       "title": "Видалити теку?",
@@ -50,7 +51,8 @@
       "collection_options": "Параметри колекції",
       "move_to": "Перемістити до",
       "rename": "Перейменувати",
-      "remove_from_wiki": "Видалити з Wiki"
+      "remove_from_wiki": "Видалити з Wiki",
+      "delete_collection": "Видалити колекцію"
     },
     "add_existing_page_modal": {
       "search_placeholder": "Шукати сторінки",

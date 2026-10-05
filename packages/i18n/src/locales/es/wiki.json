@@ -30,7 +30,8 @@
       "transfer_target_placeholder": "Selecciona una colección",
       "delete_with_pages_title": "Eliminar colección con páginas",
       "delete_with_pages_description": "Elimina permanentemente la colección y todas sus páginas. Esta acción no se puede deshacer.",
-      "submit": "Eliminar colección"
+      "submit": "Eliminar colección",
+      "float_description": "La colección se eliminará. Sus páginas y carpetas se mueven a «General»; nada de su interior se elimina."
     },
     "delete_folder_modal": {
       "title": "¿Eliminar carpeta?",
@@ -50,7 +51,8 @@
       "collection_options": "Opciones de la colección",
       "move_to": "Mover a",
       "rename": "Cambiar nombre",
-      "remove_from_wiki": "Quitar de Wiki"
+      "remove_from_wiki": "Quitar de Wiki",
+      "delete_collection": "Eliminar colección"
     },
     "add_existing_page_modal": {
       "search_placeholder": "Buscar páginas",

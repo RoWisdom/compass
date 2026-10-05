@@ -30,7 +30,8 @@
       "transfer_target_placeholder": "Bir koleksiyon seçin",
       "delete_with_pages_title": "Koleksiyonu sayfalarla birlikte sil",
       "delete_with_pages_description": "Koleksiyonu ve tüm sayfalarını kalıcı olarak siler. Bu işlem geri alınamaz.",
-      "submit": "Koleksiyonu sil"
+      "submit": "Koleksiyonu sil",
+      "float_description": "Koleksiyon silinecek. İçindeki sayfalar ve klasörler \"Genel\"e taşınır — içerik silinmez."
     },
     "delete_folder_modal": {
       "title": "Klasör silinsin mi?",
@@ -50,7 +51,8 @@
       "collection_options": "Koleksiyon seçenekleri",
       "move_to": "Şuraya taşı",
       "rename": "Yeniden adlandır",
-      "remove_from_wiki": "Wiki'den kaldır"
+      "remove_from_wiki": "Wiki'den kaldır",
+      "delete_collection": "Koleksiyonu sil"
     },
     "add_existing_page_modal": {
       "search_placeholder": "Sayfa ara",

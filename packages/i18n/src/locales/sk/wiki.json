@@ -30,7 +30,8 @@
       "transfer_target_placeholder": "Vyberte kolekciu",
       "delete_with_pages_title": "Odstrániť kolekciu aj so stránkami",
       "delete_with_pages_description": "Natrvalo odstráni kolekciu aj všetky jej stránky. Túto akciu nie je možné vrátiť späť.",
-      "submit": "Odstrániť kolekciu"
+      "submit": "Odstrániť kolekciu",
+      "float_description": "Kolekcia bude odstránená. Jej stránky a priečinky sa presunú do „Všeobecné“ — obsah sa neodstráni."
     },
     "delete_folder_modal": {
       "title": "Odstrániť priečinok?",
@@ -50,7 +51,8 @@
       "collection_options": "Možnosti kolekcie",
       "move_to": "Presunúť do",
       "rename": "Premenovať",
-      "remove_from_wiki": "Odstrániť z Wiki"
+      "remove_from_wiki": "Odstrániť z Wiki",
+      "delete_collection": "Odstrániť kolekciu"
     },
     "add_existing_page_modal": {
       "search_placeholder": "Hľadať stránky",

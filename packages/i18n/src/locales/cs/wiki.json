@@ -30,7 +30,8 @@
       "transfer_target_placeholder": "Vyberte kolekci",
       "delete_with_pages_title": "Smazat kolekci i se stránkami",
       "delete_with_pages_description": "Trvale smaže kolekci i všechny její stránky. Tuto akci nelze vrátit zpět.",
-      "submit": "Smazat kolekci"
+      "submit": "Smazat kolekci",
+      "float_description": "Kolekce bude smazána. Její stránky a složky se přesunou do „Obecné“ — obsah se nemaže."
     },
     "delete_folder_modal": {
       "title": "Smazat složku?",
@@ -50,7 +51,8 @@
       "collection_options": "Možnosti kolekce",
       "move_to": "Přesunout do",
       "rename": "Přejmenovat",
-      "remove_from_wiki": "Odebrat z Wiki"
+      "remove_from_wiki": "Odebrat z Wiki",
+      "delete_collection": "Smazat kolekci"
     },
     "add_existing_page_modal": {
       "search_placeholder": "Hledat stránky",

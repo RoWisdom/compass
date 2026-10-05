@@ -30,7 +30,8 @@
       "transfer_target_placeholder": "Sammlung auswählen",
       "delete_with_pages_title": "Sammlung mit Seiten löschen",
       "delete_with_pages_description": "Löscht die Sammlung und alle ihre Seiten dauerhaft. Diese Aktion kann nicht rückgängig gemacht werden.",
-      "submit": "Sammlung löschen"
+      "submit": "Sammlung löschen",
+      "float_description": "Die Sammlung wird gelöscht. Ihre Seiten und Ordner werden nach „Allgemein“ verschoben – der Inhalt wird nicht gelöscht."
     },
     "delete_folder_modal": {
       "title": "Ordner löschen?",
@@ -50,7 +51,8 @@
       "collection_options": "Sammlungsoptionen",
       "move_to": "Verschieben nach",
       "rename": "Umbenennen",
-      "remove_from_wiki": "Aus Wiki entfernen"
+      "remove_from_wiki": "Aus Wiki entfernen",
+      "delete_collection": "Sammlung löschen"
     },
     "add_existing_page_modal": {
       "search_placeholder": "Nach Seiten suchen",
