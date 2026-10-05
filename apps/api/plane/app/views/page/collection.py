@@ -799,7 +799,7 @@ def _destroy_collection(collection):
     for node in Page.objects.filter(id__in=top_ids):
         try:
             _move_wiki_page_mirror(node, old_names[str(node.id)], collection.id)
-        except OSError as exc:
+        except (OSError, UnicodeDecodeError) as exc:
             # 兜底：`move_mirror_file` 自己已经吞 OSError 了，这里是第二层保险 ——
             # 「永远不能让一次删除因为磁盘问题失败」是设计 §8 写死的失败方向。
             logger.warning("Failed to move the mirror of page %s: %s", node.id, exc)

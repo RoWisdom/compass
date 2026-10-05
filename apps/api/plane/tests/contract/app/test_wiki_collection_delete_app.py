@@ -405,3 +405,28 @@ class TestDeletingACollectionMovesTheMirrors:
 
         assert response.status_code == status.HTTP_204_NO_CONTENT
         assert not (isolate_markdown_mirror.parent / "3-Wiki").exists(), "不得凭空造目录"
+
+    @pytest.mark.django_db
+    def test_a_non_utf8_file_at_a_top_level_pages_mirror_path_does_not_fail_the_delete(
+        self, session_client, workspace, create_user, isolate_markdown_mirror, no_celery
+    ):
+        """一个非 UTF-8 的文件压在顶层页面的镜像路径上，删除**不得**因此 500。
+
+        失败方向是设计 §8 写死的「磁盘问题只留下一个孤儿文件、记一条日志」，绝不是
+        「删除失败」。③ 只吞 `OSError` 时这条路径会漏：`_move_wiki_page_mirror` 在进入
+        `move_mirror_file`（它自己吞 `UnicodeDecodeError`）**之前**先解析两条路径，
+        而 `_frontmatter_id`（`markdown_storage.py:75-86`）读候选文件时只兜 `OSError`
+        —— 一个非 UTF-8 的文件抛的是 `UnicodeDecodeError`（`ValueError`，不是 `OSError`），
+        一路冒到端点变成 500。
+        """
+        collection = _collection(workspace, create_user, "A")
+        _wiki_page(workspace, create_user, "page", collection=collection)
+
+        root = isolate_markdown_mirror.parent / "3-Wiki"
+        mirror = root / "A" / "page.md"
+        mirror.parent.mkdir(parents=True, exist_ok=True)
+        mirror.write_bytes(b"\xff\xfe\x00\x01 not utf-8")
+
+        response = session_client.delete(_url(workspace, collection))
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT
