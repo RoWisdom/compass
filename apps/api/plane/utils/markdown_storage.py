@@ -311,6 +311,69 @@ def _move_page_file(
     return moved
 
 
+def delete_page_file(path: Path, page_id: str) -> bool:
+    """删掉 ``path`` —— **当且仅当它是我们写的**（罗盘 Round I，设计 §4.3 规则一）。
+
+    「我们写的」= frontmatter 的 ``id:`` 正是 ``page_id``。其余一律留下：
+
+      · **没有 `id:` 行** ⇒ 它可能是这一页被导入时的**原稿**（用户自己手写的笔记）；
+      · **`id:` 是别人** ⇒ 别人的剪藏、别的页面的镜像。
+
+    这条判定不是这里发明的：它就是 ``_resolve_page_path`` / ``_move_page_file``
+    已经在用的同一个 ``_frontmatter_id``，只是方向从「拒绝写 / 拒绝搬」变成「拒绝删」。
+    本仓写死的失败方向因此逐字守住 —— **never "a destroyed note"**。
+
+    ⚠️ ``UnicodeDecodeError`` 不是 ``OSError``（它是 ``ValueError``），而 ``_frontmatter_id``
+    只兜 ``OSError`` ⇒ 一个非 UTF-8 的文件会一路冒上去把整次删除变成 500。
+    ``collection.py`` 搬移那侧踩过同一个坑（``test_..._non_utf8_file_...`` 就是为它写的）。
+
+    返回 ``True`` **只在真的删掉了一个文件**时 —— 调用方靠它决定要不要往上收目录。
+    """
+    try:
+        if not path.is_file():
+            return False
+        if _frontmatter_id(path) != page_id:
+            return False
+        path.unlink()
+        return True
+    except (OSError, UnicodeDecodeError) as exc:
+        logger.warning("Failed to delete markdown mirror of page %s: %s", page_id, exc)
+        return False
+
+
+def prune_empty_directories(paths, *, stop_at: Path) -> None:
+    """把删完文件之后**空掉**的目录收掉 —— 自底向上，非空即停（设计 §4.3 规则二/三）。
+
+    ``paths`` 是**刚被删掉的文件**路径，``stop_at`` 是这次删除所属那棵树的根
+    （wiki 树给 ``get_wiki_markdown_root``，项目树给 ``get_markdown_root``）——
+    爬到它就停，**永不动它**。
+
+    为什么「非空就 ``break`` 整条链」既正确又省事：一个目录非空 ⇒ **它的祖先必然
+    也非空**（祖先包含它），所以没有必要继续往上试。
+
+    为什么遍历时先看 ``stop_at not in directory.parents``：路径万一不在 ``stop_at``
+    这棵树里（软链、被绕过的数据），没有这一条就会顺着父目录一路 ``rmdir`` 到 ``/``。
+
+    **永不 `rmtree`**（规则三，没有例外）：文件夹目录里可能躺着**不是镜像**的文件
+    —— 手写笔记、附件、Obsidian 自己的东西。``rmtree`` 会把它们一次吃掉且不可逆；
+    ``rmdir`` 只可能失败，而失败方向是「目录留下」，正是我们要的那一边。
+    """
+    seen = set()
+    for path in paths:
+        directory = Path(path).parent
+        while directory != stop_at and directory not in seen:
+            if stop_at not in directory.parents:
+                break
+            seen.add(directory)
+            try:
+                os.rmdir(directory)
+            except OSError as exc:
+                # 三种正常结局：目录本来就不存在、非空（还留着不是我们写的文件）、只读盘。
+                logger.info("Not removing the directory %s: %s", directory, exc)
+                break
+            directory = directory.parent
+
+
 def move_mirror_file(
     old_path: Path,
     new_path: Path,
