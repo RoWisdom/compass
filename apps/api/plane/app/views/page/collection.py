@@ -696,49 +696,37 @@ class WikiPageViewSet(BaseViewSet):
         if page.node_type == Page.NODE_TYPE_FOLDER:
             return self._destroy_folder(page)
 
-        # 移出 Wiki 只是取消收录，绝不删除页面本身 —— 页面承载版本历史与评论。
+        # 移出 Wiki 只是取消收录，**绝不删除页面本身** —— 页面承载版本历史与评论。
+        # ⚠️ 这条不变量**只覆盖这一条路径**（单页移出）。文件夹那条岔路
+        # （`_destroy_folder`）自 Round I 起是**级联软删**，与这里刻意不一致 ——
+        # 设计 §2 I-3 明确覆盖本注释的旧写法，§10.3 记录了这个不对称。
+        # 不要因为它俩「看起来该一样」而把任一边改回去。
         # 同 create：QuerySet.update() 绕过 auto_now，updated_at 要显式传。
         Page.objects.filter(id=page.id).update(is_global=False, collection=None, updated_at=timezone.now())
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @staticmethod
     def _destroy_folder(folder):
-        """删一个文件夹（罗盘 Round E，设计 §4.3）。语义照 Confluence Cloud：
-        **内容不删，整体上浮一级**。
+        """删一个文件夹 —— **连里面的页面与子文件夹一起**（罗盘 Round I，设计 §4.1）。
 
-        与页面那条路径的差别只有一条，但它决定了这个功能对不对：页面被「移出 Wiki」时
-        **不动它的子节点**（子页变成孤儿、按根渲染 —— 那是既有行为，本轮不碰）；
-        而文件夹必须把**直接子节点重挂到自己的父级**上，否则用户看到的是「文件夹没了，
-        里面的东西也跟着没了」—— 与 Confluence 的承诺正好相反。
+        ⚠️ **这条语义取代了 Round E 的「内容上浮一级，一个都不删」。** Round E 当时的
+        理由（Confluence Cloud 的承诺）已经作废：用户 2026-10-05 裁定「删文件夹就该
+        把里面的东西一并删掉」，且**一律软删**、连同时属于项目的页面也不放过
+        （设计 §2 的 I-1/I-2/I-3）。**不要**把上浮改回来。
 
-        **为什么只重挂直接子节点就够**：后代的路径就是祖先链。被删的是 F，F 的子节点 C
-        挂到 F 的父级；C 以下的整棵子树里每一个节点的父**都没变**，所以祖先链里唯一变的
-        那一段（F 被摘掉）是通过 C 传导的。重挂 C 一处，全子树自动正确。
+        与「单页移出 Wiki」的不对称是**有意**的，不是疏漏（设计 §10.3）：
+        同一棵树上的两个动作现在结果不同 —— 移出单页只是取消收录（行保留），
+        删文件夹则连行一起软删。要统一是另一次裁定。
 
-        文件夹自己**不删行**：`is_global=False`（出 Wiki），与页面那条路径同一条不变量。
-        文件夹没有正文因此也没有自己的镜像（`create_page` 对文件夹跳过镜像），所以
-        子树里第一个要搬的就是它的子节点。
+        结构上一处要比旧实现更简单：**整棵子树都走了，`parent` 一个都不用动**
+        —— 旧的「子节点重挂到原父级」那一整段（以及它依赖的两个搬移辅助）随之作废。
 
-        **顺序是载荷**：① 拍快照 → ② 重挂 → ③ 自己出 Wiki → ④ 搬镜像。
-        ④ 必须在 ② 之后 —— 搬移要读 `parent_id` 算新路径。
+        文件夹自己也在软删之列：`_cascade_delete_pages` 一行 SQL 覆盖
+        `[folder.id, *后代]`。
         """
-        # ① 快照必须在重挂之前（重挂之后这些行就不再挂在 folder 下面了）。
-        child_ids, state = _snapshot_children_mirror_state(folder)
-
-        # ② 直接子节点上浮到被删文件夹的原父级。
-        # `collection` 不动（E-4）：被删文件夹与它的兄弟同属一个集合，上浮仍在同一集合里。
-        Page.objects.filter(workspace_id=folder.workspace_id, parent_id=folder.id).update(
-            parent_id=folder.parent_id, updated_at=timezone.now()
-        )
-
-        # ③ 自己出 Wiki —— 只取消收录，绝不删行（与页面那条同一条不变量）。
-        Page.objects.filter(id=folder.id).update(is_global=False, collection=None, updated_at=timezone.now())
-
-        # ④ 子节点的镜像。它们不会自己动：重挂是纯 SQL，磁盘上没有任何目录搬移跟着发生
-        #    （`_move_page_file` 的目录逻辑搬的是「这一页**同名**的目录」，而这里被摘掉的
-        #    那个目录属于**被删的文件夹**，没有任何一页的同名目录对应它）。
-        _move_children_mirrors(child_ids, state)
-
+        subtree_ids = _descendant_ids(root=folder)
+        rows = list(Page.objects.filter(id__in=[folder.id, *subtree_ids]).select_related("workspace"))
+        _cascade_delete_pages(rows)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -1402,8 +1390,11 @@ def _cascade_delete_pages(nodes):
     #    不经 `SoftDeleteModel.delete()`：那个会 `.delay()` 一个 Celery 任务
     #    （`bgtasks/deletion_task.py`），worker 不在时留下半个状态，而这里一条 SQL
     #    就已经覆盖整棵子树，不需要它（与 `_destroy_collection` 的既有论证同源）。
+    #    `is_global=False` 一并落下：被删的行不该再留在任何按「收录」过滤的读者眼里
+    #    （设计 I-3 乙 —— 连双身份的页面也整棵软删）。放在**这一份** helper 里，
+    #    文件夹级联与集合级联才是同一条不变量；只写在 `_destroy_folder` 里会让两条分叉。
     now = timezone.now()
-    Page.objects.filter(id__in=[row.id for row in rows]).update(deleted_at=now, updated_at=now)
+    Page.objects.filter(id__in=[row.id for row in rows]).update(deleted_at=now, updated_at=now, is_global=False)
 
     # ③ 删镜像 —— 只删我们自己写的（`delete_page_file` 逐字守住 §4.3 规则一）。
     #    按 root 分组，给 ④ 当止步点：页面可能落在 wiki 树**或**项目树里。
@@ -1415,54 +1406,6 @@ def _cascade_delete_pages(nodes):
     # ④ 收空掉的那几段目录，非空即停（§4.3 规则二/三，`prune_empty_directories` 里）。
     for root, paths in by_root.items():
         prune_empty_directories(paths, stop_at=root)
-
-
-def _snapshot_children_mirror_state(folder):
-    """``folder`` 的**直接子节点** id 序列 + 每个节点**改之前**的 ``(name, collection_id, ancestors)``。
-
-    只要**直接子节点**，不要整棵子树 —— 与「只重挂直接子节点」是**同一条道理**：一条链上
-    唯一变的那一段通过直接子节点传导。多拍一层不仅白花，还要为每个节点各走一趟
-    ``_page_ancestors``。
-
-    ⚠️ **子节点里有文件夹，而且必须留着 —— 它们是嵌套子树唯一的搬运工。**
-    对**页面**子节点，``_move_page_file`` 搬的是它的 ``.md``。对**文件夹**子节点，
-    它连 ``.md`` 都不存在（文件夹没有正文，也就没有镜像）：``old_path.exists()`` 为假，
-    那个分支什么也不做；真正干活的是**后面那段同名目录搬移** ——
-    ``old_dir = <旧父>/<文件夹名>``、``new_dir = <新父>/<文件夹名>``，
-    然后 ``old_dir.replace(new_dir)``（``markdown_storage.py:289-297``）——
-    整个目录连同里面所有后代**一次搬完**。所以「删 B，B 的 C2 里还有 t2」这种情况，
-    搬 C2 那一次目录替换就把 t2 带走了，**不需要**为 t2 单独做任何事。
-
-    （顺带：``_move_wiki_page_mirror`` 对文件夹走完会落到
-    ``_repoint_page_external_id``，但那里第一行就是
-    ``if not page.external_id or page.external_source != EXTERNAL_SOURCE: return``
-    —— 应用内建的文件夹 ``external_id`` 是 ``None``，直接返回，不会写坏任何东西。）
-
-    **必须在重挂之前取**：重挂之后这些行就不再挂在 ``folder`` 下面了。
-    """
-    children = list(
-        Page.objects.filter(workspace_id=folder.workspace_id, parent_id=folder.id).values(
-            "id", "name", "parent_id", "collection_id"
-        )
-    )
-    # 每行都是 folder 的直接子节点（上面的 filter 就是 parent_id=folder.id），
-    # 祖先链**同一个值**，只算一次。
-    ancestors = _page_ancestors(folder.id)
-    state = {str(row["id"]): (row["name"], row["collection_id"], ancestors) for row in children}
-    return [str(row["id"]) for row in children], state
-
-
-def _move_children_mirrors(ordered_ids, state):
-    """搬 ``ordered_ids`` 里每个节点的镜像，逐个跟随 ``external_id``。
-
-    必须在**重挂之后**调用：搬移要读 ``page.parent_id`` 算**新**路径，重挂之前它还是旧值。
-
-    ``state`` 里查不到的节点按「什么都没变」处理（old == new ⇒ ``_move_wiki_page_mirror``
-    内部直接返回），所以多传几个 id 是安全的，不会误搬。
-    """
-    for node in Page.objects.filter(id__in=ordered_ids):
-        old_name, old_collection_id, old_ancestors = state.get(str(node.id), (node.name, node.collection_id, None))
-        _move_wiki_page_mirror(node, old_name, old_collection_id, old_ancestors=old_ancestors)
 
 
 class WikiPageDescriptionViewSet(BaseViewSet):
