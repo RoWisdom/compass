@@ -35,6 +35,7 @@ from plane.app.serializers.page_collection import WikiPageTreeSerializer
 from plane.db.models import Page, PageCollection, Project, ProjectPage, Workspace
 from plane.utils.error_codes import ERROR_CODES
 from plane.utils.markdown_storage import (
+    GENERAL_DIRECTORY,
     get_markdown_root,
     get_wiki_markdown_root,
     move_mirror_file,
@@ -91,6 +92,25 @@ def _wiki_page_queryset(request, slug):
     侧栏还会出现「私有(5) 但列表 2 行」的口径分裂。
     """
     return Page.objects.filter(workspace__slug=slug, is_global=True).filter(_visible_page_q(request.user))
+
+
+def _general_name_error(name):
+    """``name`` 撞上「常规」时的 400 载荷，否则 ``None``。
+
+    判据刻意用常量比较（``GENERAL_DIRECTORY``）而不是字符串字面量：目录名只在一个
+    地方定义，改的时候不会漏掉这里。
+
+    为什么要挡：``_sanitize_name("常规")`` 原样返回，所以一个叫「常规」的普通集合，
+    它算出的目录与本轮的 ``wiki_general_directory`` **是同一个 ``Path``** ——
+    两个语义共用一个文件夹，页面的归属就看不出区别了。
+
+    形状照 DRF 的字段错误（``{"name": [...]}``）—— 前端 ``create_modal`` /
+    ``edit_modal`` 已有 ``toasts.create_error`` / ``toasts.rename_error`` 兜底，
+    不需要为这条新写任何文案。
+    """
+    if name == GENERAL_DIRECTORY:
+        return {"name": [f"Collection name '{GENERAL_DIRECTORY}' is reserved for the General partition."]}
+    return None
 
 
 class PageCollectionViewSet(BaseViewSet):
@@ -154,6 +174,10 @@ class PageCollectionViewSet(BaseViewSet):
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
+        name_error = _general_name_error(serializer.validated_data.get("name"))
+        if name_error is not None:
+            return Response(name_error, status=status.HTTP_400_BAD_REQUEST)
+
         collection = serializer.save(workspace=workspace, owned_by=request.user)
 
         # 带上 `page_count`，与 `list` 里的每一行同形 —— 前端拿到 201 就能直接塞进侧栏。
@@ -193,6 +217,10 @@ class PageCollectionViewSet(BaseViewSet):
         serializer = PageCollectionSerializer(collection, data=request.data, partial=True)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        name_error = _general_name_error(serializer.validated_data.get("name"))
+        if name_error is not None:
+            return Response(name_error, status=status.HTTP_400_BAD_REQUEST)
 
         collection = serializer.save()
 
