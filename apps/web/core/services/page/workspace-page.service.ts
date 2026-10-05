@@ -229,6 +229,21 @@ export class WorkspacePageService extends APIService {
   }
 
   /**
+   * 删除集合。**不返回体** —— 后端是 `204 No Content`（与删页面的 `removeFromWiki` 同形）。
+   *
+   * 集合里的页面**不会被删**：后端把它们整体上浮到「常规」（也就是把 `collection_id`
+   * 置空），vault 里的文件跟着搬进 `3-Wiki/常规/`。所以调用方之后要重拉的**不只是**
+   * 集合列表 —— 见 store 里同名方法的注释。
+   */
+  async deleteCollection(workspaceSlug: string, collectionId: string): Promise<void> {
+    return this.delete(`/api/workspaces/${workspaceSlug}/page-collections/${collectionId}/`)
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data ?? error;
+      });
+  }
+
+  /**
    * 在 Wiki 里**新建**一个页面。
    *
    * 与 `includePages` 的分界：那个是"把已有页面收录进来"，这个是"从零建一个"。

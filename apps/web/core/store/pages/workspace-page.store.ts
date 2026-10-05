@@ -86,6 +86,7 @@ export interface IWorkspacePageStore {
     collectionId: string,
     name: string
   ) => Promise<Omit<TPageCollection, "page_count">>;
+  deleteCollection: (workspaceSlug: string, collectionId: string) => Promise<void>;
   createPage: (workspaceSlug: string, payload: TPageCreatePayload) => Promise<TPage>;
   fetchPagesList: (workspaceSlug: string, collection: TCollectionFilter) => Promise<TPage[] | undefined>;
   fetchFolderPages: (workspaceSlug: string, folderId: string) => Promise<TPageWithParent[] | undefined>;
@@ -148,6 +149,7 @@ export class WorkspacePageStore implements IWorkspacePageStore {
       fetchCollections: action,
       createCollection: action,
       updateCollection: action,
+      deleteCollection: action,
       createPage: action,
       fetchPagesList: action,
       fetchFolderPages: action,
@@ -289,6 +291,37 @@ export class WorkspacePageStore implements IWorkspacePageStore {
     await this.fetchCollections(workspaceSlug).catch(() => {});
 
     return collection;
+  };
+
+  /**
+   * 删除集合。
+   *
+   * 三条纪律照现有集合写方法**逐字**（`createCollection` / `updateCollection`）：
+   *   1. **不设 `loader`** —— `loader` 驱动整个主面板的加载骨架，而删除只是让侧栏少一行。
+   *   2. **不得吞掉异常** —— 弹窗靠「action 是否 reject」决定 toast 成败。
+   *   3. **重拉不在写入的 try 里** —— 删除已经落库，刷新失败只能记进 `this.error`。
+   *
+   * **重拉两样，比 `updateCollection` 多一样**：`fetchCollections`（集合行没了）**与**
+   * `fetchWikiTree`（被删集合的页面现在挂在常规下，`pageParentIds` / `pageNodeTypes`
+   * 与树行都要跟着重算）。多这一次不是复制粘贴时漏了 —— 后端那一步是**整棵子树**
+   * 出集合，本地没有等价的增量改法。
+   *
+   * 注意 `fetchWikiTree` **不写** `collectionPageIds`（右侧列表走的是 `fetchPagesList`）——
+   * 用户正看着某个分区时那一屏要不要重拉，由**调用方**决定，见侧栏的
+   * `handleCollectionDeleted`。
+   */
+  deleteCollection = async (workspaceSlug: string, collectionId: string) => {
+    try {
+      await this.service.deleteCollection(workspaceSlug, collectionId);
+    } catch (error) {
+      runInAction(() => {
+        this.error = { title: "Failed", description: "Failed to delete the collection, Please try again later." };
+      });
+      throw error;
+    }
+
+    await this.fetchCollections(workspaceSlug).catch(() => {});
+    await this.fetchWikiTree(workspaceSlug).catch(() => {});
   };
 
   /**
