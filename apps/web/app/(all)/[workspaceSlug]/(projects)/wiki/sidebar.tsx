@@ -10,7 +10,7 @@ import { observer } from "mobx-react";
 import Link from "next/link";
 import { useParams, usePathname, useSearchParams } from "next/navigation";
 import useSWR from "swr";
-import { Box, Folder, MoreHorizontal, Plus } from "lucide-react";
+import { Box, Folder, MoreHorizontal, Pencil, Plus, Trash2 } from "lucide-react";
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { IconButton } from "@plane/propel/icon-button";
@@ -1061,16 +1061,37 @@ export const WikiSidebar = observer(function WikiSidebar() {
                     collection.name,
                     collection.page_count,
                     canManageCollections ? (
+                      /*
+                        两项的动作与**文件夹行**（`folder-row-actions.tsx`）逐字同源：
+                        同一个「改名」就叫「重命名」，同一个「删掉容器」就叫「删除」，
+                        图标同一个（`Pencil` / `Trash2`，`size-3`）。这两个对象在同一棵
+                        侧栏里上下挨着，同一个动作写两个词是纯粹的漂 —— Round D 的
+                        「同一棵树长得一样」说的就是这件事。两把键（`menu.rename`、
+                        `common.delete`）都是现成的，19 个语言里都有，不加新键。
+
+                        注意集合里**没有**文件夹的第一项「移动到…」—— 集合恒在顶层，
+                        没有能放它的地方，所以这里是**两项对齐**，不是照抄三行。
+
+                        `ariaLabel` 反过来**不动**：文件夹那边用通用的 `common.options`
+                        是因为「文件夹不是集合」；这行恰恰**是**集合，`collection_options`
+                        才是念对了对象的那把键。
+                      */
                       <CustomMenu
                         customButton={<IconButton icon={MoreHorizontal} variant="ghost" size="sm" />}
                         ariaLabel={t("wiki_collections.menu.collection_options")}
                         closeOnSelect
                       >
                         <CustomMenu.MenuItem onClick={() => openEdit(collection)}>
-                          {t("wiki_collections.menu.edit_collection")}
+                          <span className="flex items-center gap-2">
+                            <Pencil className="size-3" />
+                            {t("wiki_collections.menu.rename")}
+                          </span>
                         </CustomMenu.MenuItem>
                         <CustomMenu.MenuItem onClick={() => setDeletingCollection(collection)}>
-                          {t("wiki_collections.menu.delete_collection")}
+                          <span className="flex items-center gap-2">
+                            <Trash2 className="size-3" />
+                            {t("common.delete")}
+                          </span>
                         </CustomMenu.MenuItem>
                       </CustomMenu>
                     ) : undefined
