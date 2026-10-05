@@ -268,7 +268,7 @@ urlpatterns = [
     ),
     path(
         "workspaces/<str:slug>/page-collections/<uuid:pk>/",
-        PageCollectionViewSet.as_view({"patch": "partial_update"}),
+        PageCollectionViewSet.as_view({"patch": "partial_update", "delete": "destroy"}),
         name="workspace-page-collection",
     ),
     # wiki pages: detail / include / move / remove

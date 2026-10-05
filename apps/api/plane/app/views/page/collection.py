@@ -232,6 +232,37 @@ class PageCollectionViewSet(BaseViewSet):
 
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
+    def destroy(self, request, slug, pk):
+        """删除集合（Round H，设计 §4.1 / §4.6）。
+
+        **页面与文件夹一个都不删** —— 它们整体上浮到「常规」，结构原封不动。
+        权限与同 ViewSet 的 `create` / `partial_update` 逐字一致（不允许 GUEST）。
+
+        **不接受任何 query 参数**：设计 §1.1 那条 `?transfer_to=` / `?delete_pages=`
+        二选一是 Phase 2 的事。**传了就 400 而不是静默忽略** —— 静默忽略会让一个
+        照旧文档写客户端的调用方以为「连删页面」生效了。判据是**出现**而不是取值：
+        `?delete_pages=false` 同样 400，因为它说明调用方以为那份契约存在。
+        """
+        collection = get_object_or_404(
+            PageCollection.objects.filter(workspace__slug=slug).select_related("workspace"), pk=pk
+        )
+
+        if request.query_params.get("transfer_to") is not None or request.query_params.get("delete_pages") is not None:
+            return Response(
+                {
+                    "error": (
+                        "transfer_to and delete_pages are not supported: deleting a collection "
+                        "moves its pages and folders to the General partition."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        _destroy_collection(collection)
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 
 class WikiPageViewSet(BaseViewSet):
     """Wiki 里的页面 —— 收录 / 移出 / 换集合。
@@ -707,6 +738,46 @@ class WikiPageViewSet(BaseViewSet):
         _move_children_mirrors(child_ids, state)
 
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+def _destroy_collection(collection):
+    """删一个集合：**页面与文件夹一个都不删**，整体上浮到「常规」。
+
+    与 `_destroy_folder` 的关系：那个搬的是「一棵子树里被摘掉的那一段」，这个搬的是
+    「整片森林从一个目录挪到另一个目录」。相同点是**都只对顶层节点下手** ——
+    后代由承载它的目录一次带走（`_move_page_file` 的同名目录分支，见
+    `_snapshot_children_mirror_state` 的 docstring）。
+
+    **顺序是载荷**（① 快照 → ② 整棵子树出集合 → ③ 搬镜像 → ④ 软删集合行 → ⑤ rmdir）：
+
+    ② 必须在 ④ 之前，且**不能**依赖 `SoftDeleteModel` 的 Celery 级联。那个任务
+    （`bgtasks/deletion_task.py`）对 SET_NULL 关系做的正是我们要的浮升，但它是
+    `.delay()`，需要 worker 活着 —— worker 不在时集合行已经软删、`list` 已经过滤掉它，
+    而页面的 `collection_id` **还指着它** ⇒ `resolve_collection_key` 返回那个 uuid ⇒
+    侧栏没有这一行 ⇒ **页面在 UI 里凭空消失**，与「一个都不删」的承诺正好相反。
+
+    ② 对整棵子树**一次**生效：后代行本来就都带 `collection_id`
+    （`_move_descendants_to_collection` 就是靠这一点工作的），所以一条
+    `WHERE collection_id = A` 覆盖页面、文件夹、嵌套页面全部。`Page.parent` 一个都不动
+    ⇒ 结构自动正确。
+    """
+    # ① 顶层节点快照 —— ③ 需要它，而它**必须**发生在 ② 之前（② 之后这些行就不再挂在
+    #    集合下面了）。取法与「为什么判据得写在 Python 里而不是 SQL 里」见 Task 5 Step 4。
+    #    **本步先不落地它**：只做 ②④ 的中间态下它是个没人读的局部变量，而 ①③⑤ 进的是
+    #    同一个 commit（② 是纯 SQL，不搬文件，磁盘与库会分叉 —— 中间态没有意义）。
+
+    # ② 整棵子树出集合。
+    # `QuerySet.update()` 绕过 auto_now ⇒ `updated_at` 必须显式刷新（与 `create` /
+    # `destroy` / `_move_descendants_to_collection` 三条既有路径同一条纪律）；
+    # `updated_by` **不写** —— 刷新时间戳，不把执行者盖到「最后编辑人」上。
+    Page.objects.filter(collection_id=collection.id).update(collection=None, updated_at=timezone.now())
+
+    # ③ 搬顶层节点的镜像 —— Task 5 Step 4 在同一处插入，不换函数。
+
+    # ④ 软删集合行。此时 Celery 那条 SET_NULL 级联已经无事可做（② 清空了）。
+    collection.delete()
+
+    # ⑤ 空目录 rmdir —— Task 5 Step 4 补。
 
 
 def _wiki_page_project_id(page):
