@@ -39,6 +39,40 @@ type TError = { title: string; description: string };
  */
 export type TWikiTreeRow = { pageId: string; collectionKey: string };
 
+/**
+ * 按 `pageParentIds` 算出一棵子树的全部 id —— **含根自己**。
+ *
+ * 本地没有别的祖先来源：`treeRows` 只有 `{ pageId, collectionKey }`，没有父子关系。
+ * 广度优先 + `seen` 去重，与后端 `_descendant_ids` 同一形状 —— 环与畸形数据都不能
+ * 让界面转死（`pageParentIds` 是**服务端算出来的**，但它归根到底是 `Page.parent` 的
+ * 投影，而 `parent` 没有任何约束禁止成环）。
+ *
+ * 为什么不用 `treeRows` 的 `collectionKey` 搞定：那只回答「属于哪个集合」，
+ * 回答不了「在哪个文件夹下」—— 删一个文件夹时，它的兄弟与父级同属一个集合，
+ * 按集合过滤会把它们一起误删。
+ */
+const collectSubtreeIds = (pageParentIds: Record<string, string | null> | undefined, rootId: string): string[] => {
+  const childrenByParent = new Map<string, string[]>();
+  for (const [id, parentId] of Object.entries(pageParentIds ?? {})) {
+    if (!parentId || id === rootId) continue;
+    const siblings = childrenByParent.get(parentId);
+    if (siblings) siblings.push(id);
+    else childrenByParent.set(parentId, [id]);
+  }
+
+  const subtree = [rootId];
+  const seen = new Set(subtree);
+  // 边遍历边增长 —— 广度优先，`subtree` 自己就是队列。
+  for (let index = 0; index < subtree.length; index++) {
+    for (const childId of childrenByParent.get(subtree[index]) ?? []) {
+      if (seen.has(childId)) continue;
+      seen.add(childId);
+      subtree.push(childId);
+    }
+  }
+  return subtree;
+};
+
 export interface IWorkspacePageStore {
   // observables
   loader: TLoader;
@@ -294,21 +328,21 @@ export class WorkspacePageStore implements IWorkspacePageStore {
   };
 
   /**
-   * 删除集合。
+   * 删一个集合（Round H 起；Round I 改成**连里面的页面一起删**，设计 §4.2）。
    *
-   * 三条纪律照现有集合写方法**逐字**（`createCollection` / `updateCollection`）：
+   * 三点纪律沿用 `deleteFolder`：
    *   1. **不设 `loader`** —— `loader` 驱动整个主面板的加载骨架，而删除只是让侧栏少一行。
    *   2. **不得吞掉异常** —— 弹窗靠「action 是否 reject」决定 toast 成败。
    *   3. **重拉不在写入的 try 里** —— 删除已经落库，刷新失败只能记进 `this.error`。
    *
-   * **重拉两样，比 `updateCollection` 多一样**：`fetchCollections`（集合行没了）**与**
-   * `fetchWikiTree`（被删集合的页面现在挂在常规下，`pageParentIds` / `pageNodeTypes`
-   * 与树行都要跟着重算）。多这一次不是复制粘贴时漏了 —— 后端那一步是**整棵子树**
-   * 出集合，本地没有等价的增量改法。
+   * **重拉两样**：`fetchCollections`（集合行没了）与 `fetchWikiTree`（树行要重算）。
+   * 但重拉**不负责清账** —— `fetchWikiTree` 只写不清、也不碰 `collectionPageIds`
+   * （见它上面那段注释），所以被删集合里那些页面的 id 得在这里自己摘掉，
+   * 否则右侧列表会一直列着它们，直到 `fetchPagesList` 再跑一次。
    *
-   * 注意 `fetchWikiTree` **不写** `collectionPageIds`（右侧列表走的是 `fetchPagesList`）——
-   * 用户正看着某个分区时那一屏要不要重拉，由**调用方**决定，见侧栏的
-   * `handleCollectionDeleted`。
+   * 后代的来源是 **`treeRows` 的 `collectionKey`**，不是 `collectionPageIds` ——
+   * 后者只装了 `fetchPagesList` / `fetchFolderPages` 那次拿到的**顶层**行，
+   * 而 `treeRows` 是 `?scope=all` 的完整投影。
    */
   deleteCollection = async (workspaceSlug: string, collectionId: string) => {
     try {
@@ -321,12 +355,20 @@ export class WorkspacePageStore implements IWorkspacePageStore {
     }
 
     runInAction(() => {
-      // 与 `deleteFolder` / `removeFromWiki` / `moveTo` 同一条清账纪律：被删的 id 不该再
-      // 在 `collectionPageIds` 里留痕。差别只在「删的是什么」—— 那三处删的是**页面/文件夹**，
-      // 于是把 id 从每个分区数组里滤掉；这里删的是**整个分区键本身**（集合 id 就是键），
-      // 所以直接把这个键 unset 掉。不清理的话，这个键会指向一个已经不存在的集合，一直
-      // 悬到下一轮重拉（右侧列表读的是 `fetchPagesList`，会覆盖它；但在此之前谁读谁上当）。
+      // 被删集合里的**每一行**（含嵌套页面与文件夹）都软删了，按 `collectionKey` 一次摘干净。
+      const doomed = this.treeRows.filter((row) => row.collectionKey === collectionId).map((row) => row.pageId);
+      const doomedSet = new Set(doomed);
+      // 同 `deleteFolder`：**必须逐个 id `unset`**，把数组当路径传会静默空转。
+      for (const id of doomed) {
+        unset(this.data, [id]);
+        unset(this.pageNodeTypes, [id]);
+      }
+      // 集合 id 本身就是 `collectionPageIds` 里的一个键 —— 整键 unset，
+      // 与 `deleteFolder` 那种「从每个数组里滤掉几个 id」不是一回事。
       unset(this.collectionPageIds, [collectionId]);
+      for (const key of Object.keys(this.collectionPageIds)) {
+        this.collectionPageIds[key] = this.collectionPageIds[key].filter((id) => !doomedSet.has(id));
+      }
     });
 
     await this.fetchCollections(workspaceSlug).catch(() => {});
@@ -646,22 +688,36 @@ export class WorkspacePageStore implements IWorkspacePageStore {
 
   /**
    * 删一个文件夹。**走的是与「移出 Wiki」同一个 HTTP 端点** —— 后端按 `node_type`
-   * 分叉（设计 §4.3），所以这里只是给它一个诚实的名字与一句诚实的错误提示。
+   * 分叉（`collection.py` 的 `destroy`）。
    *
-   * 与 `removeFromWiki` 的差别在**服务端语义**：删文件夹会让它的直接子节点换父（后端
-   * `destroy`），`removeFromWiki` 则不动子页。落到本地状态，差别只有一件 —— 那些子节点的
-   * `pageParentIds` 变了、非重拉树修不对；而两个方法**上面那段本地状态处理逐字相同**
-   * （同一套 `unset` + 过滤 `collectionPageIds` + 重拉集合与树），别指望从那里读出差别。
+   * ⚠️ **Round I 起它删的是一整棵子树**（设计 §4.1）：文件夹自己、里面的页面、
+   * 嵌套的子文件夹，后端全部软删。所以本地不能只摘 `folderId` —— 那样会留下一堆
+   * 指向已经不存在的行的 id。**必须自己算后代**，理由是 `fetchWikiTree` 只写不清、
+   * 且根本不碰 `collectionPageIds`（见本文件 `fetchWikiTree` 上面那段注释）。
+   *
+   * 与 `removeFromWiki` 的分界**变了**：那个至今是「取消收录、行保留、不动子页」，
+   * 这个已经是「连行带子页一起没」。两段代码长得像，语义不再像。
    */
   deleteFolder = async (workspaceSlug: string, folderId: string) => {
     try {
       await this.service.removeFromWiki(workspaceSlug, folderId);
 
       runInAction(() => {
-        unset(this.data, [folderId]);
-        unset(this.pageNodeTypes, [folderId]);
+        // 先算后代再动手 —— `pageParentIds` 一旦被下面这次重拉改写就晚了
+        // （虽然重拉只写不清，但依赖它「恰好没清」是脆的）。
+        const doomed = collectSubtreeIds(this.pageParentIds, folderId);
+        const doomedSet = new Set(doomed);
+        // ⚠️ **必须逐个 id 调 `unset(o, [id])`，不能写成 `unset(o, doomed)`。**
+        // lodash 的 `unset` 把数组当**深层路径**解：`unset(o, ['a','b'])` 删的是 `o.a.b`，
+        // 于是多元素时整段清账**静默空转**（实测：对象一字不变）。老代码
+        // `unset(this.data, [folderId])` 看着是对的，只因为**单元素**数组恰好等价于
+        // 「删这个键」—— 加到 N 个 id 就塌了。这是 T6 存在的意义所在的那个 bug 的翻版。
+        for (const id of doomed) {
+          unset(this.data, [id]);
+          unset(this.pageNodeTypes, [id]);
+        }
         for (const key of Object.keys(this.collectionPageIds)) {
-          this.collectionPageIds[key] = this.collectionPageIds[key].filter((id) => id !== folderId);
+          this.collectionPageIds[key] = this.collectionPageIds[key].filter((id) => !doomedSet.has(id));
         }
       });
 
