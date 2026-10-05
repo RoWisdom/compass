@@ -2,20 +2,21 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-"""删除集合（罗盘 Round H，设计 §2/§4）。语义照 Confluence Cloud：
+"""删除集合（罗盘 Round I，设计 §4.2）。语义从 Round H 的「内容整体上浮到常规、
+一个都不删」改为**连里面的页面与文件夹一起删**：
 
-  · 集合这个**容器**没了，里面的页面与文件夹**一个都不删**；
-  · 它们整体上浮到「常规」（预置分区，`collection_id` 置空即自动落进去）；
-  · 结构原封不动 —— `parent` 一个都不动；
-  · vault 里的镜像搬进 `3-Wiki/常规/`，空目录删掉，非空原样留下。
+  · 集合里**每一行**（页面、文件夹、嵌套页面）都软删；
+  · 集合行自己也软删（与 Round H 同）；
+  · 磁盘上只删**我们自己写的**镜像，目录只在空掉时 `rmdir`；
+  · 「常规」重名守卫、`?transfer_to=` / `?delete_pages=` 的 400 守卫**逐字不变**。
 
-本文件分三段：守卫（本任务的「常规」重名）、端点与行语义（Task 4）、镜像（Task 5）。
+⚠️ 与 `test_wiki_folder_delete_app.py` 是同一套语义的两个入口，断言必须同步。
 """
 
 import pytest
 from rest_framework import status
 
-from plane.db.models import Page, PageCollection, User, Workspace, WorkspaceMember
+from plane.db.models import Page, PageCollection, Project, ProjectPage, User, Workspace, WorkspaceMember
 
 GENERAL = "常规"
 
@@ -30,13 +31,14 @@ def _url(workspace, collection):
 
 @pytest.fixture
 def no_celery(monkeypatch):
-    """把软删行时那次 Celery 级联钉成空操作。
+    """把软删**集合行**时那次 Celery 级联钉成空操作。
 
     `SoftDeleteModel.delete()` 会 `.delay()` 一个任务（`db/mixins.py:78`），而测试设置
     （`plane/settings/test.py`）**没有** `CELERY_TASK_ALWAYS_EAGER` —— 真跑就会把一条
-    消息发到 226 的 RabbitMQ 上，被**生产** worker 消费。本轮的设计本来就**不依赖**
-    那条级联（页面由 ② 同步浮升，见 `destroy` 的 docstring），所以测试里钉掉它既准确
-    又不污染生产队列。
+    消息发到 226 的 RabbitMQ 上，被**生产** worker 消费。
+
+    页面那侧**不需要**它：`_cascade_delete_pages` 走的是一条 `QuerySet.update()`，
+    根本不经过 `SoftDeleteModel.delete()`。
     """
     monkeypatch.setattr("plane.db.mixins.soft_delete_related_objects.delay", lambda *args, **kwargs: None)
 
@@ -95,7 +97,7 @@ def _folder(workspace, user, name, **kwargs):
 
 @pytest.fixture
 def collection_tree(workspace, create_user):
-    """一个集合 + 里面的一页面、一文件夹、文件夹下的子页，外加一个局外页面：
+    """两个集合 + 局外页面：
 
         集合 A
         ├── page（页面）
@@ -115,8 +117,13 @@ def collection_tree(workspace, create_user):
     return {"a": a, "b": b, "page": page, "folder": folder, "child": child, "other": other, "outside": outside}
 
 
+def _deleted(row):
+    row.refresh_from_db()
+    return row.deleted_at is not None
+
+
 @pytest.mark.contract
-class TestDeletingACollectionKeepsEverythingInsideIt:
+class TestDeletingACollectionDeletesEverythingInsideIt:
     @pytest.mark.django_db
     def test_an_empty_collection_can_be_deleted(self, session_client, workspace, create_user, no_celery):
         collection = _collection(workspace, create_user, "空集合")
@@ -137,62 +144,56 @@ class TestDeletingACollectionKeepsEverythingInsideIt:
         assert session_client.delete(_url(workspace, collection)).status_code == status.HTTP_404_NOT_FOUND
 
     @pytest.mark.django_db
-    def test_pages_and_folders_stay_and_float_into_general(
-        self, session_client, workspace, collection_tree, no_celery
-    ):
-        """核心承诺：**一行都不删**，全部落到常规，结构原封不动。"""
+    def test_every_row_inside_gets_a_deleted_at(self, session_client, workspace, collection_tree, no_celery):
+        """核心承诺：页面、文件夹、嵌套页面**每一行**都软删。"""
         tree = collection_tree
-        folders = {tree["folder"].id: tree["folder"].parent_id}
-        rows = {key: (tree[key], tree[key].parent_id) for key in ("page", "folder", "child")}
 
         response = session_client.delete(_url(workspace, tree["a"]))
 
         assert response.status_code == status.HTTP_204_NO_CONTENT
-        for key, (row, parent_id) in rows.items():
-            row.refresh_from_db()
-            assert row.deleted_at is None, f"{key} 不得被删"
-            assert row.is_global is True, f"{key} 不得出 Wiki"
-            assert row.collection_id is None, f"{key} 应上浮到常规（collection_id 置空）"
-            assert row.parent_id == parent_id, f"{key} 的父不得动（结构原封不动）"
-        assert folders[tree["folder"].id] is None, "前置：文件夹本来就是顶层"
+        for key in ("page", "folder", "child"):
+            assert _deleted(tree[key]), f"{key} 应随集合一起软删"
+        tree["a"].refresh_from_db()
+        assert tree["a"].deleted_at is not None, "集合行自己也软删"
+
+    @pytest.mark.django_db
+    def test_the_deleted_rows_leave_the_wiki_tree_endpoint(
+        self, session_client, workspace, collection_tree, no_celery
+    ):
+        session_client.delete(_url(workspace, collection_tree["a"]))
+
+        response = session_client.get(f"/api/workspaces/{workspace.slug}/wiki-pages/?scope=all")
+        assert response.status_code == status.HTTP_200_OK
+        ids = {row["id"] for row in response.data}
+        for key in ("page", "folder", "child"):
+            assert str(collection_tree[key].id) not in ids, f"{key} 不该再出现在树里"
 
     @pytest.mark.django_db
     def test_the_other_collection_and_pages_outside_are_untouched(
         self, session_client, workspace, collection_tree, no_celery
     ):
-        response = session_client.delete(_url(workspace, collection_tree["a"]))
-        assert response.status_code == status.HTTP_204_NO_CONTENT
+        session_client.delete(_url(workspace, collection_tree["a"]))
 
-        collection_tree["b"].refresh_from_db()
-        assert collection_tree["b"].deleted_at is None, "B 不该被删"
+        assert not _deleted(collection_tree["b"]), "B 不该被删"
         collection_tree["other"].refresh_from_db()
-        assert collection_tree["other"].collection_id == collection_tree["b"].id, "B 里的页面不动"
+        assert collection_tree["other"].deleted_at is None, "B 里的页面不动"
+        assert collection_tree["other"].collection_id == collection_tree["b"].id
         collection_tree["outside"].refresh_from_db()
-        assert collection_tree["outside"].collection_id is None, "本来就在常规的页面不受影响"
-        assert collection_tree["outside"].deleted_at is None
+        assert collection_tree["outside"].deleted_at is None, "本来就在常规的页面不受影响"
 
     @pytest.mark.django_db
-    def test_the_general_partition_count_picks_the_pages_up(
+    def test_a_page_that_also_belongs_to_a_project_is_deleted(
         self, session_client, workspace, create_user, no_celery
     ):
-        """口径落到 `resolve_collection_key`：`collection_id` 一置空，页面就落 general。
-
-        刻意用一棵**不带文件夹**的小树，并把断言写成**增量**：`collection_tree` 里有个
-        本来就在常规的 `outside`，用绝对值会把基准挪掉；而绝对计数还会偷偷把
-        「`page_count` 到底算不算文件夹节点」这条与本轮无关的既有口径钉进本测试。
-        """
+        """设计 §2 I-3 的锁（与删文件夹那条同一个形状）。"""
         collection = _collection(workspace, create_user, "A")
-        _wiki_page(workspace, create_user, "p1", collection=collection)
-        _wiki_page(workspace, create_user, "p2", collection=collection)
+        page = _wiki_page(workspace, create_user, "双身份", collection=collection)
+        project = Project.objects.create(name="项目", identifier="PRJ", workspace=workspace)
+        ProjectPage.objects.create(workspace=workspace, project=project, page=page, created_by=create_user)
 
-        def general_count():
-            response = session_client.get(f"/api/workspaces/{workspace.slug}/page-collections/")
-            assert response.status_code == status.HTTP_200_OK
-            return next(item for item in response.data["predefined"] if item["key"] == "general")["page_count"]
-
-        before = general_count()
         session_client.delete(_url(workspace, collection))
-        assert general_count() == before + 2, "两个页面都进了常规"
+
+        assert _deleted(page)
 
     @pytest.mark.django_db
     def test_the_deleted_collection_leaves_the_list(self, session_client, workspace, collection_tree, no_celery):
@@ -235,6 +236,8 @@ class TestTheEndpointRefusesTheUnimplementedContract:
         assert "error" in response.data
         collection_tree["a"].refresh_from_db()
         assert collection_tree["a"].deleted_at is None, "被拒的请求不得删掉任何东西"
+        collection_tree["page"].refresh_from_db()
+        assert collection_tree["page"].deleted_at is None
 
     @pytest.mark.django_db
     def test_delete_pages_is_rejected(self, session_client, workspace, collection_tree, no_celery):
@@ -302,18 +305,13 @@ class TestPermissions:
 
 
 @pytest.mark.contract
-class TestDeletingACollectionMovesTheMirrors:
-    """文件必须跟着浮升 —— ② 是**纯 SQL**，磁盘上不会自己动。
-
-    ⚠️ 这里的页面必须挂在**真实集合**里，并且先用 `_mirror_wiki_page` 落一份文件：
-    镜像是 best-effort，前置没落盘的话后面那些断言就成了空转。
-    """
+class TestDeletingACollectionDeletesTheMirrors:
+    """镜像按设计 §4.3 收尾 —— 与删文件夹那一节同一条纪律、同一份实现。"""
 
     @pytest.fixture
     def mirrored(self, workspace, create_user, isolate_markdown_mirror):
-        """一棵带集合的树 + 已经落好的镜像：
+        """集合 A / 3-Wiki/A/ 下已经落好的镜像：
 
-            集合 A / 3-Wiki/A/
             ├── page            page.md
             └── F（文件夹）      F/child.md
         """
@@ -332,28 +330,25 @@ class TestDeletingACollectionMovesTheMirrors:
         return {"collection": collection, "page": page, "folder": folder, "child": child, "root": root}
 
     @pytest.mark.django_db
-    def test_a_pages_file_moves_into_the_general_folder(self, session_client, workspace, mirrored, no_celery):
-        before = (mirrored["root"] / "A" / "page.md").read_text(encoding="utf-8")
-
+    def test_our_own_files_are_deleted(self, session_client, workspace, mirrored, no_celery):
         response = session_client.delete(_url(workspace, mirrored["collection"]))
-        assert response.status_code == status.HTTP_204_NO_CONTENT
 
-        moved = mirrored["root"] / "常规" / "page.md"
-        assert moved.is_file(), "文件搬到 3-Wiki/常规/ 下"
-        assert moved.read_text(encoding="utf-8") == before, "内容逐字不变（os.replace，不是重写）"
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert not (mirrored["root"] / "A" / "page.md").exists()
+        assert not (mirrored["root"] / "A" / "F" / "child.md").exists()
 
     @pytest.mark.django_db
-    def test_a_folder_takes_its_whole_subtree_along(self, session_client, workspace, mirrored, no_celery):
+    def test_the_emptied_collection_directory_is_removed(self, session_client, workspace, mirrored, no_celery):
         session_client.delete(_url(workspace, mirrored["collection"]))
 
-        assert (mirrored["root"] / "常规" / "F" / "child.md").is_file(), "文件夹整棵跟着走"
-        assert not (mirrored["root"] / "A").exists(), "旧目录空了就该被删掉"
+        assert not (mirrored["root"] / "A").exists(), "集合目录空了就该走"
+        assert (mirrored["root"]).is_dir(), "wiki 根永不动"
 
     @pytest.mark.django_db
-    def test_a_non_empty_source_directory_is_left_alone(
+    def test_a_file_that_is_not_ours_keeps_the_directory_alive(
         self, session_client, workspace, mirrored, no_celery
     ):
-        """孤儿文件（用户手写、或页面行已不在）挡着 ⇒ **不删目录**，一个字都不碰。"""
+        """孤儿文件（用户手写、或页面行已不在）挡着 ⇒ **不删目录**、文件一字不动。"""
         orphan = mirrored["root"] / "A" / "用户手写的.md"
         orphan_text = "---\ntags:\n  - 手写\n---\n\n这是我自己的笔记。\n"
         orphan.write_text(orphan_text, encoding="utf-8")
@@ -362,45 +357,31 @@ class TestDeletingACollectionMovesTheMirrors:
 
         assert (mirrored["root"] / "A").is_dir(), "非空目录必须原样留下"
         assert orphan.read_text(encoding="utf-8") == orphan_text, "孤儿文件一字未动"
-        assert (mirrored["root"] / "常规" / "page.md").is_file(), "搬移照常进行"
-
-    @pytest.mark.django_db
-    def test_an_occupied_target_is_not_clobbered(self, session_client, workspace, mirrored, no_celery):
-        """目标重名 ⇒ 不覆盖，落 `-{id8}` 兄弟；别人的笔记一字不动。"""
-        clash = mirrored["root"] / "常规" / "page.md"
-        clash.parent.mkdir(parents=True, exist_ok=True)
-        clash_text = "---\ntags:\n  - 手写\n---\n\n常规里这篇是我手写的，Plane 不认识它。\n"
-        clash.write_text(clash_text, encoding="utf-8")
-
-        session_client.delete(_url(workspace, mirrored["collection"]))
-
-        assert clash.read_text(encoding="utf-8") == clash_text, "别人的文件一字未动"
-        sibling = mirrored["root"] / "常规" / f"page-{str(mirrored['page'].id)[:8]}.md"
-        assert sibling.is_file(), "本页的文件落成 -{id8} 兄弟"
+        assert not (mirrored["root"] / "A" / "page.md").exists(), "我们自己的还是收掉了"
 
     @pytest.mark.django_db
     def test_a_read_only_vault_does_not_fail_the_delete(
         self, session_client, workspace, mirrored, no_celery, monkeypatch
     ):
-        """best-effort：磁盘问题**永远不得**让一次删除失败（失败方向是「多一个孤儿文件」）。"""
+        """best-effort：磁盘问题**永远不得**让一次删除失败（失败方向是「页面已删、文件残留」）。"""
         import os
 
         def _boom(*args, **kwargs):
             raise OSError("read-only vault")
 
-        monkeypatch.setattr(os, "replace", _boom)
+        monkeypatch.setattr(os, "unlink", _boom)
 
         response = session_client.delete(_url(workspace, mirrored["collection"]))
 
         assert response.status_code == status.HTTP_204_NO_CONTENT
-        Page.objects.get(id=mirrored["page"].id)  # 不只是 204：行确实还在
-        assert (mirrored["root"] / "A" / "page.md").is_file(), "搬移失败，文件留原处"
+        assert _deleted(mirrored["page"]), "不只是 204：行确实被软删了"
+        assert (mirrored["root"] / "A" / "page.md").is_file(), "删不掉就留着"
 
     @pytest.mark.django_db
     def test_a_collection_with_no_mirror_directory_is_fine(
         self, session_client, workspace, create_user, isolate_markdown_mirror, no_celery
     ):
-        """226 上 11 个集合里有 3 个是空的 ⇒ 「删空集合」是高频路径，必须干净。"""
+        """226 上多个集合从来没落过盘 ⇒ 「删这种集合」是常规路径，必须干净。"""
         collection = _collection(workspace, create_user, "从没落过盘的")
         _wiki_page(workspace, create_user, "页", collection=collection)
 
@@ -415,12 +396,10 @@ class TestDeletingACollectionMovesTheMirrors:
     ):
         """一个非 UTF-8 的文件压在顶层页面的镜像路径上，删除**不得**因此 500。
 
-        失败方向是设计 §8 写死的「磁盘问题只留下一个孤儿文件、记一条日志」，绝不是
-        「删除失败」。③ 只吞 `OSError` 时这条路径会漏：`_move_wiki_page_mirror` 在进入
-        `move_mirror_file`（它自己吞 `UnicodeDecodeError`）**之前**先解析两条路径，
-        而 `_frontmatter_id`（`markdown_storage.py:75-86`）读候选文件时只兜 `OSError`
-        —— 一个非 UTF-8 的文件抛的是 `UnicodeDecodeError`（`ValueError`，不是 `OSError`），
-        一路冒到端点变成 500。
+        `_frontmatter_id`（`markdown_storage.py:75-86`）只兜 `OSError`，而一个非 UTF-8
+        的文件抛的是 `UnicodeDecodeError`（`ValueError`，不是 `OSError`）。
+        本轮的解析发生在**两个**地方（`_wiki_mirror_target` 里的 `_resolve_page_path`，
+        以及 `delete_page_file` 里的 `_frontmatter_id`），两处都得兜住。
         """
         collection = _collection(workspace, create_user, "A")
         _wiki_page(workspace, create_user, "page", collection=collection)
