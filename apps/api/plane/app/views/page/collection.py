@@ -238,7 +238,9 @@ class PageCollectionViewSet(BaseViewSet):
     def destroy(self, request, slug, pk):
         """删除集合（Round H，设计 §4.1 / §4.6）。
 
-        **页面与文件夹一个都不删** —— 它们整体上浮到「常规」，结构原封不动。
+        **连里面的页面与文件夹一起删** —— Round I 起它们与集合一并软删（设计 §4.2；
+        取代了 Round H 的「整体上浮到常规、一个都不删」），集合内的镜像文件与空目录
+        也随级联一并收走。
         权限与同 ViewSet 的 `create` / `partial_update` 逐字一致（不允许 GUEST）。
 
         **不接受任何 query 参数**：设计 §1.1 那条 `?transfer_to=` / `?delete_pages=`
@@ -255,7 +257,7 @@ class PageCollectionViewSet(BaseViewSet):
                 {
                     "error": (
                         "transfer_to and delete_pages are not supported: deleting a collection "
-                        "moves its pages and folders to the General partition."
+                        "deletes its pages and folders; use the collection DELETE endpoint itself."
                     )
                 },
                 status=status.HTTP_400_BAD_REQUEST,
@@ -789,7 +791,8 @@ def _destroy_collection(collection):
         os.rmdir(directory)
     except OSError as exc:
         # 三种正常结局：目录本来就不存在、非空（还有不是我们写的文件）、只读盘。
-        # 这是「wiki 永不主动删 vault 内容」唯一的一次例外，且**只删空目录**。
+        # 这是 wiki 主动删 vault 内容的例外之一（另一处是 `delete_page_file` 删掉本
+        # 应用写过的镜像文件），且这里**只删空目录**。
         logger.info("Not removing the collection directory %s: %s", directory, exc)
 
 
@@ -1148,7 +1151,8 @@ def _move_wiki_page_mirror(page, old_name, old_collection_id, old_ancestors=None
     two ``None`` guards below are unreachable defensive branches. They are kept
     only so a future change to that routing fails softly instead of half-moving a
     file: were one to fire, the old file would be **left where it is** and a
-    warning logged, because the wiki never deletes vault folders (删集合不删文件夹).
+    warning logged — a move only relocates, it never retires; retiring a file is
+    `delete_page_file`'s job, not the move's.
 
     The recorded path (``Page.external_id``) follows the file, so the next body write
     still recognises it as this page's own — see ``_repoint_page_external_id`` for the
@@ -1188,7 +1192,8 @@ def _move_wiki_page_mirror(page, old_name, old_collection_id, old_ancestors=None
         logger.warning(
             "Skipping markdown mirror move for wiki page %s: the new state resolved to no mirror "
             "root (unreachable — the three-way routing always picks one). The old file is left in "
-            "place — the wiki never deletes vault files (design §243 「删集合不删文件夹」).",
+            "place — a move only relocates, it never retires; retiring a file is "
+            "`delete_page_file`'s job, not the move's.",
             page.id,
         )
         return

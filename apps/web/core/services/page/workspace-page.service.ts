@@ -231,8 +231,8 @@ export class WorkspacePageService extends APIService {
   /**
    * 删除集合。**不返回体** —— 后端是 `204 No Content`（与删页面的 `removeFromWiki` 同形）。
    *
-   * 集合里的页面**不会被删**：后端把它们整体上浮到「常规」（也就是把 `collection_id`
-   * 置空），vault 里的文件跟着搬进 `3-Wiki/常规/`。所以调用方之后要重拉的**不只是**
+   * 集合里的页面与文件夹**会一并被删**（Round I 起）：后端软删整个集合的内容，
+   * vault 里那些页面的镜像文件也随级联收走。所以调用方之后要重拉的**不只是**
    * 集合列表 —— 见 store 里同名方法的注释。
    */
   async deleteCollection(workspaceSlug: string, collectionId: string): Promise<void> {
@@ -408,8 +408,8 @@ export class WorkspacePageService extends APIService {
    * 移出 Wiki。只取消收录，**不删页面**。
    *
    * 同一个端点也承载**删文件夹**（`WikiPageViewSet.destroy` 按 `node_type` 分叉）：
-   * 页面走「移出 Wiki」，文件夹走「内容上浮一级 + 自己出 Wiki」。前端不需要第二个
-   * service 方法 —— 差别在**语义**不在**请求**（设计 §4.3）。
+   * 页面走「移出 Wiki」，文件夹走「连同整棵子树一并删除」（Round I 起，设计 §4.1）。
+   * 前端不需要第二个 service 方法 —— 差别在**语义**不在**请求**（设计 §4.3）。
    */
   async removeFromWiki(workspaceSlug: string, pageId: string): Promise<void> {
     return this.delete(`/api/workspaces/${workspaceSlug}/wiki-pages/${pageId}/`)

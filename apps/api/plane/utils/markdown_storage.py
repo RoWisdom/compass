@@ -293,8 +293,8 @@ def _move_page_file(
         else:
             # 目录**只在真的搬文件时**建。搬到这儿之前的每一步（没有源文件、来源不是本页、
             # 目标被占）都是「什么都不动」，凭空建出目标目录会在 vault 里留下一片空文件夹
-            # —— 删一个从没落过盘的集合时尤其明显（`_destroy_collection` 的 ③ 会对每个
-            # 顶层节点调用本函数，其中就有镜像从未落盘的那些）。
+            # —— 对那些镜像从未落盘的页面尤其明显（页面行存在、正文一次都没写过，本函数
+            # 照样会被调到，此时一个源文件都没有）。
             new_path.parent.mkdir(parents=True, exist_ok=True)
             old_path.replace(new_path)
             moved = True
