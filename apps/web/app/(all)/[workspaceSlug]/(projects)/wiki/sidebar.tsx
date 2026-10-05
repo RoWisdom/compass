@@ -637,8 +637,8 @@ export const WikiSidebar = observer(function WikiSidebar() {
    * 再有就是右侧列表：`fetchWikiTree` **不写** `collectionPageIds`（列表读的是
    * `fetchPagesList`）。用户正看着**常规**时去删另一个集合，被删集合的页面此刻正
    * 应该出现在那一屏里 —— 不补这一刀，那几行要等下一次取数才冒出来。
-   * 侧栏这棵树不用管：`deleteCollection` 内部已经重拉（同 `FolderRowActions` 传空
-   * 函数的理由，见 `renderPageRow` 里那段注释）。
+   * 侧栏这棵树不用管：`deleteCollection` 内部已经重拉（同 `FolderRowActions` 的
+   * `handleFolderDeleted` 只管**主面板**、不管这棵树的理由，见 `renderPageRow` 里那段注释）。
    */
   const handleCollectionDeleted = () => {
     if (!workspaceSlug) return;
@@ -656,6 +656,33 @@ export const WikiSidebar = observer(function WikiSidebar() {
       router.push(`/${workspaceSlug}/wiki/?collection=general`);
       return;
     }
+    fetchPagesList(workspaceSlug, activeCollection).catch(() => {});
+  };
+
+  /**
+   * 删文件夹成功后的收尾。**文件夹那条路径的 `handleCollectionDeleted`。**
+   *
+   * 侧栏这棵树来自 `fetchWikiTree`（`deleteFolder` 内部已经重拉过），所以树不用管；
+   * 要管的是**主面板**：用户可能正站在被删的那个文件夹里（`?folder=<id>`），
+   * 而那个文件夹**连行都没了**（Round I 起是级联软删），再拉一次只会进
+   * `fetchFolderPages` 的错误分支、留下一个没有出路的空面板。
+   *
+   * 与 `handleCollectionDeleted` 同一条纪律：**必须实时读 `pageStore`**，不能读
+   * 这次渲染解构出来的绑定 —— 弹窗用的是点击那一刻捕获的闭包，那个快照指向删除**前**
+   * 的树（那条注释里的完整推理在这里逐字成立）。
+   *
+   * 回退目标是**父级所在的集合**：文件夹可能嵌在另一个文件夹里，回它自己的父级没意义
+   * （`?folder=` 只认集合或文件夹，父级可能已经不存在）。落回集合是安全的 ——
+   * 用户至少还能看见同一个集合里的其他内容。
+   */
+  const handleFolderDeleted = () => {
+    if (!workspaceSlug) return;
+    const stillExists = pageStore.treeRows.some((row) => row.pageId === explicitFolder);
+    if (explicitFolder && !stillExists) {
+      router.push(`/${workspaceSlug}/wiki/?collection=${activeCollection ?? "general"}`);
+      return;
+    }
+    // 没站在被删的文件夹里 —— 与删文件夹之前一样，重拉当前视图。
     fetchPagesList(workspaceSlug, activeCollection).catch(() => {});
   };
 
@@ -941,19 +968,24 @@ export const WikiSidebar = observer(function WikiSidebar() {
             并不一致 —— 那是**刻意**的：集合行是分区标题、常驻显示；树行里的动作格
             要跟同一行的 `＋` 对齐，否则窄侧栏里每个文件夹行都会常亮一颗 `•••`。
 
-            `onChanged` 传空函数是**有意的**：侧栏这棵树来自 `fetchWikiTree`，而
-            `deleteFolder` / `moveTo` 内部**已经**调了它（见 store），树会自己刷新 ——
-            这里再补一次请求就是第二次取数。
+            `onChanged` 接 `handleFolderDeleted`（它自己的注释在 :662）。**它只管主面板**：
+            侧栏这棵树来自 `fetchWikiTree`，而 `deleteFolder` / `moveTo` 内部**已经**调了它
+            （见 store），树会自己刷新 —— 这里不必、也不该再补一次取数。真正要收尾的是主面板：
+            用户可能正站在刚被删掉的那个文件夹里（`?folder=<id>` 指向一条已经不存在的行），
+            那时再拉一次只会进 `fetchFolderPages` 的错误分支、留下一个没有出路的空面板 ——
+            `handleFolderDeleted` 就是为此跳回所属集合。
 
             **但它只管这棵树，不管右边的列表视图**：列表读的是 `collectionPageIds`，而
             store 的 `moveTo` 只把被移动的 id 从**所有**集合键里剔掉、不往目标键里补。所以
             从侧栏「移动」之后，正显示**目标集合**的列表要等它自己重拉才会出现那一行
-            （移出方向没问题，本地过滤就把行去掉了）。列表视图自己的 `•••` 没这个问题 ——
-            它把 `refreshList` 传了进去。要在侧栏这处修得让 store 广播一次刷新，是接口改动，
-            **不在本轮**；先如实记在这里，别当成已解决。 */}
+            （移出方向没问题，本地过滤就把行去掉了）。`handleFolderDeleted` 末尾那次
+            `fetchPagesList(activeCollection)` 只在「目标集合 == 当前在看的那一个」时才盖到
+            这一刀，**页面行**（侧栏没有 `•••`）那条路径更没盖到。列表视图自己的 `•••` 没这个
+            问题 —— 它把 `refreshList` 传了进去。要在侧栏这处修得让 store 广播一次刷新，是接口
+            改动，**不在本轮**；先如实记在这里，别当成已解决。 */}
         {isFolder && canManageCollections && (
           <span className="opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
-            <FolderRowActions folderId={line.pageId} onChanged={() => undefined} />
+            <FolderRowActions folderId={line.pageId} onChanged={handleFolderDeleted} />
           </span>
         )}
       </div>
