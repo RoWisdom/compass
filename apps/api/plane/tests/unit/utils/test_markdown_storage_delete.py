@@ -5,16 +5,14 @@
 """删除镜像文件的两条纪律（罗盘 Round I，设计 §4.3）。
 
   · `delete_page_file` —— **只删我们自己写的**（frontmatter `id:` 等于本页）。
-    没有 `id:` 行的文件可能是这一页被导入时的原稿（用户自己写的），`id:` 是别人的
-    是别人的剪藏 —— 两种都留下。这条判定不是新发明的：它就是 `_resolve_page_path`
+    没有 `id:` 行的文件可能是这一页被导入时的原稿（用户自己写的）；`id:` 是别人的
+    则是别人的剪藏 —— 两种都留下。这条判定不是新发明的：它就是 `_resolve_page_path`
     与 `_move_page_file` 已经在用的同一个 `_frontmatter_id`，只是方向从「拒绝写/拒绝搬」
     变成「拒绝删」。本仓写死的失败方向是 **never 'a destroyed note'**。
 
   · `prune_empty_directories` —— 只删**空**目录，自底向上。文件夹目录里可能躺着
     不是镜像的文件（手写笔记、附件），`rmdir` 只可能失败，**永不 `rmtree`**。
 """
-
-import os
 
 import pytest
 
