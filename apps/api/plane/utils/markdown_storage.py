@@ -329,6 +329,13 @@ def delete_page_file(path: Path, page_id: str) -> bool:
 
     返回 ``True`` **只在真的删掉了一个文件**时 —— 调用方靠它决定要不要往上收目录。
     """
+    # 一个 falsy 的 ``page_id`` 必须**立刻**拒绝。``_frontmatter_id`` 对一个没有 ``id:``
+    # 行的文件返回 ``None``，所以真把 ``None`` 传进来会**恰好匹配**用户手写的那一类文件
+    # —— 正好是本函数唯一绝不允许删的东西，失败方向整个反过来。调用方今天传的是
+    # ``str(page.id)``（UUID），不可达；但这条不变量值得自我防卫，不能只靠调用方守规矩。
+    if not page_id:
+        return False
+
     try:
         if not path.is_file():
             return False
@@ -351,6 +358,10 @@ def prune_empty_directories(paths, *, stop_at: Path) -> None:
     为什么「非空就 ``break`` 整条链」既正确又省事：一个目录非空 ⇒ **它的祖先必然
     也非空**（祖先包含它），所以没有必要继续往上试。
 
+    那个论证只覆盖**同一次向上爬**。跨路径还有一层补偿：同一条目录会被后面另一条
+    路径**再试一次** —— 它此刻可能已经被那条路径腾空了。所以 ``seen`` 只在
+    **``rmdir`` 成功之后**才记（失败就记 ⇒ 永久留下一个空目录，见下面的注释）。
+
     为什么遍历时先看 ``stop_at not in directory.parents``：路径万一不在 ``stop_at``
     这棵树里（软链、被绕过的数据），没有这一条就会顺着父目录一路 ``rmdir`` 到 ``/``。
 
@@ -364,13 +375,21 @@ def prune_empty_directories(paths, *, stop_at: Path) -> None:
         while directory != stop_at and directory not in seen:
             if stop_at not in directory.parents:
                 break
-            seen.add(directory)
             try:
                 os.rmdir(directory)
             except OSError as exc:
                 # 三种正常结局：目录本来就不存在、非空（还留着不是我们写的文件）、只读盘。
+                #
+                # ⚠️ **失败时绝不能把 directory 记进 `seen`。** 它现在非空，但同一批里
+                # 排在**后面**的另一条文件路径可能正好在它下面；那条删完之后它就空了。
+                # 先记 `seen` 等于「试过一次、失败、永不重试」⇒ 那个已经空掉的目录被永久
+                # 留下。实测：`paths=[A/x.md, A/B/y.md]` 里 A 会残留，而反过来传
+                # `[A/B/y.md, A/x.md]` 两个都删干净 —— 一个**顺序相关**的 bug，而喂进来的
+                # 顺序是 queryset 给的（无序）。
                 logger.info("Not removing the directory %s: %s", directory, exc)
                 break
+            # 只有**真的删掉**了才记进来（它不可能再被删第二次）。
+            seen.add(directory)
             directory = directory.parent
 
 

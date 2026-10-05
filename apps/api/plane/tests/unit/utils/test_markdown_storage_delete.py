@@ -47,9 +47,26 @@ class TestDeletePageFile:
 
     def test_a_file_carrying_another_pages_id_is_left_alone(self, tmp_path):
         path = _mirror(tmp_path / "3-Wiki" / "C" / "页.md", "另一个页面的-id")
+        before = path.read_text(encoding="utf-8")
 
         assert delete_page_file(path, PAGE_ID) is False
-        assert path.exists()
+        assert path.read_text(encoding="utf-8") == before, "别人的剪藏一字不动，不只是「还在」"
+
+    @pytest.mark.parametrize("falsy", [None, ""])
+    def test_a_falsy_page_id_never_deletes(self, tmp_path, falsy):
+        """一个 falsy 的 `page_id` 必须**绝删不掉任何东西**。
+
+        `_frontmatter_id` 对没有 `id:` 行的文件返回 `None` ⇒ 真把 `None` 传进来会
+        **恰好匹配**用户手写的那一类文件，把「绝不删用户笔记」这条不变量整个翻过来。
+        调用方今天传的是 `str(page.id)`（UUID），不可达 —— 但这条不变量要自我防卫。
+        """
+        path = tmp_path / "3-Wiki" / "C" / "页.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        original = "---\ntags:\n  - 手写\n---\n\n我自己写的笔记。\n"
+        path.write_text(original, encoding="utf-8")
+
+        assert delete_page_file(path, falsy) is False
+        assert path.read_text(encoding="utf-8") == original
 
     def test_a_missing_file_returns_false_and_does_not_raise(self, tmp_path):
         assert delete_page_file(tmp_path / "3-Wiki" / "C" / "没有这个.md", PAGE_ID) is False
@@ -78,6 +95,28 @@ class TestPruneEmptyDirectories:
 
         assert not (root / "C" / "A" / "B").exists(), "B 空了就该走"
         assert not (root / "C").exists(), "一路往上都空了，跟着走"
+        assert root.is_dir(), "stop_at 永不动"
+
+    @pytest.mark.parametrize("reverse", [False, True])
+    def test_an_ancestor_emptied_by_a_later_path_is_removed(self, tmp_path, reverse):
+        """**顺序无关**：两条文件路径共用祖先时，谁先谁后都要把空掉的祖先收掉。
+
+        锁的是「`seen` 只在 `rmdir` **成功之后**才记」。旧写法在失败时也记，于是
+        「先试了 A（当时非空 ⇒ 失败）、后来 A 下面的 B 被另一条路径收走 ⇒ A 空了」这条
+        路径上，A 永远不会被重试、被永久留下；把 `paths` 反过来传却没事 —— 一个
+        **顺序相关**的 bug，而真实调用里喂进来的顺序是 queryset 给的（无序）。
+        """
+        root = tmp_path / "3-Wiki"
+        deep = root / "C" / "A" / "B"
+        deep.mkdir(parents=True)
+        paths = [root / "C" / "A" / "x.md", deep / "y.md"]
+        if reverse:
+            paths.reverse()
+
+        prune_empty_directories(paths, stop_at=root)
+
+        assert not (root / "C" / "A").exists(), "A 最终是空的，必须被收掉"
+        assert not (root / "C").exists(), "C 也跟着空了"
         assert root.is_dir(), "stop_at 永不动"
 
     def test_a_directory_holding_a_foreign_file_stays(self, tmp_path):
