@@ -322,6 +322,9 @@ export const WikiSidebar = observer(function WikiSidebar() {
   // plane hooks
   const { t } = useTranslation();
   // store hooks
+  // 留着 store 本身不只是为了解构：`handleCollectionDeleted` 必须在**运行时**读
+  // `pageStore.collections` / `pageStore.predefined`（理由见那个 handler）。
+  const pageStore = usePageStore(EPageStoreType.WORKSPACE);
   const {
     predefined,
     collections,
@@ -332,7 +335,7 @@ export const WikiSidebar = observer(function WikiSidebar() {
     pageParentIds,
     getPageById,
     getPageNodeType,
-  } = usePageStore(EPageStoreType.WORKSPACE);
+  } = pageStore;
   const { allowPermissions } = useUserPermissions();
   // state
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -639,8 +642,16 @@ export const WikiSidebar = observer(function WikiSidebar() {
    */
   const handleCollectionDeleted = () => {
     if (!workspaceSlug) return;
-    const isPredefined = predefined.some((item) => item.key === explicitCollection);
-    const stillExists = collections.some((collection) => collection.id === explicitCollection);
+    // **必须读 `pageStore` 而不是上面解构出来的 `predefined` / `collections`**：那两个
+    // 绑定是**这次渲染时的快照**。`DeleteCollectionModal` 的 `handleDelete` 先
+    // `handleClose()` 再 `onDeleted()`，用的是点击那一刻捕获的闭包 —— 跑这个 handler 时
+    // 组件早已重渲过，快照指向删除**前**的数组；而 `fetchCollections` 是**整体赋值**
+    // （`workspace-page.store.ts` 的 `this.collections = response.collections`），快照
+    // 永远不会变成新值。读快照则 `stillExists` 恒为 `true`，跳转分支永不触发。
+    // 删除动作在 resolve 之前 `await` 过 `fetchCollections`，所以此刻读 store 拿到的
+    // 就是删除后的状态，分支判断才是对的。
+    const isPredefined = pageStore.predefined.some((item) => item.key === explicitCollection);
+    const stillExists = pageStore.collections.some((collection) => collection.id === explicitCollection);
     if (explicitCollection && !isPredefined && !stillExists) {
       router.push(`/${workspaceSlug}/wiki/?collection=general`);
       return;

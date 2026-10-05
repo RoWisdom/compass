@@ -320,6 +320,15 @@ export class WorkspacePageStore implements IWorkspacePageStore {
       throw error;
     }
 
+    runInAction(() => {
+      // 与 `deleteFolder` / `removeFromWiki` / `moveTo` 同一条清账纪律：被删的 id 不该再
+      // 在 `collectionPageIds` 里留痕。差别只在「删的是什么」—— 那三处删的是**页面/文件夹**，
+      // 于是把 id 从每个分区数组里滤掉；这里删的是**整个分区键本身**（集合 id 就是键），
+      // 所以直接把这个键 unset 掉。不清理的话，这个键会指向一个已经不存在的集合，一直
+      // 悬到下一轮重拉（右侧列表读的是 `fetchPagesList`，会覆盖它；但在此之前谁读谁上当）。
+      unset(this.collectionPageIds, [collectionId]);
+    });
+
     await this.fetchCollections(workspaceSlug).catch(() => {});
     await this.fetchWikiTree(workspaceSlug).catch(() => {});
   };

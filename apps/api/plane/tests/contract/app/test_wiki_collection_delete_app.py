@@ -160,7 +160,8 @@ class TestDeletingACollectionKeepsEverythingInsideIt:
     def test_the_other_collection_and_pages_outside_are_untouched(
         self, session_client, workspace, collection_tree, no_celery
     ):
-        session_client.delete(_url(workspace, collection_tree["a"]))
+        response = session_client.delete(_url(workspace, collection_tree["a"]))
+        assert response.status_code == status.HTTP_204_NO_CONTENT
 
         collection_tree["b"].refresh_from_db()
         assert collection_tree["b"].deleted_at is None, "B 不该被删"
@@ -231,6 +232,7 @@ class TestTheEndpointRefusesTheUnimplementedContract:
         )
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "error" in response.data
         collection_tree["a"].refresh_from_db()
         assert collection_tree["a"].deleted_at is None, "被拒的请求不得删掉任何东西"
 
@@ -241,6 +243,7 @@ class TestTheEndpointRefusesTheUnimplementedContract:
         response = session_client.delete(f"{_url(workspace, collection_tree['a'])}?delete_pages=false")
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "error" in response.data
         collection_tree["a"].refresh_from_db()
         assert collection_tree["a"].deleted_at is None
 

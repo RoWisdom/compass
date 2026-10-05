@@ -830,10 +830,10 @@ def _wiki_page_project_id(page):
     ``_write_page_mirror`` is project-scoped by construction: it resolves a
     directory name through ``Project.objects.filter(pk=project_id)``, and
     ``MARKDOWN_STORAGE_PATH`` points at the projects folder itself
-    (``…/ObsidianVault/2-项目``). A page with no live ``ProjectPage`` link
-    therefore has **no directory to be written into** — not "we have not
-    written it yet", but "there is nowhere to put it". Guessing a location
-    would put a file somewhere the user did not ask for.
+    (``…/ObsidianVault/2-项目``). A page with no live ``ProjectPage`` link has
+    no project directory of its own, and guessing one would put a file somewhere
+    the user did not ask for — so this resolver answers ``None`` and leaves the
+    routing to its caller.
 
     Such pages are reachable: ``WikiPageViewSet.create`` only excludes private
     and archived pages from inclusion, so a public page belonging to no project
@@ -1140,10 +1140,12 @@ def _move_wiki_page_mirror(page, old_name, old_collection_id, old_ancestors=None
     never "unknown" — passing it while the parent *did* move computes the old path at
     the new location, and the move silently finds nothing.
 
-    When the new state has no home the old file is **left where it is** and a
-    warning is logged: the wiki never deletes vault folders (删集合不删文件夹), and a
-    page leaving the wiki for a project-less limbo is not a reason to silently
-    destroy the user's notes.
+    Both paths always resolve: ``_wiki_mirror_path``'s three-way routing
+    (collection → project → the 「常规」 folder) never comes back ``None``, so the
+    two ``None`` guards below are unreachable defensive branches. They are kept
+    only so a future change to that routing fails softly instead of half-moving a
+    file: were one to fire, the old file would be **left where it is** and a
+    warning logged, because the wiki never deletes vault folders (删集合不删文件夹).
 
     The recorded path (``Page.external_id``) follows the file, so the next body write
     still recognises it as this page's own — see ``_repoint_page_external_id`` for the
@@ -1165,21 +1167,24 @@ def _move_wiki_page_mirror(page, old_name, old_collection_id, old_ancestors=None
     new_path = _wiki_mirror_path(page, collection_id=page.collection_id, name=page.name, ancestors=new_ancestors)
 
     if old_path is None:
-        # Nothing on disk to move. Either the page never had a home, or it is
-        # arriving at one for the first time — the next body write creates it.
+        # Unreachable as of Round H: ``_wiki_mirror_path`` always resolves (collection
+        # → project → 「常规」), so neither state can come back ``None``. Kept as a
+        # defensive guard — if it ever fires there is simply nothing on disk to move.
         if new_path is None:
             logger.warning(
-                "Skipping markdown mirror move for wiki page %s: no live ProjectPage link "
-                "and no collection, so the page has no mirror root. The wiki never writes "
-                "a page to a guessed location.",
+                "Skipping markdown mirror move for wiki page %s: neither the old nor the new "
+                "state resolved to a mirror root (unreachable — the three-way routing always "
+                "picks one).",
                 page.id,
             )
         return
 
     if new_path is None:
+        # Unreachable for the same reason, so the old file can no longer be orphaned
+        # here. Kept defensive; the file would be left in place, never deleted.
         logger.warning(
-            "Orphaning markdown mirror for wiki page %s: the page now has neither a collection "
-            "nor a live ProjectPage link, so it has no mirror root. The old file is left in "
+            "Skipping markdown mirror move for wiki page %s: the new state resolved to no mirror "
+            "root (unreachable — the three-way routing always picks one). The old file is left in "
             "place — the wiki never deletes vault files (design §243 「删集合不删文件夹」).",
             page.id,
         )
