@@ -2,17 +2,16 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-"""wiki 页面的镜像是**三分支**的（设计 §3.3）。
-
-`3-Wiki` 下的文件夹成为 Plane 的**集合**，所以「一个页面该落到哪棵树」不再只看项目：
+"""wiki 页面的镜像是**三分支**的（设计 §3.3；第三档由 Round H 落成目录）：
 
 | 页面 | 落点 |
 |---|---|
 | 有集合 | `3-Wiki/<集合名>/…` |
 | 无集合、有项目 | `2-项目/<项目名>/…`（逐字不变，这里有回归锁） |
-| 都没有 | 不落盘 + `logger.warning`（Phase 1B 的 §2.3c 裁定，逐字不变） |
+| 都没有 | `3-Wiki/常规/…`（Round H 之前是「不落盘 + warning」） |
 
-第三行是**旧行为**，前两行的**顺序**是本轮的裁定：集合优先于项目。
+前两行的**顺序**是 Phase 1B 的裁定：集合优先于项目。第三行是 Round H 补的空格 ——
+补之前「删集合」会把 226 上全部 35 个无项目链接的页面踢出镜像同步。
 """
 
 import pytest
@@ -80,15 +79,23 @@ class TestMirrorRouting:
         assert not (isolate_markdown_mirror / "面料交易").exists()
 
     @pytest.mark.django_db
-    def test_page_with_neither_mirrors_nowhere_and_logs(self, isolate_markdown_mirror, wiki_page, caplog):
+    def test_page_with_neither_now_mirrors_into_the_general_folder(
+        self, isolate_markdown_mirror, wiki_page, workspace, create_user
+    ):
+        """Round H 起第三档不再是「不落盘」：无集合、无项目的页面落 `3-Wiki/常规/`。
+
+        （旧行为由 Phase 1B 的 §2.3c 裁定 —— 那时没有「常规」这个目录可落。
+        226 实测 35 个 wiki 页面**全部**没有项目链接，不补这一档，删集合会把它们
+        永久踢出镜像同步。）
+        """
         from plane.app.views.page.collection import _mirror_wiki_page
 
-        with caplog.at_level("WARNING"):
-            _mirror_wiki_page(Page.objects.get(id=wiki_page.id), "<p>新正文</p>")
+        _mirror_wiki_page(Page.objects.get(id=wiki_page.id), "<p>新正文</p>")
 
-        assert not (isolate_markdown_mirror.parent / "3-Wiki").exists()
-        assert not isolate_markdown_mirror.exists()
-        assert any("Skipping markdown mirror" in record.message for record in caplog.records)
+        written = isolate_markdown_mirror.parent / "3-Wiki" / "常规" / "路由测试页.md"
+        assert written.is_file()
+        assert written.read_text(encoding="utf-8").endswith("新正文")
+        assert not isolate_markdown_mirror.exists(), "不得落进项目树"
 
     @pytest.mark.django_db
     def test_rename_moves_the_file_inside_the_wiki_tree(self, isolate_markdown_mirror, wiki_page, workspace, create_user):

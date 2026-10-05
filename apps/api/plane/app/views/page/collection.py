@@ -40,7 +40,9 @@ from plane.utils.markdown_storage import (
     move_mirror_file,
     page_markdown_path,
     wiki_collection_directory,
+    wiki_general_page_markdown_path,
     wiki_page_markdown_path,
+    write_wiki_general_page_markdown,
     write_wiki_page_markdown,
 )
 from plane.utils.wiki_collections import GENERAL, PREDEFINED_KEYS, resolve_collection_key
@@ -692,10 +694,11 @@ def _wiki_page_project_id(page):
 
     Such pages are reachable: ``WikiPageViewSet.create`` only excludes private
     and archived pages from inclusion, so a public page belonging to no project
-    can be included in the wiki. The ruling (design §2.3c, 2026-09-27) is to
-    skip and log — the failure direction is "no file", never "a file in the
-    wrong place". The write and the move both honour it, which is why they
-    share this resolver instead of each deciding for itself.
+    can be included in the wiki. Until Round H the ruling (design §2.3c,
+    2026-09-27) was to skip and log; Round H added the missing third home —
+    ``3-Wiki/常规/`` — so this resolver's ``None`` now means "write into the
+    General folder", not "write nowhere". The write and the move both honour it,
+    which is why they share this resolver instead of each deciding for itself.
 
     Multi-project pages: a page may belong to several projects. ``.first()``
     picks an arbitrary one, which is fine while the data is 1:1 (it is today:
@@ -846,6 +849,21 @@ def _wiki_page_own_path(page):
     return get_wiki_markdown_root(page.workspace).parent / page.external_id
 
 
+def _description_to_markdown(description_html):
+    """把正文 HTML 转成 Markdown —— 集合档与「常规」档共用这一份。
+
+    两份拷贝的代价不是行数，是**解析器配置漂移**：`resolve_user` / `resolve_asset_url`
+    决定正文里的 @提及与附件链接长什么样，两处一旦分叉，同一篇正文在不同分区
+    镜像出的 Markdown 会不一样。
+    """
+    user_cache, asset_cache = {}, {}
+    return html_to_markdown(
+        description_html,
+        resolve_user=lambda uid: _resolve_user_display_name(uid, user_cache),
+        resolve_asset_url=lambda aid: _resolve_asset_url(aid, asset_cache),
+    )
+
+
 def _write_collection_page_mirror(page, collection, description_html):
     """Mirror a page body into its collection's folder under the wiki vault root.
 
@@ -858,19 +876,13 @@ def _write_collection_page_mirror(page, collection, description_html):
     Best-effort like every other mirror: ``write_wiki_page_markdown`` swallows
     ``OSError`` and logs, so a read-only vault cannot fail a page save.
     """
-    user_cache, asset_cache = {}, {}
-    markdown = html_to_markdown(
-        description_html,
-        resolve_user=lambda uid: _resolve_user_display_name(uid, user_cache),
-        resolve_asset_url=lambda aid: _resolve_asset_url(aid, asset_cache),
-    )
     write_wiki_page_markdown(
         collection_name=collection.name,
         collection_id=str(collection.id),
         ancestors=_page_ancestors(page.parent_id),
         page_id=str(page.id),
         name=page.name,
-        markdown=markdown,
+        markdown=_description_to_markdown(description_html),
         root=get_wiki_markdown_root(collection.workspace),
         own_path=_wiki_page_own_path(page),
     )
@@ -883,9 +895,11 @@ def _mirror_wiki_page(page, description_html):
     collection mirrors under the wiki vault root, keyed by the collection name —
     the collection is the axis the user sees in the Wiki, so that is where the
     file belongs. A page with no collection but a live ``ProjectPage`` link
-    keeps the pre-existing project behaviour verbatim. A page with neither is
-    skipped and logged — see ``_wiki_page_project_id`` for why guessing a
-    location is worse than writing nothing.
+    keeps the pre-existing project behaviour verbatim.
+
+    A page with neither lands in ``3-Wiki/常规/`` (Round H) — that folder is the
+    one place a page with no collection and no project can be written, and it is
+    where the pages of a deleted collection land.
     """
     if page.collection_id is not None:
         collection = PageCollection.objects.filter(id=page.collection_id).select_related("workspace").first()
@@ -896,11 +910,16 @@ def _mirror_wiki_page(page, description_html):
     project_id = _wiki_page_project_id(page)
 
     if project_id is None:
-        logger.warning(
-            "Skipping markdown mirror for wiki page %s: no live ProjectPage link. "
-            "MARKDOWN_STORAGE_PATH points at the projects directory, so a page with no "
-            "project has no folder to mirror into.",
-            page.id,
+        # 第三档（Round H，设计 §4.2）：既没有集合、又没有活着的项目链接 ⇒ 落「常规」。
+        # 此前这一档是「不写、只记 warning」；226 实测 35 个 wiki 页面**全部**没有项目
+        # 链接，所以「删集合」若不补这一档，等于把这 35 个页面永久踢出镜像同步。
+        write_wiki_general_page_markdown(
+            ancestors=_page_ancestors(page.parent_id),
+            page_id=str(page.id),
+            name=page.name,
+            markdown=_description_to_markdown(description_html),
+            root=get_wiki_markdown_root(page.workspace),
+            own_path=_wiki_page_own_path(page),
         )
         return
 
@@ -922,8 +941,7 @@ def _wiki_mirror_path(page, *, collection_id, name, ancestors):
     the saved instance is what made a collection change silently move nothing.
 
     Routing is the same three-way, collection-first rule as ``_mirror_wiki_page``:
-    collection root, else project root, else ``None`` (no home — see
-    ``_wiki_page_project_id``). Returns ``None`` rather than a guessed path.
+    collection root, else project root, else the 「常规」 folder (Round H).
     """
     if collection_id is not None:
         collection = PageCollection.objects.filter(id=collection_id).select_related("workspace").first()
@@ -942,7 +960,16 @@ def _wiki_mirror_path(page, *, collection_id, name, ancestors):
 
     project_id = _wiki_page_project_id(page)
     if project_id is None:
-        return None
+        # 第三档（Round H）：无集合、无项目 ⇒ 「常规」。返回 None 会让**搬移**把这类
+        # 页面判成「没有家」而原地不动（`_move_wiki_page_mirror` 的 `new_path is None`
+        # 分支），删集合时它们会永远留在 `3-Wiki/<集合>/` 下面。
+        return wiki_general_page_markdown_path(
+            ancestors=ancestors,
+            name=name,
+            page_id=str(page.id),
+            root=get_wiki_markdown_root(page.workspace),
+            own_path=_wiki_page_own_path(page),
+        )
     return page_markdown_path(
         project_name=_project_name(project_id),
         project_id=str(project_id),

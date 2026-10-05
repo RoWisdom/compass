@@ -24,7 +24,7 @@
 | 集合 A → 集合 B 且同时改名 | 只有一个文件、在新路径、旧路径无残骸 |
 | 项目 → 集合（跨根） | `2-项目/…` → `3-Wiki/…` |
 | 集合 → 项目（跨根） | 反向同上 |
-| 集合 → 无家（无项目） | 旧文件**原地保留**，只记 warning（设计 §243「删集合不删文件夹」） |
+| 集合 → 无家（无项目） | 搬进 `3-Wiki/常规/`，内容逐字不变（Round H 补的第三档，设计 §4.2） |
 | 无家 → 任意 | 没有旧文件可搬；不报错，新文件由下一次写正文建立 |
 
 `isolate_markdown_mirror` 把两棵镜像根都钉进 tmp_path：项目根 = `markdown-mirror`，
@@ -217,20 +217,23 @@ class TestWikiMirrorCollectionMove:
         assert not wiki_file.exists(), "wiki 树里不得留残骸"
 
     @pytest.mark.django_db
-    def test_collection_to_homeless_page_keeps_old_file(
+    def test_collection_to_homeless_page_moves_into_the_general_folder(
         self, session_client, isolate_markdown_mirror, workspace, create_user
     ):
-        """集合 →「常规」且该页**没有**项目：旧文件原地保留，不得删除。
+        """集合 →「常规」且该页**没有**项目：文件搬进 `3-Wiki/常规/`，内容逐字不变。
 
-        设计 §243「删集合不删文件夹」是用户已裁定的：镜像是用户笔记的一部分，
-        超出「尽力而为」的范围就是破坏。
+        Round H 补上了「常规」这一档（设计 §4.2）：无集合、无项目的页面**不是**
+        「无家可归」—— 它有 `3-Wiki/常规/` 可落。所以本档行为从「旧文件原地保留」
+        变成「搬进常规」；§243「删集合不删文件夹」约束的是**删目录**，搬移不是删除：
+        文件仍在（换了位置）、内容未动。
         """
         page = _wiki_page(workspace, create_user, "孤儿页")
         collection = _collection(workspace, create_user, "解散的集合")
         Page.objects.filter(id=page.id).update(collection=collection)
 
         _write_mirror(page)
-        old_file = isolate_markdown_mirror.parent / "3-Wiki" / "解散的集合" / "孤儿页.md"
+        wiki_root = isolate_markdown_mirror.parent / "3-Wiki"
+        old_file = wiki_root / "解散的集合" / "孤儿页.md"
         assert old_file.is_file()
         before = old_file.read_text(encoding="utf-8")
 
@@ -244,9 +247,11 @@ class TestWikiMirrorCollectionMove:
         page.refresh_from_db()
         assert page.collection_id is None
 
-        assert old_file.is_file(), "无家可归时旧文件必须原地保留，绝不删除"
-        assert old_file.read_text(encoding="utf-8") == before, "保留的旧文件内容不得被动过"
-        assert _all_mirrors(isolate_markdown_mirror) == [old_file], "不得在别处新建第二份"
+        new_file = wiki_root / "常规" / "孤儿页.md"
+        assert new_file.is_file(), "无集合无项目 ⇒ 搬进 3-Wiki/常规/"
+        assert new_file.read_text(encoding="utf-8") == before, "搬移不该改内容（含 frontmatter id）"
+        assert not old_file.exists(), "旧集合文件夹下不得留残骸"
+        assert _all_mirrors(isolate_markdown_mirror) == [new_file], "不得复制出第二份"
 
     @pytest.mark.django_db
     def test_homeless_page_arriving_at_a_collection_writes_nothing(
