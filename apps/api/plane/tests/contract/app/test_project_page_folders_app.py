@@ -230,3 +230,69 @@ class TestTheNodeTypeIsNotEditable:
         assert response.status_code == status.HTTP_200_OK
         tree["a"].refresh_from_db()
         assert tree["a"].node_type == Page.NODE_TYPE_FOLDER
+
+
+@pytest.mark.contract
+class TestMovingANode:
+    @pytest.mark.django_db
+    def test_a_page_can_be_moved_into_a_folder(self, session_client, workspace, project, tree):
+        response = session_client.patch(
+            _detail_url(workspace, project, tree["root"]), {"parent": str(tree["a"].id)}, format="json"
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        tree["root"].refresh_from_db()
+        assert tree["root"].parent_id == tree["a"].id
+
+    @pytest.mark.django_db
+    def test_a_page_can_be_moved_back_to_the_top(self, session_client, workspace, project, tree):
+        response = session_client.patch(
+            _detail_url(workspace, project, tree["b"]), {"parent": None}, format="json"
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        tree["b"].refresh_from_db()
+        assert tree["b"].parent_id is None
+
+
+@pytest.mark.contract
+class TestMovingIsGuarded:
+    @pytest.mark.django_db
+    def test_a_page_cannot_be_its_own_parent(self, session_client, workspace, project, tree):
+        response = session_client.patch(
+            _detail_url(workspace, project, tree["a"]), {"parent": str(tree["a"].id)}, format="json"
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        tree["a"].refresh_from_db()
+        assert tree["a"].parent_id is None
+
+    @pytest.mark.django_db
+    def test_a_page_cannot_be_moved_into_its_own_descendant(self, session_client, workspace, project, tree):
+        """A → B → C → D。把 A 挂到 D 下面会成环。"""
+        response = session_client.patch(
+            _detail_url(workspace, project, tree["a"]), {"parent": str(tree["d"].id)}, format="json"
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        tree["a"].refresh_from_db()
+        assert tree["a"].parent_id is None, "被拒的请求一个字段都不该动"
+
+    @pytest.mark.django_db
+    def test_a_target_from_another_project_is_rejected_with_a_clear_error(
+        self, session_client, workspace, create_user, project, tree
+    ):
+        other = Project.objects.create(name="别的项目", identifier="OT", workspace=workspace, created_by=create_user)
+        ProjectMember.objects.create(project=other, member=create_user, workspace=workspace, role=20)
+        foreign = _page(workspace, other, create_user, "别家的页")
+
+        response = session_client.patch(
+            _detail_url(workspace, project, tree["root"]), {"parent": str(foreign.id)}, format="json"
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "access" not in response.data.get("error", "").lower(), (
+            "目标不对就报目标不对 —— 别复述外层那句误导人的权限错误"
+        )
+        tree["root"].refresh_from_db()
+        assert tree["root"].parent_id is None

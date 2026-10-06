@@ -289,14 +289,48 @@ class PageViewSet(BaseViewSet):
             if page.is_locked:
                 return Response({"error": "Page is locked"}, status=status.HTTP_400_BAD_REQUEST)
 
+            # 目标位置。两条判定都排在 `serializer.save()` **之前** —— 400 路径下
+            # **一个字段都不会动**。
+            #
+            # 改了两处（罗盘 Round J，设计 §4.4）：
+            #
+            #   ① 用 `.first()` + 自己回 400，而不是 `Page.objects.get(...)`。原来那句
+            #      抛的 `Page.DoesNotExist` 会被**外层那个 try 的 `except
+            #      Page.DoesNotExist`（本文件 `:299`）吞掉**，回一句「Access cannot be
+            #      updated...」—— 目标不存在却报「权限不足」，误导。
+            #   ② 补环检测。`parent` 是普通外键，数据层不禁止 A 的父是 B、B 的父是 A；
+            #      写入路径应当拒绝，否则会造出**渲染成「根」**的畸形数据。判据与 wiki
+            #      侧逐字同一条（`collection.py` 的 `partial_update`）：
+            #      `target_parent.id == page.id or target_parent.id in set(descendant_ids(root=page))`
+            #      —— 直接复用 `_descendant_ids`，不自己写遍历（它自带 `seen` 集与深度封顶）。
+            #
+            # 局部导入：`collection.py` 在模块层 `from .base import _page_ancestors`，
+            # 所以本文件在模块层反向导入它必然成环。级联与子树遍历只有**一份**实现
+            # （Task 4 会把它们搬到 `cascade.py`，那时这个局部导入改成模块层导入）。
+            from .collection import _descendant_ids
+
             parent = request.data.get("parent", None)
             if parent:
-                _ = Page.objects.get(
-                    pk=parent,
-                    workspace__slug=slug,
-                    projects__id=project_id,
-                    project_pages__deleted_at__isnull=True,
+                target_parent = (
+                    Page.objects.filter(
+                        pk=parent,
+                        workspace__slug=slug,
+                        projects__id=project_id,
+                        project_pages__deleted_at__isnull=True,
+                    )
+                    .only("id", "parent_id")
+                    .first()
                 )
+                if target_parent is None:
+                    return Response(
+                        {"error": "The target parent page does not belong to this project"},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
+                if target_parent.id == page.id or target_parent.id in set(_descendant_ids(root=page)):
+                    return Response(
+                        {"error": "Cannot move a page into itself or its own descendant"},
+                        status=status.HTTP_400_BAD_REQUEST,
+                    )
 
             # Only update access if the page owner is the requesting  user
             if page.access != request.data.get("access", page.access) and page.owned_by_id != request.user.id:
