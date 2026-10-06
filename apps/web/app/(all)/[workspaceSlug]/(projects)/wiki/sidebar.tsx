@@ -474,9 +474,10 @@ export const WikiSidebar = observer(function WikiSidebar() {
    *
    * 两项**并列**：添加页面、添加文件夹（2026-10-06 用户第四次裁定把这对文案从
    * 「创建新页面 / 新建文件夹」改成「添加页面 / 添加文件夹」，与 Projects 顶栏同词，
-   * 读同一对键 `wiki_collections.actions.*`）。落点由调用方给（页面行/文件夹行给
+   * 读同一对键 `wiki_collections.actions.*`）。落点由调用方给（文件夹行给
    * `{ parent }`，集合行/`general` 行给 `containerTarget(key)`），所以同一个函数
-   * 服务四种行 —— 这正是"一个 `＋`、两种节点"的形状。
+   * 服务**三种行** —— 这正是"一个 `＋`、两种节点"的形状（**页面行不在其中**，
+   * 2026-10-06 裁定摘掉，理由见 `renderPageRow` 里那处调用点的注释）。
    *
    * 两项各带一颗**与列表行同款**的前置图标（2026-10-06 用户要求）：页面 `PageIcon`、
    * 文件夹 `Folder` —— 正是 `renderRow` 里 `isFolder ? Folder : PageIcon` 那个映射，
@@ -754,7 +755,8 @@ export const WikiSidebar = observer(function WikiSidebar() {
    * 集合行自己**没有缩进格**（`COLLECTION_ROW_LEVEL` 是 0），所以它那格正好压在
    * 「集合」两个字的左缘上 —— 这正是用户要的「和「集合」对齐」。
    * 行右那一格（`⋯` 左边）是 Round D 新增的 `＋` 下拉 —— 收录进 Wiki 的**新建**
-   * 入口之一，与页面行那颗同源（`renderCreateMenu`）。
+   * 入口之一，与文件夹行那颗同源（`renderCreateMenu`；**页面行**自 2026-10-06 起没有
+   * 这颗 `＋`，见 `renderPageRow` 那处调用点）。
    *
    * **行左那格的图标是 `Box`（lucide），不是页面行那颗 `PageIcon`** —— 用户
    * 2026-10-03 指出：集合行与页面行用的是同一颗图标，一眼看过去分不出谁是容器。
@@ -874,9 +876,10 @@ export const WikiSidebar = observer(function WikiSidebar() {
    * 这里**不**改用 `wiki_collections.list.untitled` —— 那会让侧栏与列表对同一个页面
    * 显示两个不同的名字，比英文更糟。**文件夹同样走 `getPageName`**，理由逐字相同。
    *
-   * `partitionKey` 仍要收：它决定这一行渲不渲染那个 `＋`（**这是设计文档 Round C 的
+   * `partitionKey` 仍要收：它决定这一行的 `＋` 渲不渲染（**这是设计文档 Round C 的
    * 裁定 5，不是本计划执行期裁定里的第 5 条** —— 后者讲的是 `?folder=` 含子文件夹。
-   * Round D 起那个 `＋` 是一个两项下拉，见 `renderCreateMenu`）。
+   * Round D 起那个 `＋` 是一个两项下拉，见 `renderCreateMenu`；**2026-10-06 起
+   * 只有文件夹行才走到它**，页面行连这一格都没有 —— 见下面那处调用点的注释）。
    */
   const renderPageRow = (line: TWikiTreeLine, partitionKey: string) => {
     const page = getPageById(line.pageId);
@@ -967,10 +970,19 @@ export const WikiSidebar = observer(function WikiSidebar() {
         >
           <span className="truncate">{getPageName(page.name)}</span>
         </button>
-        {/* 入口：**只在 ADMIN/MEMBER、且本行不在归档分区时**渲染。hover 才出现，
-            平时不占视觉重量。落点是 `{ parent: 这一行 }` —— **页面行与文件夹行
-            逐字相同**（在文件夹里建页面/子文件夹都靠它）。 */}
-        {canCreateIn(partitionKey) && renderCreateMenu({ parent: line.pageId })}
+        {/* 入口：**只在文件夹行**、且 ADMIN/MEMBER、且本行不在归档分区时渲染。hover 才出现，
+            平时不占视觉重量。落点是 `{ parent: 这一行 }`。
+
+            **页面行不给 `＋`**（用户 2026-10-06 裁定，见设计文档「后记」）。原样是
+            Confluence F7 / 设计 :88 的四行同构（页面行也建子页面），用户看过之后
+            明确选了「页面行不给入口」——他的读法是：**页面的容器身份是「文档」，
+            文件夹的容器身份才是「容器」**，往一页里塞文件夹是异类。
+            代价已被点明并接受：**侧栏从此没有「新建子页面」这条路**。
+            子页面本身没消失 —— 列表视图的行菜单里「移动到…」仍能把一个页面挂到
+            另一页下面（`move-to-modal` 的候选**故意**含页面），所以丢的是**这一个入口**，
+            不是这个结构。两处的口径此后是**不对称**的（搬得进去、建不出来），
+            已记在该弹窗与本轮的裁决里，别当 bug 重新提出。 */}
+        {isFolder && canCreateIn(partitionKey) && renderCreateMenu({ parent: line.pageId })}
         {/* 文件夹行的 `•••`（Round E）。页面行**不加** —— 侧栏的页面行今天就没有 `⋯`
             （它的两个动作在列表视图的行菜单上），本轮不扩大侧栏的动作面。
 
