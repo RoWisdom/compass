@@ -160,6 +160,28 @@ from plane.utils.openapi import (
 )
 from plane.bgtasks.work_item_link_task import crawl_work_item_link_title
 
+#: Fields a bot (AI member) may not write through the public API. `state` is an
+#: argument of the work-item update action rather than a tool of its own, so the
+#: only place to enforce "AI never moves the card" is here. See design §5 and the
+#: plan's deviation note 1.
+BOT_FORBIDDEN_FIELDS = ("state", "state_id")
+
+
+def _bot_state_violation(request):
+    """Return an error response when a bot tries to write a forbidden field."""
+    if not getattr(request.user, "is_bot", False):
+        return None
+    offending = [field for field in BOT_FORBIDDEN_FIELDS if field in request.data]
+    if not offending:
+        return None
+    return Response(
+        {
+            "error": "An AI member cannot change the work item state; Plane's own code owns that transition.",
+            "fields": offending,
+        },
+        status=status.HTTP_400_BAD_REQUEST,
+    )
+
 
 def user_has_issue_permission(user_id, project_id, issue=None, allowed_roles=None, allow_creator=True):
     if allow_creator and issue is not None and user_id == issue.created_by_id:
@@ -452,6 +474,10 @@ class IssueListCreateAPIEndpoint(BaseAPIView):
         Create a new work item in the specified project with the provided details.
         Supports external ID tracking for integration purposes.
         """
+        violation = _bot_state_violation(request)
+        if violation is not None:
+            return violation
+
         project = Project.objects.get(pk=project_id)
 
         serializer = IssueSerializer(
@@ -774,6 +800,10 @@ class IssueDetailAPIEndpoint(BaseAPIView):
         Partially update an existing work item with the provided fields.
         Supports external ID validation to prevent conflicts.
         """
+        violation = _bot_state_violation(request)
+        if violation is not None:
+            return violation
+
         issue = Issue.objects.get(workspace__slug=slug, project_id=project_id, pk=pk)
         project = Project.objects.get(pk=project_id)
         current_instance = json.dumps(IssueSerializer(issue).data, cls=DjangoJSONEncoder)
