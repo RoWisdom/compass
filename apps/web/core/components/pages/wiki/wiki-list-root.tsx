@@ -19,7 +19,7 @@ import type { TPageActions } from "@/components/pages/dropdowns";
 import { PageListBlock } from "@/components/pages/list/block";
 import { FolderListRow } from "@/components/pages/wiki/folder-list-row";
 import { MoveToModal } from "@/components/pages/wiki/move-to-modal";
-import { buildWikiTreeLines, wikiTreeIndentClass } from "@/components/pages/wiki/wiki-tree";
+import { buildWikiTreeLines, wikiTreeIndentClass } from "@/components/pages/tree/page-tree";
 // hooks
 import { EPageStoreType, usePageStore } from "@/hooks/store";
 import { useUserPermissions } from "@/hooks/store/user";

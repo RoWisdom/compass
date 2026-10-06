@@ -16,7 +16,7 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { EModalWidth, ModalCore } from "@plane/ui";
 import { cn } from "@plane/utils";
 // components
-import { buildWikiTreeLines, wikiTreeIndentClass } from "@/components/pages/wiki/wiki-tree";
+import { buildWikiTreeLines, wikiTreeIndentClass } from "@/components/pages/tree/page-tree";
 // hooks
 import { EPageStoreType, usePageStore } from "@/hooks/store";
 // services

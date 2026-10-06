@@ -27,8 +27,8 @@ import {
   buildWikiTreeLines,
   groupPageIdsByPartition,
   isLineHiddenByExpansion,
-} from "@/components/pages/wiki/wiki-tree";
-import type { TWikiTreeLine } from "@/components/pages/wiki/wiki-tree";
+} from "@/components/pages/tree/page-tree";
+import type { TWikiTreeLine } from "@/components/pages/tree/page-tree";
 import { SidebarNavItem } from "@/components/sidebar/sidebar-navigation";
 import { SidebarWrapper } from "@/components/sidebar/sidebar-wrapper";
 // hooks
