@@ -12,6 +12,8 @@ import { ChevronRightIcon, Folder } from "lucide-react";
 import { cn, getPageName } from "@plane/utils";
 // components
 import { ListItem } from "@/components/core/list";
+import { ProjectMoveToModal } from "@/components/pages/project-move-to-modal";
+import { FolderRowActions } from "@/components/pages/wiki/folder-row-actions";
 // hooks
 import { usePlatformOS } from "@/hooks/use-platform-os";
 import { EPageStoreType, usePage } from "@/hooks/store";
@@ -50,7 +52,7 @@ type Props = {
  * 页面行一致；图标用 `Folder`，与 wiki 侧同一个图标（裁定 A「同一棵树」的同源要求）。
  */
 export const ProjectFolderListRow = observer(function ProjectFolderListRow(props: Props) {
-  const { pageId, isExpanded, hasChildren, onToggle } = props;
+  const { pageId, isExpanded, hasChildren, onToggle, canWrite, onChanged } = props;
   // router
   const { workspaceSlug, projectId } = useParams();
   // refs —— 与 `PageListBlock` 同款：`ListItem` 的 `parentRef` 是行内浮层定位用的。
@@ -93,6 +95,16 @@ export const ProjectFolderListRow = observer(function ProjectFolderListRow(props
           // 占位用 `size-5`（与 wiki `move-to-modal.tsx` 的「无子行」占位同款）。
           <span className="size-5 flex-shrink-0" />
         )
+      }
+      actionableItems={
+        canWrite ? (
+          <FolderRowActions
+            folderId={pageId}
+            storeType={EPageStoreType.PROJECT}
+            moveToModal={ProjectMoveToModal}
+            onChanged={onChanged}
+          />
+        ) : undefined
       }
       isMobile={isMobile}
       parentRef={parentRef}
