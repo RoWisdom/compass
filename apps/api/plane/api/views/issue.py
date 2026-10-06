@@ -167,11 +167,16 @@ from plane.bgtasks.work_item_link_task import crawl_work_item_link_title
 BOT_FORBIDDEN_FIELDS = ("state", "state_id")
 
 
-def _bot_state_violation(request):
-    """Return an error response when a bot tries to write a forbidden field."""
+def _bot_state_violation(request, data=None):
+    """Return an error response when a bot tries to write a forbidden field.
+
+    ``data`` defaults to ``request.data``; pass it explicitly when the fields
+    arrive nested — the intake endpoint carries them under ``issue``.
+    """
     if not getattr(request.user, "is_bot", False):
         return None
-    offending = [field for field in BOT_FORBIDDEN_FIELDS if field in request.data]
+    payload = request.data if data is None else data
+    offending = [field for field in BOT_FORBIDDEN_FIELDS if field in payload]
     if not offending:
         return None
     return Response(

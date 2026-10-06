@@ -350,6 +350,16 @@ class IntakeIssueDetailAPIEndpoint(BaseAPIView):
         issue_serializer = None
         intake_serializer = None
 
+        # An AI member may not move a card's state — not here, and not on the
+        # work-item endpoints (design §5). The intake payload nests the work-item
+        # fields under ``issue``, so the shared check has to look inside it.
+        if bool(issue_data):
+            from plane.api.views.issue import _bot_state_violation
+
+            violation = _bot_state_violation(request, issue_data)
+            if violation is not None:
+                return violation
+
         # Validate issue data if provided
         if bool(issue_data):
             issue = Issue.objects.annotate(
