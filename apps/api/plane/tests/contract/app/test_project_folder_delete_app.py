@@ -115,6 +115,13 @@ class TestTheWholeSubtreeIsSoftDeleted:
 
         session_client.delete(_url(workspace, project, folder_tree["b"]))
 
+        # 正向锚：这条用例的名字听着像在守级联，但它自己**只**守得住视图里那一刀
+        # `ProjectPage` through 行清理。`?scope=all` 的过滤是 `project=Exists(
+        # ProjectPage.objects.filter(...))`，through 行一软删，行就已经离开了树 ——
+        # 哪怕 `_cascade_delete_pages` 被短路成 no-op、`Page.deleted_at` 从没落过值，
+        # 本条依旧全绿。所以必须显式钉住「级联真的跑了」。
+        assert _deleted(folder_tree["t1"]), "先确认级联真的跑了，而不只是 through 行被清"
+
         after = session_client.get(base + "?scope=all")
         ids_after = {str(row["id"]) for row in after.data}
         for key in ("b", "t1", "c", "t2"):
@@ -125,8 +132,13 @@ class TestTheWholeSubtreeIsSoftDeleted:
 @pytest.mark.contract
 class TestTheDualIdentityPageIsSoftDeletedToo:
     """设计 §2 I-3 的锁：一个页面**既在项目文件夹里、又被收录进 Wiki**（双身份），
-    删掉那个文件夹后必须**彻底从 Wiki 读者眼里消失** —— 光软删页面行还不够，
-    `is_global` 也要落下去，否则按「收录」过滤的读者仍会看见一行已删页面。
+    删掉那个文件夹后，`is_global` 必须随级联一起落下（`is_global=False`）—— 这是
+    规格里一条**显式约束**，本条就是在钉住它。
+
+    真正钉死它的是下面那句直接的 `row.is_global is False`。本用例另一半的端到端检查
+    （`wiki-pages/?scope=all`）**抓不到**这条的回归：wiki 读者查的是 `Page.objects`
+    （`SoftDeletionManager`），`deleted_at` 一落值行就已被滤掉，哪怕 `is_global`
+    忘了落，那一半照样绿 —— 端到端那一半守的是「读者看不见」，不是「标记落下了」。
 
     与 wiki 侧 `test_wiki_folder_delete_app.py::TestTheDualIdentityPageIsSoftDeletedToo`
     互为镜像：那边测「wiki 页面同时挂在项目上」，这边测「项目页面同时收录进 Wiki」，
@@ -153,7 +165,7 @@ class TestTheDualIdentityPageIsSoftDeletedToo:
             # 就再也查不到这一行了（与 `TestTheProjectPageRowsAreCleanedUp` 同一条纪律）。
             row = Page.all_objects.get(id=folder_tree[key].id)
             assert row.deleted_at is not None, f"{key} 应随整棵子树一起软删"
-            assert row.is_global is False, f"{key} 的收录标记也要落下 —— 否则还在 Wiki 读者眼里"
+            assert row.is_global is False, f"{key} 的收录标记也要落下（规格 §2 I-3 的显式约束）"
 
         # 不在子树里的页面：行与收录标记都不得被碰。
         outside = Page.all_objects.get(id=folder_tree["outside"].id)
@@ -289,8 +301,14 @@ class TestPermissions:
     def test_a_member_who_owns_nothing_cannot_delete_a_folder(
         self, session_client, workspace, project, create_user, folder_tree
     ):
-        """文件夹豁免的**只是**「先归档」（裁定 甲），权限判定照旧 —— 非属主、非 admin
-        的成员删文件夹必须 403，且整棵子树一行都不许动。
+        """端到端结果锁：非属主、非 admin 的成员删文件夹必须 403，且整棵子树一行都不许动。
+
+        这个 403 由 **DRF 的 `ProjectPagePermission`** 落下 —— 它只放 ADMIN 过 DELETE
+        （`app/permissions/page.py:121-124`），所以非 admin 根本进不到视图体；把视图里
+        那句属主/admin 谓词短路成 `return True`，本条依旧 403（reviewer 实测）。
+        视图层那道谓词是**第二道闸，在 DELETE 上当前够不到** —— 能过 DRF 的人要么是
+        属主、要么是 ADMIN，两种都让谓词返回 True。所以本条守的是「结果」，
+        不是「哪一层拦的」。
 
         `session_client` 认证为 `create_user`，这里把两条路都堵死：文件夹的属主换成
         **另一个人**，并把 `create_user` 从 ADMIN 降到 MEMBER（15；20 才是 ADMIN）。
