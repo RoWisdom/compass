@@ -4,8 +4,12 @@
 
 """删项目文件夹 = **整棵子树级联软删**（罗盘 Round J，裁定 D2）。
 
-与 wiki 侧（`test_wiki_folder_delete_app.py`）是**同一套语义的两个入口**，
-两边断言必须同步 —— 只改一边，另一边就是一份会「通过」的谎言。
+与 wiki 侧（`test_wiki_folder_delete_app.py`）是**同一套语义的两个入口**：两边调的是
+**同一份**级联实现（`app/views/page/cascade.py:_cascade_delete_pages`）。所以**级联
+本身的**断言两边必须同步 —— 整棵子树软删、双身份页面连坐、镜像收尾这三条，只改一边，
+另一边就是一份会「通过」的谎言。此外两份文件各有**这棵树专属**的断言，刻意没有对方
+那一半（项目侧：`ProjectPage` through 行、收藏/最近访问、「单页仍需先归档」；wiki 侧：
+集合路由）—— 那不是不同步，是两条路本来就不同。
 
 ⚠️ 两处**刻意**的不一致，不要「修」：
 
@@ -17,7 +21,7 @@
 import pytest
 from rest_framework import status
 
-from plane.db.models import Page, Project, ProjectMember, ProjectPage, UserFavorite, UserRecentVisit
+from plane.db.models import Page, Project, ProjectMember, ProjectPage, User, UserFavorite, UserRecentVisit
 
 
 def _page(workspace, project, user, name, **kwargs):
@@ -77,7 +81,12 @@ class TestTheWholeSubtreeIsSoftDeleted:
 
     @pytest.mark.django_db
     def test_a_sibling_and_the_outside_page_are_untouched(self, session_client, workspace, project, folder_tree):
-        session_client.delete(_url(workspace, project, folder_tree["b"]))
+        response = session_client.delete(_url(workspace, project, folder_tree["b"]))
+
+        # 正向锚：先钉住「这一次删除真的成功了、目标子树真的被删了」。没有它，这条
+        # 就只断言邻居没被碰 —— 哪怕端点整个坏掉（对什么都返回 400），它照样过。
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert _deleted(folder_tree["t1"]), "先确认目标子树确实被删了"
 
         for key in ("t3", "d", "outside"):
             assert not _deleted(folder_tree[key]), f"{key} 不在 B 的子树里"
@@ -114,6 +123,53 @@ class TestTheWholeSubtreeIsSoftDeleted:
 
 
 @pytest.mark.contract
+class TestTheDualIdentityPageIsSoftDeletedToo:
+    """设计 §2 I-3 的锁：一个页面**既在项目文件夹里、又被收录进 Wiki**（双身份），
+    删掉那个文件夹后必须**彻底从 Wiki 读者眼里消失** —— 光软删页面行还不够，
+    `is_global` 也要落下去，否则按「收录」过滤的读者仍会看见一行已删页面。
+
+    与 wiki 侧 `test_wiki_folder_delete_app.py::TestTheDualIdentityPageIsSoftDeletedToo`
+    互为镜像：那边测「wiki 页面同时挂在项目上」，这边测「项目页面同时收录进 Wiki」，
+    验的是同一份级联（`_cascade_delete_pages` 里那句 `is_global=False`）的同一件事。
+    """
+
+    @pytest.mark.django_db
+    def test_the_whole_subtree_loses_is_global(self, session_client, workspace, project, folder_tree):
+        subtree = ("b", "t1", "c", "t2")
+        # 「收录进 Wiki」= `is_global=True`。项目页面默认不收录（`Page.is_global` 默认
+        # False），所以这里显式打开；`outside` 也一起打开，用来证明「只碰子树」。
+        Page.objects.filter(id__in=[folder_tree[key].id for key in (*subtree, "outside")]).update(is_global=True)
+
+        wiki_url = f"/api/workspaces/{workspace.slug}/wiki-pages/?scope=all"
+        before = session_client.get(wiki_url)
+        assert before.status_code == status.HTTP_200_OK
+        assert str(folder_tree["t1"].id) in {row["id"] for row in before.data}, "前置：双身份页面在 Wiki 里"
+
+        response = session_client.delete(_url(workspace, project, folder_tree["b"]))
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        for key in subtree:
+            # 走 `all_objects`：`deleted_at` 一落值，默认 `objects`（SoftDeletionManager）
+            # 就再也查不到这一行了（与 `TestTheProjectPageRowsAreCleanedUp` 同一条纪律）。
+            row = Page.all_objects.get(id=folder_tree[key].id)
+            assert row.deleted_at is not None, f"{key} 应随整棵子树一起软删"
+            assert row.is_global is False, f"{key} 的收录标记也要落下 —— 否则还在 Wiki 读者眼里"
+
+        # 不在子树里的页面：行与收录标记都不得被碰。
+        outside = Page.all_objects.get(id=folder_tree["outside"].id)
+        assert outside.deleted_at is None
+        assert outside.is_global is True
+
+        # 端到端锚：Wiki 读者（同一个 `wiki-pages` 端点）再也看不到这棵子树。
+        after = session_client.get(wiki_url)
+        assert after.status_code == status.HTTP_200_OK
+        ids_after = {row["id"] for row in after.data}
+        for key in subtree:
+            assert str(folder_tree[key].id) not in ids_after, f"{key} 不该再出现在 Wiki 里"
+        assert str(folder_tree["outside"].id) in ids_after, "别人的收录页面要还在"
+
+
+@pytest.mark.contract
 class TestTheProjectPageRowsAreCleanedUp:
     """设计 §8.4 的锁：级联走的是**批量 update**，绕过 `SoftDeleteModel.delete()`，
     所以 `ProjectPage` through 行必须**在这里**补一刀。"""
@@ -131,7 +187,13 @@ class TestTheProjectPageRowsAreCleanedUp:
 
     @pytest.mark.django_db
     def test_outside_rows_keep_their_link(self, session_client, workspace, project, folder_tree):
-        session_client.delete(_url(workspace, project, folder_tree["b"]))
+        response = session_client.delete(_url(workspace, project, folder_tree["b"]))
+
+        # 正向锚：先确认「项目侧补的那一刀」真的落下了（`ProjectPage` 行的软删不在
+        # 共用级联里，是本层补的）。有了它，下方「外面的行没被碰」才不是「什么都没发生」。
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert Page.all_objects.get(id=folder_tree["t1"].id).deleted_at is not None, "先确认目标子树确实被删了"
+        assert ProjectPage.all_objects.get(page_id=folder_tree["t1"].id).deleted_at is not None
 
         assert ProjectPage.all_objects.get(page_id=folder_tree["outside"].id).deleted_at is None
 
@@ -222,3 +284,135 @@ class TestPermissions:
         assert response.status_code in (status.HTTP_403_FORBIDDEN, status.HTTP_404_NOT_FOUND)
         foreign.refresh_from_db()
         assert foreign.deleted_at is None
+
+    @pytest.mark.django_db
+    def test_a_member_who_owns_nothing_cannot_delete_a_folder(
+        self, session_client, workspace, project, create_user, folder_tree
+    ):
+        """文件夹豁免的**只是**「先归档」（裁定 甲），权限判定照旧 —— 非属主、非 admin
+        的成员删文件夹必须 403，且整棵子树一行都不许动。
+
+        `session_client` 认证为 `create_user`，这里把两条路都堵死：文件夹的属主换成
+        **另一个人**，并把 `create_user` 从 ADMIN 降到 MEMBER（15；20 才是 ADMIN）。
+        """
+        owner = User.objects.create(
+            email="folder-owner@plane.so",
+            username="folder-owner",
+            first_name="Folder",
+            last_name="Owner",
+        )
+        Page.objects.filter(id=folder_tree["b"].id).update(owned_by=owner)
+        ProjectMember.objects.filter(project=project, member=create_user).update(role=15)
+
+        response = session_client.delete(_url(workspace, project, folder_tree["b"]))
+
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+        # 什么都不许动：文件夹自己、整棵子树、以及项目侧的 through 行。
+        for key in ("b", "t1", "c", "t2"):
+            assert not _deleted(folder_tree[key]), f"{key} 不得被删"
+        assert ProjectPage.all_objects.get(page_id=folder_tree["b"].id).deleted_at is None
+
+
+@pytest.mark.contract
+class TestDeletingAFolderDeletesTheMirrors:
+    """镜像按设计 §4.3 收尾（**项目侧**那条 `resolve_mirror`）：只删我们自己写的、只删空目录。
+
+    与 wiki 侧 `test_wiki_folder_delete_app.py::TestDeletingAFolderDeletesTheMirrors`
+    互为镜像 —— 两边跑的是同一份 `_cascade_delete_pages`，只是寻址函数换成项目树
+    （`_project_mirror_target_resolver`）。所以断言逐条对应：我们的文件被收走、
+    空掉的目录链一路爬到镜像根、别人的文件与目录留下、只读盘不挡删除。
+    """
+
+    @pytest.fixture
+    def scoped(self, workspace, project, create_user, isolate_markdown_mirror):
+        """一棵**镜像已经落好**的项目小树：
+
+            项目目录 <项目镜像根>/<项目名>/
+            └── A（文件夹）
+                └── B（文件夹）
+                    ├── t1（页面）    A/B/t1.md
+                    └── C2（文件夹）
+                        └── t2（页面） A/B/C2/t2.md
+
+        镜像用**生产侧同一个写盘函数**落下去（`PageViewSet.create` 调的那个
+        `_write_page_mirror`），祖先链也走同一个 `_page_ancestors` —— 路径与
+        frontmatter 里的 `id:` 与真实写入逐字同源，断言才不会对着一个我自己编的
+        路径自说自话。
+        """
+        from plane.app.views.page.base import _page_ancestors, _project_mirror_root, _write_page_mirror
+        from plane.utils.markdown_storage import _project_directory_name
+
+        a = _page(workspace, project, create_user, "A", node_type=Page.NODE_TYPE_FOLDER)
+        b = _page(workspace, project, create_user, "B", node_type=Page.NODE_TYPE_FOLDER, parent=a)
+        c2 = _page(workspace, project, create_user, "C2", node_type=Page.NODE_TYPE_FOLDER, parent=b)
+        t1 = _page(workspace, project, create_user, "t1", parent=b)
+        t2 = _page(workspace, project, create_user, "t2", parent=c2)
+        for row in (t1, t2):
+            _write_page_mirror(
+                project.id,
+                row.id,
+                row.name,
+                _page_ancestors(row.parent_id),
+                f"<p>{row.name} 的正文</p>",
+            )
+
+        mirror_root = _project_mirror_root(project.id)
+        root = mirror_root / _project_directory_name(project.name, str(project.id))
+        assert (root / "A" / "B" / "t1.md").is_file(), "前置：t1 的镜像在 A/B/ 下"
+        assert (root / "A" / "B" / "C2" / "t2.md").is_file(), "前置：t2 的镜像在 A/B/C2/ 下"
+        return {"a": a, "b": b, "c2": c2, "t1": t1, "t2": t2, "root": root, "mirror_root": mirror_root}
+
+    @pytest.mark.django_db
+    def test_our_own_files_are_deleted(self, session_client, workspace, project, scoped):
+        response = session_client.delete(_url(workspace, project, scoped["b"]))
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert not (scoped["root"] / "A" / "B" / "t1.md").exists(), "我们自己写的镜像要收掉"
+        assert not (scoped["root"] / "A" / "B" / "C2" / "t2.md").exists(), "子文件夹里的也要收掉"
+
+    @pytest.mark.django_db
+    def test_the_emptied_folder_chain_is_removed_up_to_the_mirror_root(
+        self, session_client, workspace, project, scoped
+    ):
+        """一路往上爬：A/B 空了走、A 也跟着空了走、**项目目录**也空了于是走 —— 止步点是
+        项目侧的镜像根（`get_markdown_root`，正是 `_project_mirror_target_resolver`
+        返回的那个 `root`），它永不动。
+
+        「删一个文件夹，把项目目录也一起收掉了」看着像越界，其实是这条规则的自然结果，
+        而且**无害**：目录只是按项目名拼出来的空壳，下次写页面时 `mkdir(parents=True)`
+        会重建（`_write_page_file`）。真正不能碰的是**非空**目录 —— 下一条锁住它。
+        """
+        session_client.delete(_url(workspace, project, scoped["b"]))
+
+        assert not (scoped["root"] / "A" / "B").exists(), "B 空了就该走"
+        assert not (scoped["root"] / "A").exists(), "A 也跟着空了"
+        assert not scoped["root"].exists(), "项目目录也空了 —— 止步点之上才是镜像根"
+        assert scoped["mirror_root"].is_dir(), "镜像根永不动"
+
+    @pytest.mark.django_db
+    def test_a_file_that_is_not_ours_keeps_its_directory_alive(self, session_client, workspace, project, scoped):
+        """设计 §2 I-4 的锁：目录里留着**不是我们写的**文件 ⇒ 文件一字不动、目录原样留下。"""
+        original = scoped["root"] / "A" / "B" / "用户手写的.md"
+        text = "---\ntags:\n  - 手写\n---\n\n这是我自己的笔记。\n"
+        original.write_text(text, encoding="utf-8")
+
+        session_client.delete(_url(workspace, project, scoped["b"]))
+
+        assert original.read_text(encoding="utf-8") == text, "导入原稿/手写笔记一字不动"
+        assert (scoped["root"] / "A" / "B").is_dir(), "非空目录必须原样留下"
+
+    @pytest.mark.django_db
+    def test_a_read_only_vault_does_not_fail_the_delete(self, session_client, workspace, project, scoped, monkeypatch):
+        """best-effort：磁盘问题**永远不得**让一次删除失败（设计 §7 第一行）。"""
+        import os
+
+        def _boom(*args, **kwargs):
+            raise OSError("read-only vault")
+
+        monkeypatch.setattr(os, "unlink", _boom)
+
+        response = session_client.delete(_url(workspace, project, scoped["b"]))
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert _deleted(scoped["t1"]), "不只是 204：行确实被软删了"
+        assert (scoped["root"] / "A" / "B" / "t1.md").is_file(), "删不掉就留着"
