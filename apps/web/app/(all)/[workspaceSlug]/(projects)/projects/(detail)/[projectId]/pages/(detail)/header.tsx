@@ -4,7 +4,6 @@
  * See the LICENSE file for details.
  */
 
-import { useMemo } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane imports
@@ -32,6 +31,26 @@ export interface IPagesHeaderProps {
 
 const storeType = EPageStoreType.PROJECT;
 
+/**
+ * 沿 `pageParentIds` 往上走到根，返回 `[最顶, …, 直接父级]`（**不含起点自己**）。
+ *
+ * `seen` 而不是「深度封顶 32」：`seen` 让这个循环**可证终止**（每轮都往集合里添一个
+ * 新 id，id 有限），且顺带保证链里不会出现重复 id —— 一个环在 `Map` 里会让 React
+ * 撞上重复 key。封一个魔数只是把「死循环」换成「截断的错链」，不如直接判环。
+ */
+const collectAncestors = (pageParentIds: Record<string, string | null>, startId: string | undefined): string[] => {
+  const chain: string[] = [];
+  if (!startId) return chain;
+  const seen = new Set<string>();
+  let cursor: string | null = pageParentIds[startId] ?? null;
+  while (cursor && !seen.has(cursor)) {
+    seen.add(cursor);
+    chain.unshift(cursor);
+    cursor = pageParentIds[cursor] ?? null;
+  }
+  return chain;
+};
+
 export const PageDetailsHeader = observer(function PageDetailsHeader() {
   // router
   const router = useAppRouter();
@@ -47,25 +66,20 @@ export const PageDetailsHeader = observer(function PageDetailsHeader() {
   const projectPageIds = getCurrentProjectPageIds(projectId?.toString());
 
   /**
-   * 当前页的**祖先链** `[最顶, …, 直接父级]`（**不含当前页本身**，它由右侧那颗
-   * 下拉自己代表）。
+   * 当前页的**祖先链**（不含当前页本身 —— 它由右侧那颗下拉代表）。
    *
-   * 详情路由的 layout 也调了 `fetchPagesList`（同一个 `PROJECT_PAGES_<id>` SWR key，
+   * 详情路由的 layout 也调了 `fetchPagesList`（同一个 `PROJECT_PAGES_<id>` SWR key、
    * `?scope=all`），所以 `pageParentIds` 在这条路由上**有值** —— 这是这半截面包屑
-   * 能成立的前提，不是碰巧。`depth` 封顶防环。
+   * 能成立的前提，不是碰巧。
+   *
+   * **此处故意不包 `useMemo`**：`pageParentIds` 是 MobX observable，只在原对象上
+   * `set`/`unset`（`project-page.store.ts:125,142,303`），**地址从不换**。拿它当
+   * useMemo 的依赖，硬刷新 / 直接开这条 URL 时首帧（store 还空着）算出的空链会被
+   * **永久缓存** —— 数据灌满后组件确实会重渲，但依赖没变、memo 不回算，面包屑就
+   * 少了中间那层，正是这一版要修的症状。写在渲染体里，每次渲染都重读，MobX 才跟得住。
+   * 开销是每个祖先一次查表（≤ 树深），可以忽略。
    */
-  const folderChain = useMemo(() => {
-    const chain: string[] = [];
-    if (!pageId) return chain;
-    let cursor: string | null = pageParentIds[pageId.toString()] ?? null;
-    let depth = 0;
-    while (cursor && depth < 32) {
-      chain.unshift(cursor);
-      cursor = pageParentIds[cursor] ?? null;
-      depth += 1;
-    }
-    return chain;
-  }, [pageId, pageParentIds]);
+  const folderChain = collectAncestors(pageParentIds, pageId?.toString());
 
   /**
    * 祖先节点的落点：文件夹 → **下钻视图**（`?folder=<id>`，与列表里点文件夹行同一
