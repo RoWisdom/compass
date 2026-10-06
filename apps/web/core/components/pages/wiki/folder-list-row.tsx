@@ -13,6 +13,7 @@ import { getPageName } from "@plane/utils";
 // components
 import { ListItem } from "@/components/core/list";
 import { FolderRowActions } from "@/components/pages/wiki/folder-row-actions";
+import { MoveToModal } from "@/components/pages/wiki/move-to-modal";
 // hooks
 import { usePlatformOS } from "@/hooks/use-platform-os";
 import { EPageStoreType, usePage } from "@/hooks/store";
@@ -67,7 +68,16 @@ export const FolderListRow = observer(function FolderListRow(props: Props) {
       prependTitleElement={<Folder className="h-4 w-4 flex-shrink-0 text-tertiary" />}
       title={getPageName(page.name)}
       itemLink={`/${workspaceSlug}/wiki/?folder=${pageId}`}
-      actionableItems={canWrite ? <FolderRowActions folderId={pageId} onChanged={onChanged} /> : undefined}
+      actionableItems={
+        canWrite ? (
+          <FolderRowActions
+            folderId={pageId}
+            storeType={EPageStoreType.WORKSPACE}
+            moveToModal={MoveToModal}
+            onChanged={onChanged}
+          />
+        ) : undefined
+      }
       isMobile={isMobile}
       parentRef={parentRef}
     />

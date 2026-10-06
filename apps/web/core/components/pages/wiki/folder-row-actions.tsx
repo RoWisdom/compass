@@ -4,6 +4,7 @@
  * See the LICENSE file for details.
  */
 
+import type * as React from "react";
 import { useState } from "react";
 import { observer } from "mobx-react";
 import { FileOutput, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
@@ -14,10 +15,25 @@ import { CustomMenu } from "@plane/ui";
 // components
 import { DeleteFolderModal } from "@/components/pages/wiki/delete-folder-modal";
 import { RenameFolderModal } from "@/components/pages/wiki/rename-folder-modal";
-import { MoveToModal } from "@/components/pages/wiki/move-to-modal";
+// hooks
+import type { EPageStoreType } from "@/hooks/store";
 
 type Props = {
   folderId: string;
+  /** 这个文件夹属于哪一棵树。**必填、不给默认值**：默认成 WORKSPACE 会让项目侧
+   *  漏传时静默地去改 wiki 的那棵树 —— 一个不会报错的错。 */
+  storeType: EPageStoreType;
+  /**
+   * 「移动到…」的目标选择器。**由调用方给**：wiki 那一个绑死「集合分区」这一层
+   * （读 `collections` / `treeRows`），而项目侧没有集合这一层，两者无法共用一个组件。
+   * 收组件类型而不是 render prop：少一层闭包，调用点也直白。
+   */
+  moveToModal: React.ComponentType<{
+    isOpen: boolean;
+    pageId: string | null;
+    onMoved: () => void;
+    handleClose: () => void;
+  }>;
   /** 删除/移动成功后重拉**当前视图**。 */
   onChanged: () => void;
 };
@@ -38,7 +54,7 @@ type Props = {
  * 而不是一个带 `isFolder` 分支的大组件。
  */
 export const FolderRowActions = observer(function FolderRowActions(props: Props) {
-  const { folderId, onChanged } = props;
+  const { folderId, storeType, moveToModal: MoveToModalComponent, onChanged } = props;
   // plane hooks
   const { t } = useTranslation();
   // states
@@ -74,16 +90,23 @@ export const FolderRowActions = observer(function FolderRowActions(props: Props)
           </span>
         </CustomMenu.MenuItem>
       </CustomMenu>
-      <MoveToModal isOpen={isMoveOpen} pageId={folderId} onMoved={onChanged} handleClose={() => setIsMoveOpen(false)} />
+      <MoveToModalComponent
+        isOpen={isMoveOpen}
+        pageId={folderId}
+        onMoved={onChanged}
+        handleClose={() => setIsMoveOpen(false)}
+      />
       <DeleteFolderModal
         isOpen={isDeleteOpen}
         folderId={folderId}
+        storeType={storeType}
         onDeleted={onChanged}
         handleClose={() => setIsDeleteOpen(false)}
       />
       <RenameFolderModal
         isOpen={isRenameOpen}
         folderId={folderId}
+        storeType={storeType}
         onRenamed={onChanged}
         handleClose={() => setIsRenameOpen(false)}
       />

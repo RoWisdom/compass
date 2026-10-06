@@ -13,12 +13,15 @@ import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { EModalWidth, Input, ModalCore } from "@plane/ui";
 // hooks
-import { EPageStoreType, usePageStore } from "@/hooks/store";
+import type { EPageStoreType } from "@/hooks/store";
+import { usePageStore } from "@/hooks/store";
 
 type Props = {
   isOpen: boolean;
   /** `null` 表示当前没有要改名的文件夹（弹窗只是被关着）。 */
   folderId: string | null;
+  /** 由调用方给：这个文件夹属于哪一棵树。**必填**，理由见 `folder-row-actions.tsx`。 */
+  storeType: EPageStoreType;
   /** 改名成功后重拉**当前视图**。分叉在调用方，理由同 `MoveToModal.onMoved`。 */
   onRenamed: () => void;
   handleClose: () => void;
@@ -54,13 +57,13 @@ const MAX_NAME_LENGTH = 255;
  * **与集合改名同一套规则**，不给文件夹开第二套。
  */
 export const RenameFolderModal = observer(function RenameFolderModal(props: Props) {
-  const { isOpen, folderId, onRenamed, handleClose } = props;
+  const { isOpen, folderId, onRenamed, handleClose, storeType } = props;
   // router
   const { workspaceSlug } = useParams();
   // plane hooks
   const { t } = useTranslation();
   // store hooks
-  const { getPageById, renameFolder } = usePageStore(EPageStoreType.WORKSPACE);
+  const { getPageById, renameFolder } = usePageStore(storeType);
   // states
   const [name, setName] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);

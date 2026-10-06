@@ -13,12 +13,15 @@ import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { EModalWidth, ModalCore } from "@plane/ui";
 // hooks
-import { EPageStoreType, usePageStore } from "@/hooks/store";
+import type { EPageStoreType } from "@/hooks/store";
+import { usePageStore } from "@/hooks/store";
 
 type Props = {
   isOpen: boolean;
   /** `null` 表示当前没有要删的文件夹（弹窗只是被关着）。 */
   folderId: string | null;
+  /** 由调用方给：这个文件夹属于哪一棵树。**必填**，理由见 `folder-row-actions.tsx`。 */
+  storeType: EPageStoreType;
   /** 删除成功后重拉**当前视图**。分叉在调用方，理由同 `MoveToModal.onMoved`。 */
   onDeleted: () => void;
   handleClose: () => void;
@@ -37,13 +40,13 @@ type Props = {
  * 本组件只读键，不改值。
  */
 export const DeleteFolderModal = observer(function DeleteFolderModal(props: Props) {
-  const { isOpen, folderId, onDeleted, handleClose } = props;
+  const { isOpen, folderId, onDeleted, handleClose, storeType } = props;
   // router
   const { workspaceSlug } = useParams();
   // plane hooks
   const { t } = useTranslation();
   // store hooks
-  const { deleteFolder } = usePageStore(EPageStoreType.WORKSPACE);
+  const { deleteFolder } = usePageStore(storeType);
   // states
   const [isDeleting, setIsDeleting] = useState(false);
 

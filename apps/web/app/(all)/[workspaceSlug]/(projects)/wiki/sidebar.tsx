@@ -21,6 +21,7 @@ import { cn, getPageName } from "@plane/utils";
 import { CollectionFormModal } from "@/components/pages/wiki/collection-form-modal";
 import { DeleteCollectionModal } from "@/components/pages/wiki/delete-collection-modal";
 import { FolderRowActions } from "@/components/pages/wiki/folder-row-actions";
+import { MoveToModal } from "@/components/pages/wiki/move-to-modal";
 import { PageFormModal } from "@/components/pages/wiki/page-form-modal";
 import {
   WIKI_TREE_INDENT_CLASS,
@@ -991,7 +992,12 @@ export const WikiSidebar = observer(function WikiSidebar() {
             改动，**不在本轮**；先如实记在这里，别当成已解决。 */}
         {isFolder && canManageCollections && (
           <span className="opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
-            <FolderRowActions folderId={line.pageId} onChanged={() => handleFolderDeleted(partitionKey)} />
+            <FolderRowActions
+              folderId={line.pageId}
+              storeType={EPageStoreType.WORKSPACE}
+              moveToModal={MoveToModal}
+              onChanged={() => handleFolderDeleted(partitionKey)}
+            />
           </span>
         )}
       </div>
