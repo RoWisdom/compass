@@ -18,7 +18,7 @@ import { BreadcrumbLink } from "@/components/common/breadcrumb-link";
 import { useProject } from "@/hooks/store/use-project";
 // plane web imports
 import { CommonProjectBreadcrumbs } from "@/components/breadcrumbs/common";
-import { ProjectCreateMenu } from "@/components/pages/project-create-menu";
+import { ProjectCreateActions } from "@/components/pages/project-create-actions";
 import { EPageStoreType, usePageStore } from "@/hooks/store";
 // services
 import { PAGE_NODE_TYPE_FOLDER } from "@/services/page";
@@ -102,7 +102,7 @@ export const PagesListHeader = observer(function PagesListHeader() {
       </Header.LeftItem>
       {canCurrentUserCreatePage && (
         <Header.RightItem>
-          <ProjectCreateMenu pageType={pageType === "private" ? "private" : "public"} parentId={activeFolderId} />
+          <ProjectCreateActions pageType={pageType === "private" ? "private" : "public"} parentId={activeFolderId} />
         </Header.RightItem>
       )}
     </Header>
