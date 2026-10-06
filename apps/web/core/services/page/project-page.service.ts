@@ -11,6 +11,17 @@ import type { TDocumentPayload, TPage } from "@plane/types";
 // services
 import { APIService } from "@/services/api.service";
 import { FileUploadService } from "@/services/file-upload.service";
+import type { TPageNodeType } from "./workspace-page.service";
+
+/**
+ * `?scope=all` 的行：在页面字段之上多一个 `node_type`（后端 `ProjectPageTreeSerializer`）。
+ *
+ * `TPage` **刻意不带** `parent` / `node_type`：`BasePage` 的实例是逐字段显式赋值构造的，
+ * 而它被**项目页与 wiki 页共用**，层级没有理由去动它。所以层级只在这条线上被读一次
+ * —— 读**原始响应**，随即落进 store 的旁挂索引，**不进页面模型**。
+ * 与 wiki 侧的 `TPageWithParent`（`workspace-page.service.ts`）同一条设计。
+ */
+export type TProjectPageWithParent = TPage & { parent?: string | null; node_type?: TPageNodeType | null };
 
 export class ProjectPageService extends APIService {
   private fileUploadService: FileUploadService;
@@ -21,8 +32,20 @@ export class ProjectPageService extends APIService {
     this.fileUploadService = new FileUploadService();
   }
 
-  async fetchAll(workspaceSlug: string, projectId: string): Promise<TPage[]> {
-    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/pages/`)
+  /**
+   * 项目页的**整棵树**（页面 + 文件夹）。
+   *
+   * 必须带 `scope=all`：不带时后端只返回 `parent IS NULL` 的行（上游行为），
+   * 子页与文件夹一个都拿不到，前端没法建树。
+   *
+   * 与 wiki 侧的 `fetchAllPages` 同一条路子 —— 那个端点是新增的，这个只是在既有
+   * 端点上加一个 opt-in 参数（裁定 乙），所以**不带参数的那条路径一行未动**，
+   * 详情页那颗平铺 switcher 依赖的正是它。
+   */
+  async fetchAll(workspaceSlug: string, projectId: string): Promise<TProjectPageWithParent[]> {
+    return this.get(`/api/workspaces/${workspaceSlug}/projects/${projectId}/pages/`, {
+      params: { scope: "all" },
+    })
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
@@ -176,16 +199,6 @@ export class ProjectPageService extends APIService {
 
   async duplicate(workspaceSlug: string, projectId: string, pageId: string): Promise<TPage> {
     return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/pages/${pageId}/duplicate/`)
-      .then((response) => response?.data)
-      .catch((error) => {
-        throw error?.response?.data;
-      });
-  }
-
-  async move(workspaceSlug: string, projectId: string, pageId: string, newProjectId: string): Promise<void> {
-    return this.post(`/api/workspaces/${workspaceSlug}/projects/${projectId}/pages/${pageId}/move/`, {
-      new_project_id: newProjectId,
-    })
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
