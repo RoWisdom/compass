@@ -36,6 +36,9 @@ from plane.app.serializers import (
     PageDetailSerializer,
     PageBinaryUpdateSerializer,
 )
+# 直接取自子模块：`ProjectPageTreeSerializer` 只服务于本文件的 `scope=all` 分支，
+# 不进 serializers 包的公共出口（那会把它变成整个 app 都能 import 的名字）。
+from plane.app.serializers.page import ProjectPageTreeSerializer
 from plane.db.models import (
     FileAsset,
     Page,
@@ -166,7 +169,9 @@ class PageViewSet(BaseViewSet):
             entity_identifier=OuterRef("pk"),
             workspace__slug=self.kwargs.get("slug"),
         )
-        return self.filter_queryset(
+        # 注意：`parent__isnull=True` **不在**这条链里 —— 它被挪到末尾条件化叠加，
+        # 理由见下面那段注释。其余每一个过滤/注解/排序**逐字未动**。
+        queryset = (
             super()
             .get_queryset()
             .filter(workspace__slug=self.kwargs.get("slug"))
@@ -175,7 +180,6 @@ class PageViewSet(BaseViewSet):
                 projects__project_projectmember__is_active=True,
                 projects__archived_at__isnull=True,
             )
-            .filter(parent__isnull=True)
             .filter(Q(owned_by=self.request.user) | Q(access=0))
             .prefetch_related("projects")
             .select_related("workspace")
@@ -206,6 +210,28 @@ class PageViewSet(BaseViewSet):
             .filter(project=True)
             .distinct()
         )
+
+        # 「只返回根节点」是**上游为列表**加的一条过滤，但它挂在 `get_queryset` 上，
+        # 于是另外两个动作也跟着吃（罗盘 Round J，裁定 乙）：
+        #
+        #   · `retrieve`（本文件 `:306`）= `self.get_queryset().filter(pk=page_id).first()`
+        #     ⇒ 子页被这条过滤吃掉 ⇒ **详情永远 404**；
+        #   · `create`（本文件 `:238`）= `self.get_queryset().get(pk=<新页 id>)`
+        #     ⇒ 刚建出来的子页同样被吃掉 ⇒ 抛 `Page.DoesNotExist` ⇒ 落进
+        #     `BaseViewSet.handle_exception` 的 `ObjectDoesNotExist` 分支
+        #     （`app/views/base.py:92-96`）⇒ **404，不是 500**
+        #     （页面与镜像其实都落库了，客户端看到的却是一个错误）。
+        #
+        # 今天没有入口能建出子页，所以这两个缺口看不见。本轮一旦能建子页，它们立刻变成
+        # 「建得出来、打不开」。所以这里改成**只在 list 且不带 `scope=all` 时**叠加：
+        # 默认列表逐字不变，另外两个动作顺带修好。
+        #
+        # `?scope=all` 不是「另一个列表端点」—— 它就是**同一份 queryset 少一条 where**，
+        # 其余过滤（工作区、项目成员、access、`is_favorite` 注解与排序）一条都不碰。
+        if self.action == "list" and self.request.GET.get("scope") != "all":
+            queryset = queryset.filter(parent__isnull=True)
+
+        return self.filter_queryset(queryset)
 
     def create(self, request, slug, project_id):
         serializer = PageSerializer(
@@ -405,7 +431,11 @@ class PageViewSet(BaseViewSet):
             and not project.guest_view_all_features
         ):
             queryset = queryset.filter(owned_by=request.user)
-        pages = PageSerializer(queryset, many=True).data
+        # 树那条路径多一个 `node_type`（前端要据此区分文件夹行），且**只多这一个键**。
+        # 单独一个子类而不是给 `PageSerializer` 加字段：默认路径的响应必须逐字不变
+        # （与 `WikiPageTreeSerializer` 同一条纪律）。
+        serializer_class = ProjectPageTreeSerializer if request.GET.get("scope") == "all" else PageSerializer
+        pages = serializer_class(queryset, many=True).data
         return Response(pages, status=status.HTTP_200_OK)
 
     def archive(self, request, slug, project_id, page_id):

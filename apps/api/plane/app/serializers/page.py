@@ -167,6 +167,22 @@ class PageDetailSerializer(PageSerializer):
         fields = PageSerializer.Meta.fields + ["description_html"]
 
 
+class ProjectPageTreeSerializer(PageSerializer):
+    """``GET .../pages/?scope=all`` 的行：在 ``PageSerializer`` 之上多一个 ``node_type``。
+
+    与 ``WikiPageTreeSerializer`` 同一条纪律 —— 只加在**子类**上，因为默认（不带 ``scope``）
+    那条路径的响应必须逐字不变：多出来的键会顺着前端 ``mutateProperties``
+    （一个盲写的 ``set(this, key, value)``）被写成页面实例上没人认识的属性。
+
+    只加 ``node_type``、不加别的：前端拿它区分「文件夹行」与「页面行」。
+    ``parent`` 已经在 ``PageSerializer.Meta.fields`` 里（`:45`），不必重复声明。
+    """
+
+    class Meta(PageSerializer.Meta):
+        fields = [*PageSerializer.Meta.fields, "node_type"]
+        read_only_fields = fields
+
+
 class PageVersionSerializer(BaseSerializer):
     class Meta:
         model = PageVersion
