@@ -478,6 +478,14 @@ export const WikiSidebar = observer(function WikiSidebar() {
    * `{ parent }`，集合行/`general` 行给 `containerTarget(key)`），所以同一个函数
    * 服务四种行 —— 这正是"一个 `＋`、两种节点"的形状。
    *
+   * 两项各带一颗**与列表行同款**的前置图标（2026-10-06 用户要求）：页面 `PageIcon`、
+   * 文件夹 `Folder` —— 正是 `renderRow` 里 `isFolder ? Folder : PageIcon` 那个映射，
+   * 所以菜单里看到的就是点下去会长出来的东西。尺寸 `size-3` 取菜单里的既有值
+   * （本文件 `⋯` 那两条、`folder-row-actions` 的三条都这么写）；`<span
+   * className="flex items-center gap-2">` 那层包裹也是照抄它们 —— `MenuItem` 只把
+   * children 直接倒进 `<button>`（`custom-menu.tsx:490`），自己不排版。零新增 import
+   * （两颗图标本就在本文件的 import 里）。
+   *
    * `aria-label` 用 `common.add_new`（19 个 locale 都有，"Add new" / 「添加新的」）：
    * 触发器的名字**不能**叫菜单里任何一项的名字（叫这个会指错），
    * 而为一个 aria-label 新增 i18n 键要再动 19 个语言文件，不值。零新增键是这里的取舍。
@@ -489,10 +497,16 @@ export const WikiSidebar = observer(function WikiSidebar() {
       closeOnSelect
     >
       <CustomMenu.MenuItem onClick={() => openCreateDialog(target, PAGE_NODE_TYPE_DOC)}>
-        {t("wiki_collections.actions.add_page")}
+        <span className="flex items-center gap-2">
+          <PageIcon className="size-3" />
+          {t("wiki_collections.actions.add_page")}
+        </span>
       </CustomMenu.MenuItem>
       <CustomMenu.MenuItem onClick={() => openCreateDialog(target, PAGE_NODE_TYPE_FOLDER)}>
-        {t("wiki_collections.actions.add_folder")}
+        <span className="flex items-center gap-2">
+          <Folder className="size-3" />
+          {t("wiki_collections.actions.add_folder")}
+        </span>
       </CustomMenu.MenuItem>
     </CustomMenu>
   );
