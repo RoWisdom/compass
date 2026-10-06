@@ -19,6 +19,16 @@ interface IListItemProps {
   itemLink: string;
   onItemClick?: (e: React.MouseEvent<HTMLAnchorElement>) => void;
   prependTitleElement?: React.ReactNode;
+  /**
+   * 行左、**在链接之外**的一格。与 `prependTitleElement` 的区别只在位置：
+   * 那个渲在 `ControlLink`（那个 `<a>`）**里面**，所以往它塞 `<button>` 是
+   * 「交互内容嵌交互内容」、HTML 非法；这一格是 `<a>` 的**兄弟**（与行右的
+   * `quickActionElement` 对称），放按钮合法。
+   *
+   * 用途：折叠箭头那种「平时是图标、悬停换箭头」的单元格（照 wiki 侧栏
+   * `renderRow` 的手法）。不传就什么都不渲 —— 其余 9 个调用点行为逐字不变。
+   */
+  prependActionElement?: React.ReactNode;
   appendTitleElement?: React.ReactNode;
   actionableItems?: React.ReactNode;
   isMobile?: boolean;
@@ -39,6 +49,7 @@ export function ListItem(props: IListItemProps) {
     id,
     title,
     prependTitleElement,
+    prependActionElement,
     appendTitleElement,
     actionableItems,
     itemLink,
@@ -75,6 +86,7 @@ export function ListItem(props: IListItemProps) {
         )}
       >
         <div className={cn("relative flex w-full items-center justify-between gap-3 truncate", itemClassName)}>
+          {prependActionElement ?? null}
           <ControlLink
             id={id}
             className="relative flex w-full items-center gap-3 overflow-hidden"
@@ -94,7 +106,7 @@ export function ListItem(props: IListItemProps) {
               <span className={cn("flex flex-shrink-0 items-center", rightElementClassName)}>{appendTitleElement}</span>
             )}
           </ControlLink>
-          {quickActionElement && quickActionElement}
+          {quickActionElement ?? null}
         </div>
         {actionableItems && (
           <div
