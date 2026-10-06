@@ -11,7 +11,7 @@ import { Box, Folder } from "lucide-react";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import { ChevronRightIcon, PageIcon } from "@plane/propel/icons";
+import { ChevronRightIcon } from "@plane/propel/icons";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { EModalWidth, ModalCore } from "@plane/ui";
 import { cn } from "@plane/utils";
@@ -42,16 +42,24 @@ type Props = {
  *
  * 语义照 Confluence Cloud 的 Move：目标是「位置」。所以：
  *   · 一个**集合**（含「常规」）那一行 ⇒ 移到该集合顶层；
- *   · 树里任意**能容纳子项的行**（文件夹或页面）⇒ 挂到它下面。
+ *   · 树里任意**文件夹行** ⇒ 挂到它下面。
  *
- * **为什么页面也能当目标**：本仓的 wiki 从 Round C 起支持子页面，`create_page` 也一直
- * 收任意已收录的页面当 `parent`。只列文件夹会凭空造出一条「建得出来、搬不进去」的不对称。
+ * **只把文件夹列为目标**（用户裁定 2026-10-06）。口径与 `project-move-to-modal.tsx`
+ * 逐字一致 —— 那边早就写死了「只有文件夹是容器」，**本文件是当时的例外**。
+ * （原文写的是「树里任意能容纳子项的行（文件夹或页面）」—— 页面这一档已摘掉。）
  *
- * **2026-10-06 补充**：`53d6d6412` 起侧栏**页面行不再有 `＋`**（用户裁定：页面的容器身份
- * 是「文档」，文件夹的才是「容器」）。于是上面那条不对称**翻了个面** —— 现在是
- * **「搬得进去、建不出来」**。这里**照旧列页面**：把这一项摘掉，等于连"把已有页面整理到
- * 另一个页面下"这唯一的路也堵死，子页面这个结构就彻底不可达了。这个不对称是裁定的
- * 一部分，**不是缺陷**；详情见 `罗盘-Wiki集合子文件夹-设计.md` 的「后记 1」。
+ * 依据是用户对侧栏 `＋` 的同一条读法：**页面这一行的身份是「文档」，只有文件夹是「容器」**。
+ * 侧栏页面行摘掉 `＋` 之后（`53d6d6412`），「把 A 页挂到 B 页下」在这里成了**最后一处**
+ * 入口 —— 用户看过那句「唯一剩下的建子页面路径」之后，把它也摘了。
+ *
+ * ⇒ **UI 上再没有任何路径能让一个页面成为父行**。已有关系不受影响：子页照旧在侧栏与列表里
+ * 嵌套显示，也仍能**移出去**（移到文件夹或集合顶层）；丢的只是「再建一条」。后端
+ * `create_page` 仍收任意已收录的页面当 `parent`（本轮不动后端），所以 API 层面这条路还在。
+ *
+ * **过滤放在渲染处，不是喂给 `buildWikiTreeLines` 之前**：`depth` 仍按**整棵树**算，缩进才对
+ * 得上；`forbidden` 更是必须按完整索引算 —— 祖先链可能穿过一个页面（畸形数据 / R-2 兜底），
+ * 从过滤后的列表算会漏掉那些后代，环就 guard 不住了。同款理由见
+ * `project-move-to-modal.tsx:118-125`。
  *
  * **为什么只列这些集合**：`general` + 用户自建集合是有合法 `collection_id` 的两种。
  * `private`/`shared`/`archived` 是**派生**分区：一行落在其中哪个由 `access`/`archived_at`
@@ -81,8 +89,8 @@ type Props = {
  * 找不到自己那一页）。状态存**展开**集、空集即全收起，与侧栏 `expandedPartitionKeys`
  * 同一口径。**只折集合层**，树内部不再每层可折 —— 知情的取舍，见设计 §5。
  *
- * 图标照侧栏集合行那段约定：集合 `Box` / 文件夹 `Folder` / 页面 `PageIcon`，
- * 三个层级各一颗、互不复用。
+ * 图标照侧栏集合行那段约定：集合 `Box` / 文件夹 `Folder` —— 三个层级各一颗、互不复用
+ * （第三档 `PageIcon` 在本弹窗里**看不到了**：页面不再是目标）。
  */
 export const MoveToModal = observer(function MoveToModal(props: Props) {
   const { isOpen, pageId, onMoved, handleClose } = props;
@@ -193,6 +201,11 @@ export const MoveToModal = observer(function MoveToModal(props: Props) {
         <div className="flex max-h-80 flex-col gap-1 overflow-y-auto">
           {groups.map((group) => {
             const isExpanded = expandedGroupKeys.includes(group.key);
+            // **只把文件夹列出来**（见 docblock）。过滤在这里做、不在 `linesFor` 里做 ——
+            // `depth` 与 `forbidden` 都要按**整棵树**算，理由同 `project-move-to-modal`。
+            // 箭头也跟着这份过滤后的长度走：一个只装页面的集合铺开来空空如也，
+            // 那就该与空集合一样**不给箭头**（G-9 的等宽占位）。
+            const targetLines = group.lines.filter((line) => pageNodeTypes[line.pageId] === PAGE_NODE_TYPE_FOLDER);
             return (
               <div key={group.key} className="flex flex-col">
                 {/* **两个热区**（设计 G-4）：标签 = 移到该集合顶层（行为与改动前**逐字不变**），
@@ -207,9 +220,9 @@ export const MoveToModal = observer(function MoveToModal(props: Props) {
                     }
                     className="flex min-w-0 flex-1 items-center gap-2 text-left disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    {/* 集合那一行是 `Box`（lucide），**不是**页面行那颗 `PageIcon` ——
-                        侧栏写死的约定：集合 `Box` / 文件夹 `Folder` /
-                        页面 `PageIcon`，三个层级各一颗、互不复用（设计 G-1）。 */}
+                    {/* 集合那一行是 `Box`（lucide），**不是**下面树行那颗 `Folder` ——
+                        侧栏写死的约定：集合 `Box` / 文件夹 `Folder` / 页面 `PageIcon`，
+                        三个层级各一颗、互不复用（设计 G-1；页面那一档本弹窗已不用，见 docblock）。 */}
                     <Box className="h-4 w-4 flex-shrink-0 text-tertiary" />
                     <span className="truncate">{group.label}</span>
                   </button>
@@ -217,7 +230,7 @@ export const MoveToModal = observer(function MoveToModal(props: Props) {
                       「分组标题」那一档的口径：收起后它是横躺的、
                       一眼能看见也能点开。没有子行就不给箭头（G-9），留**等宽占位**保对齐
                       —— 按钮现在是 `p-1` + `size-3` 图标 = 20px，占位用 `size-5`。 */}
-                  {group.lines.length > 0 ? (
+                  {targetLines.length > 0 ? (
                     <button
                       type="button"
                       onClick={() => toggleGroup(group.key)}
@@ -232,7 +245,7 @@ export const MoveToModal = observer(function MoveToModal(props: Props) {
                   )}
                 </div>
                 {isExpanded &&
-                  group.lines.map((line) => (
+                  targetLines.map((line) => (
                     <button
                       key={line.pageId}
                       type="button"
@@ -240,11 +253,9 @@ export const MoveToModal = observer(function MoveToModal(props: Props) {
                       onClick={() => handleMove({ collectionId: null, parentId: line.pageId })}
                       className={`flex items-center gap-2 rounded-md py-1.5 pr-2 text-left text-13 hover:bg-layer-1 disabled:cursor-not-allowed disabled:opacity-40 ${wikiTreeIndentClass(line.depth + 1)}`}
                     >
-                      {pageNodeTypes[line.pageId] === PAGE_NODE_TYPE_FOLDER ? (
-                        <Folder className="h-4 w-4 flex-shrink-0 text-tertiary" />
-                      ) : (
-                        <PageIcon className="h-4 w-4 flex-shrink-0 text-tertiary" />
-                      )}
+                      {/* 这里**只有文件夹**（`targetLines` 已滤过），所以不再写那个
+                          页面/文件夹二选一的三元 —— 它是渲染层的死分支。 */}
+                      <Folder className="h-4 w-4 flex-shrink-0 text-tertiary" />
                       <span className="truncate">{getPageById(line.pageId)?.name ?? ""}</span>
                     </button>
                   ))}
