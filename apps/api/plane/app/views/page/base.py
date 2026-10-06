@@ -24,6 +24,7 @@ from django.http import StreamingHttpResponse
 from django.contrib.postgres.aggregates import ArrayAgg
 from django.contrib.postgres.fields import ArrayField
 from django.db.models.functions import Coalesce
+from django.utils import timezone
 
 # Third party imports
 from rest_framework import status
@@ -185,6 +186,23 @@ def _project_mirror_target_resolver(project_id):
         )
 
     return resolve
+
+
+def _can_delete_page(request, slug, project_id, page):
+    """「页面所有者，或者本项目的 admin」—— 删页面与删文件夹**共用**这一条。
+
+    裁定 甲只豁免「先归档」那一条，**不**豁免权限。抽成函数是为了让两条岔路上的
+    判定逐字相同：抄一遍就有了会漂的第二份。
+    """
+    if page.owned_by_id == request.user.id:
+        return True
+    return ProjectMember.objects.filter(
+        workspace__slug=slug,
+        member=request.user,
+        role=20,
+        project_id=project_id,
+        is_active=True,
+    ).exists()
 
 
 class PageViewSet(BaseViewSet):
@@ -581,21 +599,64 @@ class PageViewSet(BaseViewSet):
             project_pages__deleted_at__isnull=True,
         )
 
+        # 文件夹：**豁免「先归档」那一条**（裁定 甲），其余照跑 —— 权限判定照它原有的
+        # 403 语义走，与上面的单页路径**共用同一个函数**（`_can_delete_page`）。
+        if page.node_type == Page.NODE_TYPE_FOLDER:
+            if not _can_delete_page(request, slug, project_id, page):
+                return Response(
+                    {"error": "Only admin or owner can delete the page"},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+            # 整棵子树（含文件夹自己）。取法与 wiki 的 `_destroy_folder` 逐字同源：
+            # `_descendant_ids` 按 `workspace_id` 收窄（裁定 丁）。
+            subtree_ids = _descendant_ids(root=page)
+            rows = list(Page.objects.filter(id__in=[page.id, *subtree_ids]).prefetch_related("projects"))
+
+            # 同一份级联实现，只换寻址函数（设计 §4.6）。
+            # 顺序是载荷：读行 + 算路径 → 一条 SQL 软删 → 删镜像 → 收空目录。
+            _cascade_delete_pages(rows, resolve_mirror=_project_mirror_target_resolver(project_id))
+
+            # ⚠️ `_cascade_delete_pages` 走**一条 SQL 批量 update**，绕过
+            # `SoftDeleteModel.delete()`，也就绕过了它会 `.delay()` 的
+            # `soft_delete_related_objects`（`db/mixins.py:72-78`）。项目页比 wiki 页多
+            # 一层 `ProjectPage` through 行，那条级联**碰不到它** —— 在这里补一刀
+            # （设计 §8.4）。少了它，直接走 `ProjectPage.objects` 的读者
+            # （如 `analytic/advance.py` 的 `total_pages`）会数到已经删掉的页面。
+            #
+            # 补在**项目侧这一层**而不是写进 `_cascade_delete_pages`：那个 helper 是 wiki
+            # 与项目**共用**的，把项目专属的 through 表清理塞进去，等于让 wiki 的级联也去
+            # 打一张与它无关的表 —— T-B5「wiki 行为逐字不变」就不再是平凡成立的了。
+            now = timezone.now()
+            ProjectPage.objects.filter(page_id__in=[row.id for row in rows]).update(
+                deleted_at=now, updated_at=now
+            )
+
+            # 收藏与最近访问：与下面单页路径的后半段逐字同源，只是从「一个 id」变成「一组 id」。
+            UserFavorite.objects.filter(
+                project=project_id,
+                workspace__slug=slug,
+                entity_identifier__in=[row.id for row in rows],
+                entity_type="page",
+            ).delete()
+            UserRecentVisit.objects.filter(
+                project_id=project_id,
+                workspace__slug=slug,
+                entity_identifier__in=[row.id for row in rows],
+                entity_name="page",
+            ).delete(soft=False)
+
+            return Response(status=status.HTTP_204_NO_CONTENT)
+
+        # ---- 以下**逐字未动**：删单个页面（裁定 甲只豁免文件夹那一条）----
+
         if page.archived_at is None:
             return Response(
                 {"error": "The page should be archived before deleting"},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        if page.owned_by_id != request.user.id and (
-            not ProjectMember.objects.filter(
-                workspace__slug=slug,
-                member=request.user,
-                role=20,
-                project_id=project_id,
-                is_active=True,
-            ).exists()
-        ):
+        if not _can_delete_page(request, slug, project_id, page):
             return Response(
                 {"error": "Only admin or owner can delete the page"},
                 status=status.HTTP_403_FORBIDDEN,
