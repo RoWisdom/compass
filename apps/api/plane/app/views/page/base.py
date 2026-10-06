@@ -36,9 +36,9 @@ from plane.app.serializers import (
     PageDetailSerializer,
     PageBinaryUpdateSerializer,
 )
-# 直接取自子模块：`ProjectPageTreeSerializer` 只服务于本文件的 `scope=all` 分支，
-# 不进 serializers 包的公共出口（那会把它变成整个 app 都能 import 的名字）。
-from plane.app.serializers.page import ProjectPageTreeSerializer
+# 直接取自子模块 —— 两个都只服务于本文件的 `scope=all` / 项目侧建页分支，
+# 不进 serializers 包的公共出口（理由与 `collection.py:32-34` 逐字相同）。
+from plane.app.serializers.page import ProjectPageCreateSerializer, ProjectPageTreeSerializer
 from plane.db.models import (
     FileAsset,
     Page,
@@ -234,7 +234,7 @@ class PageViewSet(BaseViewSet):
         return self.filter_queryset(queryset)
 
     def create(self, request, slug, project_id):
-        serializer = PageSerializer(
+        serializer = ProjectPageCreateSerializer(
             data=request.data,
             context={
                 "project_id": project_id,
@@ -246,21 +246,32 @@ class PageViewSet(BaseViewSet):
         )
 
         if serializer.is_valid():
-            serializer.save()
-            # Mirror the page as a local Markdown file (best-effort)
-            _write_page_mirror(
-                project_id,
-                serializer.data["id"],
-                request.data.get("name"),
-                _page_ancestors(request.data.get("parent")),
-                request.data.get("description_html", "<p></p>"),
-            )
-            # capture the page transaction
-            page_transaction.delay(
-                new_description_html=request.data.get("description_html", "<p></p>"),
-                old_description_html=None,
-                page_id=serializer.data["id"],
-            )
+            page = serializer.save()
+            # 文件夹**两样都跳过**（罗盘 Round J，设计 §4.3）：
+            #
+            #   · 镜像 —— **不是**「镜像会失败」。对一个没有正文的节点跑一遍 markdown
+            #     落盘，会在用户的**真实笔记库**里凭空生出一个 `<文件夹名>.md` 空文件。
+            #     静默跳过、不 warn：这是**预期**路径，不是降级。与
+            #     `collection.py` 里 wiki 侧那条同源守卫逐字同源。
+            #   · `page_transaction` —— 它记的是**正文**的版本流水，文件夹没有正文。
+            #
+            # 文件夹的目录段由它的子页面镜像在磁盘上带出来（`_resolve_page_path` 会对每个
+            # 祖先叠一层目录），所以「文件夹自己不落盘」不等于「目录不存在」。
+            if page.node_type != Page.NODE_TYPE_FOLDER:
+                # Mirror the page as a local Markdown file (best-effort)
+                _write_page_mirror(
+                    project_id,
+                    serializer.data["id"],
+                    request.data.get("name"),
+                    _page_ancestors(request.data.get("parent")),
+                    request.data.get("description_html", "<p></p>"),
+                )
+                # capture the page transaction
+                page_transaction.delay(
+                    new_description_html=request.data.get("description_html", "<p></p>"),
+                    old_description_html=None,
+                    page_id=serializer.data["id"],
+                )
             page = self.get_queryset().get(pk=serializer.data["id"])
             serializer = PageDetailSerializer(page)
             return Response(serializer.data, status=status.HTTP_201_CREATED)

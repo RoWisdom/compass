@@ -166,3 +166,67 @@ class TestChildPagesAreReachable:
         assert response.status_code == status.HTTP_201_CREATED
         created = Page.objects.get(pk=response.data["id"])
         assert created.parent_id == tree["a"].id
+
+
+@pytest.mark.contract
+class TestCreatingAFolder:
+    @pytest.mark.django_db
+    def test_a_folder_can_be_created_at_the_top_level(self, session_client, workspace, project):
+        response = session_client.post(
+            _list_url(workspace, project), {"name": "资料夹", "node_type": "folder"}, format="json"
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        created = Page.objects.get(pk=response.data["id"])
+        assert created.node_type == Page.NODE_TYPE_FOLDER
+        assert created.parent_id is None
+        assert ProjectPage.objects.filter(page_id=created.id, deleted_at__isnull=True).exists()
+
+    @pytest.mark.django_db
+    def test_a_folder_writes_no_mirror_file(self, session_client, workspace, project, tree, isolate_markdown_mirror):
+        """**不是**「镜像会失败」—— 是对一个没有正文的节点跑一遍 markdown 落盘，
+        会在用户的**真实笔记库**里凭空生出一个 `<文件夹名>.md` 空文件（设计 §4.3）。"""
+        session_client.post(_list_url(workspace, project), {"name": "不落盘", "node_type": "folder"}, format="json")
+
+        assert not list(r for r in isolate_markdown_mirror.rglob("*.md")), "文件夹不得写镜像"
+
+    @pytest.mark.django_db
+    def test_a_folder_can_be_created_under_a_parent(self, session_client, workspace, project, tree):
+        response = session_client.post(
+            _list_url(workspace, project),
+            {"name": "子文件夹", "node_type": "folder", "parent": str(tree["a"].id)},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert Page.objects.get(pk=response.data["id"]).parent_id == tree["a"].id
+
+    @pytest.mark.django_db
+    def test_a_plain_page_still_defaults_to_doc(self, session_client, workspace, project, tree, no_broker):
+        response = session_client.post(_list_url(workspace, project), {"name": "普通页"}, format="json")
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert Page.objects.get(pk=response.data["id"]).node_type == Page.NODE_TYPE_DOC
+
+    @pytest.mark.django_db
+    def test_an_unknown_node_type_is_rejected(self, session_client, workspace, project):
+        response = session_client.post(
+            _list_url(workspace, project), {"name": "怪东西", "node_type": "widget"}, format="json"
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+
+@pytest.mark.contract
+class TestTheNodeTypeIsNotEditable:
+    """F16「类型建时定死」在项目侧的同一条不变量。"""
+
+    @pytest.mark.django_db
+    def test_patch_cannot_turn_a_folder_into_a_page(self, session_client, workspace, project, tree):
+        response = session_client.patch(
+            _detail_url(workspace, project, tree["a"]), {"node_type": "doc"}, format="json"
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        tree["a"].refresh_from_db()
+        assert tree["a"].node_type == Page.NODE_TYPE_FOLDER

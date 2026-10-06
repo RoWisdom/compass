@@ -183,6 +183,30 @@ class ProjectPageTreeSerializer(PageSerializer):
         read_only_fields = fields
 
 
+class ProjectPageCreateSerializer(PageSerializer):
+    """``POST .../pages/`` 的请求体 —— 在项目里**新建**页面或文件夹（罗盘 Round J）。
+
+    ``node_type`` 只在这里可写，且 ``write_only=True``：类型建时定死。
+    ``PageDetailSerializer``（``partial_update`` 用的那个）继承的是 ``PageSerializer``、
+    **不是**这个类 —— 所以 PATCH 天生改不了类型，不需要额外写一条拒绝逻辑。
+    这与 wiki 侧靠 ``WikiPageUpdateSerializer`` 不声明 ``node_type`` 是同一条纪律。
+
+    ``ChoiceField`` 而不是 ``CharField``：合法集就是模型上的 ``NODE_TYPE_CHOICES``，
+    写死一遍等于在序列化器里存了第二个真相源（与 ``WikiPageCreateSerializer.access`` 同）。
+    ``default`` 是 ``"doc"`` —— 既有调用方（今天的前端发 `{access}`）一行不改。
+    """
+
+    node_type = serializers.ChoiceField(
+        choices=Page.NODE_TYPE_CHOICES,
+        required=False,
+        default=Page.NODE_TYPE_DOC,
+        write_only=True,
+    )
+
+    class Meta(PageSerializer.Meta):
+        fields = [*PageSerializer.Meta.fields, "node_type"]
+
+
 class PageVersionSerializer(BaseSerializer):
     class Meta:
         model = PageVersion
