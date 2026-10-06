@@ -4,22 +4,19 @@
  * See the LICENSE file for details.
  */
 
-import { useState } from "react";
 import { observer } from "mobx-react";
 // plane imports
-import { useParams, useRouter } from "next/navigation";
-import { EUserPermissionsLevel, EPageAccess } from "@plane/constants";
+import { EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { EmptyStateDetailed } from "@plane/propel/empty-state";
-import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import type { TPage, TPageNavigationTabs } from "@plane/types";
+import type { TPageNavigationTabs } from "@plane/types";
 import { EUserProjectRoles } from "@plane/types";
 // components
 import { PageLoader } from "@/components/pages/loaders/page-loader";
-import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
 // plane web hooks
 import { EPageStoreType, usePageStore } from "@/hooks/store";
+import { useProjectPageCreate } from "@/hooks/use-project-page-create";
 
 type Props = {
   children: React.ReactNode;
@@ -32,16 +29,10 @@ export const PagesListMainContent = observer(function PagesListMainContent(props
   // plane hooks
   const { t } = useTranslation();
   // store hooks
-  const { currentProjectDetails } = useProject();
   const { isAnyPageAvailable, getCurrentProjectFilteredPageIdsByTab, getCurrentProjectPageIdsByTab, loader } =
     usePageStore(storeType);
   const { allowPermissions } = useUserPermissions();
-  const { createPage } = usePageStore(EPageStoreType.PROJECT);
-  // states
-  const [isCreatingPage, setIsCreatingPage] = useState(false);
-  // router
-  const router = useRouter();
-  const { workspaceSlug } = useParams();
+  const { createUntitledPage, isCreatingPage } = useProjectPageCreate(pageType);
   // derived values
   const pageIds = getCurrentProjectPageIdsByTab(pageType);
   const filteredPageIds = getCurrentProjectFilteredPageIdsByTab(pageType);
@@ -49,29 +40,6 @@ export const PagesListMainContent = observer(function PagesListMainContent(props
     [EUserProjectRoles.ADMIN, EUserProjectRoles.MEMBER],
     EUserPermissionsLevel.PROJECT
   );
-
-  // handle page create
-  const handleCreatePage = async () => {
-    setIsCreatingPage(true);
-
-    const payload: Partial<TPage> = {
-      access: pageType === "private" ? EPageAccess.PRIVATE : EPageAccess.PUBLIC,
-    };
-
-    await createPage(payload)
-      .then((res) => {
-        const pageId = `/${workspaceSlug}/projects/${currentProjectDetails?.id}/pages/${res?.id}`;
-        router.push(pageId);
-      })
-      .catch((err) => {
-        setToast({
-          type: TOAST_TYPE.ERROR,
-          title: "Error!",
-          message: err?.data?.error || "Page could not be created. Please try again.",
-        });
-      })
-      .finally(() => setIsCreatingPage(false));
-  };
 
   if (loader === "init-loader") return <PageLoader />;
   // if no pages exist in the active page type
@@ -86,7 +54,7 @@ export const PagesListMainContent = observer(function PagesListMainContent(props
             {
               label: t("project_empty_state.pages.cta_primary"),
               onClick: () => {
-                handleCreatePage();
+                void createUntitledPage();
               },
               variant: "primary",
               disabled: !canPerformEmptyStateActions || isCreatingPage,
@@ -105,7 +73,7 @@ export const PagesListMainContent = observer(function PagesListMainContent(props
             {
               label: t("project_empty_state.pages.cta_primary"),
               onClick: () => {
-                handleCreatePage();
+                void createUntitledPage();
               },
               variant: "primary",
               disabled: !canPerformEmptyStateActions || isCreatingPage,
@@ -123,7 +91,7 @@ export const PagesListMainContent = observer(function PagesListMainContent(props
             {
               label: t("project_empty_state.pages.cta_primary"),
               onClick: () => {
-                handleCreatePage();
+                void createUntitledPage();
               },
               variant: "primary",
               disabled: !canPerformEmptyStateActions || isCreatingPage,
