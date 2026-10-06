@@ -40,13 +40,11 @@
     "rename_folder_modal": {
       "name_placeholder": "Klasör adı"
     },
-    "header": {
+    "actions": {
       "add_page": "Sayfa ekle",
       "add_folder": "Klasör ekle"
     },
     "menu": {
-      "create_new_page": "Yeni sayfa oluştur",
-      "create_new_folder": "Yeni klasör oluştur",
       "add_existing_page": "Var olan sayfa ekle",
       "edit_collection": "Koleksiyonu düzenle",
       "collection_options": "Koleksiyon seçenekleri",

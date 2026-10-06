@@ -40,13 +40,11 @@
     "rename_folder_modal": {
       "name_placeholder": "Nome da pasta"
     },
-    "header": {
+    "actions": {
       "add_page": "Adicionar página",
       "add_folder": "Adicionar pasta"
     },
     "menu": {
-      "create_new_page": "Criar nova página",
-      "create_new_folder": "Criar nova pasta",
       "add_existing_page": "Adicionar página existente",
       "edit_collection": "Editar coleção",
       "collection_options": "Opções da coleção",

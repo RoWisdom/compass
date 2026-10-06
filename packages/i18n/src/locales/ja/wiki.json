@@ -40,13 +40,11 @@
     "rename_folder_modal": {
       "name_placeholder": "フォルダー名"
     },
-    "header": {
+    "actions": {
       "add_page": "ページを追加",
       "add_folder": "フォルダを追加"
     },
     "menu": {
-      "create_new_page": "新しいページを作成",
-      "create_new_folder": "新しいフォルダを作成",
       "add_existing_page": "既存のページを追加",
       "edit_collection": "コレクションを編集",
       "collection_options": "コレクションのオプション",

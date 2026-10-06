@@ -40,13 +40,11 @@
     "rename_folder_modal": {
       "name_placeholder": "Numele folderului"
     },
-    "header": {
+    "actions": {
       "add_page": "Adaugă o pagină",
       "add_folder": "Adaugă un folder"
     },
     "menu": {
-      "create_new_page": "Creează o pagină nouă",
-      "create_new_folder": "Creează folder nou",
       "add_existing_page": "Adaugă o pagină existentă",
       "edit_collection": "Editează colecția",
       "collection_options": "Opțiuni colecție",

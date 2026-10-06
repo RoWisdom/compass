@@ -40,13 +40,11 @@
     "rename_folder_modal": {
       "name_placeholder": "文件夹名称"
     },
-    "header": {
+    "actions": {
       "add_page": "添加页面",
       "add_folder": "添加文件夹"
     },
     "menu": {
-      "create_new_page": "创建新页面",
-      "create_new_folder": "新建文件夹",
       "add_existing_page": "添加现有页面",
       "edit_collection": "编辑集合",
       "collection_options": "集合选项",

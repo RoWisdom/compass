@@ -40,13 +40,11 @@
     "rename_folder_modal": {
       "name_placeholder": "Název složky"
     },
-    "header": {
+    "actions": {
       "add_page": "Přidat stránku",
       "add_folder": "Přidat složku"
     },
     "menu": {
-      "create_new_page": "Vytvořit novou stránku",
-      "create_new_folder": "Vytvořit novou složku",
       "add_existing_page": "Přidat existující stránku",
       "edit_collection": "Upravit kolekci",
       "collection_options": "Možnosti kolekce",

@@ -472,12 +472,14 @@ export const WikiSidebar = observer(function WikiSidebar() {
   /**
    * 行右那颗 `＋` —— 悬停浮出的下拉（设计 §5.3）。
    *
-   * 两项**并列**：新建页面、新建文件夹。落点由调用方给（页面行/文件夹行给
+   * 两项**并列**：添加页面、添加文件夹（2026-10-06 用户第四次裁定把这对文案从
+   * 「创建新页面 / 新建文件夹」改成「添加页面 / 添加文件夹」，与 Projects 顶栏同词，
+   * 读同一对键 `wiki_collections.actions.*`）。落点由调用方给（页面行/文件夹行给
    * `{ parent }`，集合行/`general` 行给 `containerTarget(key)`），所以同一个函数
    * 服务四种行 —— 这正是"一个 `＋`、两种节点"的形状。
    *
    * `aria-label` 用 `common.add_new`（19 个 locale 都有，"Add new" / 「添加新的」）：
-   * 触发器的名字**不能**再叫 `create_new_page`（那现在是菜单里的一项，叫这个会指错），
+   * 触发器的名字**不能**叫菜单里任何一项的名字（叫这个会指错），
    * 而为一个 aria-label 新增 i18n 键要再动 19 个语言文件，不值。零新增键是这里的取舍。
    */
   const renderCreateMenu = (target: TPageCreateTarget) => (
@@ -487,10 +489,10 @@ export const WikiSidebar = observer(function WikiSidebar() {
       closeOnSelect
     >
       <CustomMenu.MenuItem onClick={() => openCreateDialog(target, PAGE_NODE_TYPE_DOC)}>
-        {t("wiki_collections.menu.create_new_page")}
+        {t("wiki_collections.actions.add_page")}
       </CustomMenu.MenuItem>
       <CustomMenu.MenuItem onClick={() => openCreateDialog(target, PAGE_NODE_TYPE_FOLDER)}>
-        {t("wiki_collections.menu.create_new_folder")}
+        {t("wiki_collections.actions.add_folder")}
       </CustomMenu.MenuItem>
     </CustomMenu>
   );
@@ -713,7 +715,7 @@ export const WikiSidebar = observer(function WikiSidebar() {
       className="flex w-full items-center gap-2 rounded-md border-[0.5px] border-subtle px-2 py-1.5 text-13 text-secondary hover:bg-layer-1/50"
     >
       <Plus className="h-3.5 w-3.5" />
-      {t("wiki_collections.menu.create_new_page")}
+      {t("wiki_collections.actions.add_page")}
     </button>
   ) : undefined;
 

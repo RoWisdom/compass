@@ -103,7 +103,7 @@ export const AddExistingPageModal = observer(function AddExistingPageModal(props
   return (
     <ModalCore isOpen={isOpen} handleClose={handleClose} width={EModalWidth.LG}>
       <div className="flex flex-col gap-4 p-5">
-        <h3 className="text-16 font-medium">{t("wiki_collections.header.add_page")}</h3>
+        <h3 className="text-16 font-medium">{t("wiki_collections.actions.add_page")}</h3>
         <Input
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}

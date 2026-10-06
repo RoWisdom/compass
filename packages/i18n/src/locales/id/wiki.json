@@ -40,13 +40,11 @@
     "rename_folder_modal": {
       "name_placeholder": "Nama folder"
     },
-    "header": {
+    "actions": {
       "add_page": "Tambah halaman",
       "add_folder": "Tambah folder"
     },
     "menu": {
-      "create_new_page": "Buat halaman baru",
-      "create_new_folder": "Buat folder baru",
       "add_existing_page": "Tambah halaman yang sudah ada",
       "edit_collection": "Edit koleksi",
       "collection_options": "Opsi koleksi",

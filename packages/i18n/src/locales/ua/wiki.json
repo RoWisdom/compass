@@ -40,13 +40,11 @@
     "rename_folder_modal": {
       "name_placeholder": "Назва папки"
     },
-    "header": {
+    "actions": {
       "add_page": "Додати сторінку",
       "add_folder": "Додати папку"
     },
     "menu": {
-      "create_new_page": "Створити нову сторінку",
-      "create_new_folder": "Створити нову папку",
       "add_existing_page": "Додати наявну сторінку",
       "edit_collection": "Редагувати колекцію",
       "collection_options": "Параметри колекції",

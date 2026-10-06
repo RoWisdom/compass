@@ -151,7 +151,7 @@ export const PageFormModal = observer(function PageFormModal(props: Props) {
     <ModalCore isOpen={isOpen} handleClose={handleClose} width={EModalWidth.LG}>
       <div className="flex flex-col gap-4 p-5">
         <h3 className="text-16 font-medium">
-          {isFolder ? t("wiki_collections.menu.create_new_folder") : t("wiki_collections.menu.create_new_page")}
+          {isFolder ? t("wiki_collections.actions.add_folder") : t("wiki_collections.actions.add_page")}
         </h3>
 
         <Input value={name} onChange={(event) => setName(event.target.value)} placeholder={t("common.name")} />
@@ -202,7 +202,7 @@ export const PageFormModal = observer(function PageFormModal(props: Props) {
             {t("common.cancel")}
           </Button>
           <Button variant="primary" size="lg" onClick={handleSubmit} loading={isSubmitting}>
-            {isFolder ? t("wiki_collections.menu.create_new_folder") : t("wiki_collections.menu.create_new_page")}
+            {isFolder ? t("wiki_collections.actions.add_folder") : t("wiki_collections.actions.add_page")}
           </Button>
         </div>
       </div>

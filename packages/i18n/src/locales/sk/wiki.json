@@ -40,13 +40,11 @@
     "rename_folder_modal": {
       "name_placeholder": "Názov priečinka"
     },
-    "header": {
+    "actions": {
       "add_page": "Pridať stránku",
       "add_folder": "Pridať priečinok"
     },
     "menu": {
-      "create_new_page": "Vytvoriť novú stránku",
-      "create_new_folder": "Vytvoriť nový priečinok",
       "add_existing_page": "Pridať existujúcu stránku",
       "edit_collection": "Upraviť kolekciu",
       "collection_options": "Možnosti kolekcie",

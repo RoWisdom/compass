@@ -149,10 +149,10 @@ export const WikiHeader = observer(function WikiHeader() {
           传文件夹 uuid 落 404。文件夹里建页走的是侧栏那颗 `＋` 的「新建页面」
           （`create_page` 端点，吃 `parent`），不是这个按钮。
         */}
-        {/* 文案复用 `header.add_page`（弹窗标题用的同一个键，本来就是给顶栏准备的） */}
+        {/* 文案复用 `actions.add_page`（弹窗标题、侧栏 `＋` 菜单、Projects 顶栏用的都是这一个键） */}
         {!isHome && !isFolder && canIncludeHere && canIncludePages && (
           <Button variant="primary" size="lg" onClick={openIncludeModal}>
-            {t("wiki_collections.header.add_page")}
+            {t("wiki_collections.actions.add_page")}
           </Button>
         )}
       </Header.RightItem>

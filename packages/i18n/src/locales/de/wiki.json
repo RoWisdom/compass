@@ -40,13 +40,11 @@
     "rename_folder_modal": {
       "name_placeholder": "Ordnername"
     },
-    "header": {
+    "actions": {
       "add_page": "Seite hinzufügen",
       "add_folder": "Ordner hinzufügen"
     },
     "menu": {
-      "create_new_page": "Neue Seite erstellen",
-      "create_new_folder": "Neuen Ordner erstellen",
       "add_existing_page": "Vorhandene Seite hinzufügen",
       "edit_collection": "Sammlung bearbeiten",
       "collection_options": "Sammlungsoptionen",

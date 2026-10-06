@@ -40,13 +40,11 @@
     "rename_folder_modal": {
       "name_placeholder": "Tên thư mục"
     },
-    "header": {
+    "actions": {
       "add_page": "Thêm trang",
       "add_folder": "Thêm thư mục"
     },
     "menu": {
-      "create_new_page": "Tạo trang mới",
-      "create_new_folder": "Tạo thư mục mới",
       "add_existing_page": "Thêm trang hiện có",
       "edit_collection": "Chỉnh sửa bộ sưu tập",
       "collection_options": "Tùy chọn bộ sưu tập",

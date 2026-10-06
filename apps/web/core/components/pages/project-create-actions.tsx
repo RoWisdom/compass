@@ -39,12 +39,17 @@ type Props = {
  * `wiki_collections.menu.*`** —— 那对键是「创建新页面」对「新建文件夹」，措辞本身不齐
  * （上游的漂移），用户这次直接把两颗都点成了「添加…」。
  *
- * 改读 `wiki_collections.header.*`：`add_page` 是现成的（19 个 locale 都有，wiki 顶栏
- * 那颗按钮读的就是它）；`add_folder` 是本轮**新增**的兄弟键 —— 「添加文件夹」这个说法
- * 全库原本一个键都没有。另 17 个语言的译法不是我随手编的：各自 `add_page` 里的「添加」
- * 动词 + 各自 `create_new_folder` 里的「文件夹」名词，拼起来即得（cs `Přidat složku`、
- * de `Ordner hinzufügen`、ja `フォルダを追加`…）。代价是一个新增键要写进 19 个语言文件
- * —— 已付，`pnpm --filter=@plane/i18n check:sync` 回到 19/19 全 100.0%（3858 键）。
+ * 改读 `wiki_collections.actions.*`：`add_page` 是现成的（19 个 locale 都有）；`add_folder`
+ * 是**新增**的兄弟键 —— 「添加文件夹」这个说法全库原本一个键都没有。另 17 个语言的译法
+ * 不是我随手编的：各自 `add_page` 里的「添加」动词 + 各自 `create_new_folder` 里的
+ * 「文件夹」名词，拼起来即得（cs `Přidat složku`、de `Ordner hinzufügen`、ja `フォルダを追加`…）。
+ * 代价是一个新增键要写进 19 个语言文件 —— 已付，`check:sync` 19/19 全 100.0%（3858 键）。
+ *
+ * 同日用户接着要求 **wiki 也用同一对文案**，于是这组键被收敛成**唯一一对**「添加页面 /
+ * 添加文件夹」：组名从 `header` 改叫 `actions`（它早就名不副实 —— `add-existing-page-modal`
+ * 拿它当**弹窗标题**使），wiki 侧栏 `＋` 菜单的两项、侧栏顶部那颗 `＋ New page`、建页弹窗的
+ * 标题与提交按钮、wiki 顶栏按钮、这里的两颗，六处读的都是一对键；被取代的
+ * `menu.create_new_page` / `create_new_folder` 已从 19 个语言文件里删除（全仓 0 引用）。
  *
  * 落点由调用方给（`parentId`）—— 在根视图是顶层（不传 / `null`），下钻进某个
  * 文件夹后就是那个文件夹。两种建法都落同一个 `parentId`。
@@ -69,10 +74,10 @@ export const ProjectCreateActions = observer(function ProjectCreateActions(props
   return (
     <>
       <Button variant="primary" size="lg" onClick={() => void createUntitledPage()} disabled={isCreatingPage}>
-        {t("wiki_collections.header.add_page")}
+        {t("wiki_collections.actions.add_page")}
       </Button>
       <Button variant="secondary" size="lg" onClick={() => setIsCreateFolderOpen(true)} disabled={isCreatingPage}>
-        {t("wiki_collections.header.add_folder")}
+        {t("wiki_collections.actions.add_folder")}
       </Button>
       <ProjectCreateFolderModal
         isOpen={isCreateFolderOpen}

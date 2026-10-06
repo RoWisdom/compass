@@ -40,13 +40,11 @@
     "rename_folder_modal": {
       "name_placeholder": "폴더 이름"
     },
-    "header": {
+    "actions": {
       "add_page": "페이지 추가",
       "add_folder": "폴더 추가"
     },
     "menu": {
-      "create_new_page": "새 페이지 만들기",
-      "create_new_folder": "새 폴더 만들기",
       "add_existing_page": "기존 페이지 추가",
       "edit_collection": "컬렉션 편집",
       "collection_options": "컬렉션 옵션",

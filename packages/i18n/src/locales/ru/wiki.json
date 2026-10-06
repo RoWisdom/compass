@@ -40,13 +40,11 @@
     "rename_folder_modal": {
       "name_placeholder": "Имя папки"
     },
-    "header": {
+    "actions": {
       "add_page": "Добавить страницу",
       "add_folder": "Добавить папку"
     },
     "menu": {
-      "create_new_page": "Создать новую страницу",
-      "create_new_folder": "Создать новую папку",
       "add_existing_page": "Добавить существующую страницу",
       "edit_collection": "Редактировать коллекцию",
       "collection_options": "Параметры коллекции",
