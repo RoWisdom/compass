@@ -56,11 +56,13 @@ from plane.utils.markdown_storage import (
     delete_page_markdown,
     get_markdown_root,
     move_page_markdown,
+    page_markdown_path,
     write_page_markdown,
 )
 
 # Local imports
 from ..base import BaseAPIView, BaseViewSet
+from .cascade import _cascade_delete_pages, _descendant_ids
 from plane.bgtasks.page_transaction_task import page_transaction
 from plane.bgtasks.page_version_task import track_page_version
 from plane.bgtasks.recent_visited_task import recent_visited_task
@@ -154,6 +156,35 @@ def _write_page_mirror(project_id, page_id, name, ancestors, description_html):
         markdown=markdown,
         root=_project_mirror_root(project_id),
     )
+
+
+def _project_mirror_target_resolver(project_id):
+    """返回**项目侧**的镜像寻址函数，交给 ``_cascade_delete_pages`` 当 ``resolve_mirror``。
+
+    与 ``_write_page_mirror`` / ``destroy`` 的既有落盘路径逐字同源：项目名 + 项目 id +
+    祖先链 + 页面名，根是该项目的镜像根。``ancestors`` 按 ``row.parent_id`` 现算 ——
+    与 ``destroy`` 里 ``_page_ancestors(page.parent_id)`` 同一口径。
+
+    **项目名与镜像根只查一次**：它们不随行变化，而 ``_project_mirror_root`` 每次都打一条
+    SQL —— 一棵子树几十行就是几十条重复查询。
+    """
+    project_name = _project_name(project_id)
+    root = _project_mirror_root(project_id)
+
+    def resolve(row):
+        return (
+            page_markdown_path(
+                project_name=project_name,
+                project_id=str(project_id),
+                ancestors=_page_ancestors(row.parent_id),
+                name=row.name,
+                page_id=str(row.id),
+                root=root,
+            ),
+            root,
+        )
+
+    return resolve
 
 
 class PageViewSet(BaseViewSet):
@@ -304,10 +335,9 @@ class PageViewSet(BaseViewSet):
             #      `target_parent.id == page.id or target_parent.id in set(descendant_ids(root=page))`
             #      —— 直接复用 `_descendant_ids`，不自己写遍历（它自带 `seen` 集与深度封顶）。
             #
-            # 局部导入：`collection.py` 在模块层 `from .base import _page_ancestors`，
-            # 所以本文件在模块层反向导入它必然成环。级联与子树遍历只有**一份**实现
-            # （Task 4 会把它们搬到 `cascade.py`，那时这个局部导入改成模块层导入）。
-            from .collection import _descendant_ids
+            # 子树遍历与级联只有**一份**实现，住在 `cascade.py`：`collection.py` 在模块层
+            # `from .base import _page_ancestors`，本文件在模块层反向导入它必然成环，所以
+            # 两边都从谁都不依赖的 `cascade.py` 取。
 
             parent = request.data.get("parent", None)
             if parent:
