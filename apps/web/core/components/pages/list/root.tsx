@@ -6,13 +6,14 @@
 
 import { useMemo, useState } from "react";
 import { observer } from "mobx-react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { FileOutput } from "lucide-react";
 // types
 import type { TPageNavigationTabs } from "@plane/types";
 // plane imports
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
+import { EmptyStateDetailed } from "@plane/propel/empty-state";
 import type { TContextMenuItem } from "@plane/ui";
 // components
 import { ListLayout } from "@/components/core/list";
@@ -32,10 +33,12 @@ import { PageListBlock } from "./block";
 type TPagesListRoot = {
   pageType: TPageNavigationTabs;
   storeType: EPageStoreType.PROJECT;
+  /** 当前下钻的文件夹 id（来自 `?folder=`）。`null` = 根视图。 */
+  folderId?: string | null;
 };
 
 export const PagesListRoot = observer(function PagesListRoot(props: TPagesListRoot) {
-  const { pageType, storeType } = props;
+  const { pageType, storeType, folderId } = props;
   // router
   const { workspaceSlug, projectId } = useParams();
   // plane hooks
@@ -54,20 +57,38 @@ export const PagesListRoot = observer(function PagesListRoot(props: TPagesListRo
   // derived values
   const filteredPageIds = getCurrentProjectFilteredPageIdsByTab(pageType);
 
+  /** `?folder=` 指向的真的是个文件夹才认；否则（不存在/已删/手改 URL）退回根视图。 */
+  const activeFolderId = folderId && getPageNodeType(folderId) === PAGE_NODE_TYPE_FOLDER ? folderId : null;
+
+  /**
+   * 下钻时只留**这个文件夹的直接子节点**（`pageParentIds[id] === activeFolderId`）。
+   * 父 id 不在集合里 ⇒ `buildWikiTreeLines` 把它们当根渲（R-2 兜底），depth 全为 0，
+   * 缩进自然归零；又因为它们是**兄弟**，`idsWithChildren` 算出来是空集，
+   * 所以下钻视图里**没有折叠箭头** —— 无需额外代码。
+   */
+  const scopedPageIds = useMemo(
+    () =>
+      activeFolderId
+        ? (filteredPageIds ?? []).filter((id) => (pageParentIds[id] ?? null) === activeFolderId)
+        : filteredPageIds,
+    [activeFolderId, filteredPageIds, pageParentIds]
+  );
+
   /**
    * 把当前筛选后的 id 排成树，只为拿**层深与祖先链**（设计 §4.7）。
    * 同一套算法（`buildWikiTreeLines`），不引入第二套层级算法。
    *
-   * 喂的是 `filteredPageIds`（已按 tab/搜索/排序过滤）—— 名次因此保持列表自己的
-   * 排序，只是子行紧跟到父行后面。父行被滤掉时子行按根渲染（设计 R-2 兜底）。
+   * 喂的是 `scopedPageIds`（已按 tab/搜索/排序过滤，下钻时再收窄到直接子节点）——
+   * 名次因此保持列表自己的排序，只是子行紧跟到父行后面。父行被滤掉时子行按根渲染
+   * （设计 R-2 兜底）。
    */
   const treeLines = useMemo(
     () =>
       buildWikiTreeLines({
-        pageIds: filteredPageIds ?? [],
+        pageIds: scopedPageIds ?? [],
         getParentId: (pageId) => pageParentIds[pageId] ?? null,
       }),
-    [filteredPageIds, pageParentIds]
+    [scopedPageIds, pageParentIds]
   );
 
   const expandedSet = useMemo(() => new Set(expandedPageIds), [expandedPageIds]);
@@ -75,19 +96,19 @@ export const PagesListRoot = observer(function PagesListRoot(props: TPagesListRo
   /**
    * 有**当前可见**子项的行 —— 只有它们渲染折叠箭头。
    *
-   * 判据走 `filteredPageIds` 而不是 `pageParentIds` 的全部值：一个子项全被筛掉的
+   * 判据走 `scopedPageIds` 而不是 `pageParentIds` 的全部值：一个子项全被筛掉的
    * 文件夹不该给箭头（点开什么都没有）。父页自己被筛掉时，子行按根渲染（R-2），
    * 所以这里也不会给它箭头 —— 两边一致。
    */
   const idsWithChildren = useMemo(() => {
-    const visible = new Set(filteredPageIds ?? []);
+    const visible = new Set(scopedPageIds ?? []);
     const parents = new Set<string>();
     for (const id of visible) {
       const parentId = pageParentIds[id];
       if (parentId && visible.has(parentId)) parents.add(parentId);
     }
     return parents;
-  }, [filteredPageIds, pageParentIds]);
+  }, [scopedPageIds, pageParentIds]);
 
   /**
    * 行菜单里的动作（改名 / 移动 / 删除）都是**写**。`[ADMIN, MEMBER]` 是
@@ -106,6 +127,19 @@ export const PagesListRoot = observer(function PagesListRoot(props: TPagesListRo
     setExpandedPageIds((current) =>
       current.includes(pageId) ? current.filter((id) => id !== pageId) : [...current, pageId]
     );
+
+  const searchParams = useSearchParams();
+
+  /**
+   * 造下钻链接：**保留当前 URL 的全部 query**（尤其 `?type=`），只覆盖 `folder`。
+   * 不手写 `?type=${pageType}` —— 那会把「没有 type 参数的 public」写成 `type=public`，
+   * 与用户在地址栏看到的不一致。
+   */
+  const buildFolderLink = (folderPageId: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("folder", folderPageId);
+    return `/${workspaceSlug}/projects/${projectId}/pages/?${params.toString()}`;
+  };
 
   /** 动作落库后重拉整棵树。**不 await、吞掉错误** —— 动作这时已经落库。 */
   const refreshTree = () => {
@@ -139,6 +173,14 @@ export const PagesListRoot = observer(function PagesListRoot(props: TPagesListRo
   ];
 
   if (!filteredPageIds) return <></>;
+
+  // 下钻到一个**可见子节点为空**的文件夹 —— 给空态，而不是一片空白。
+  // 只给标题、不给 description：`wiki_collections.list.no_pages_description` 的字面
+  // 是「This collection doesn't have any pages right now.」—— 在项目文件夹语境里
+  // 名词是错的；而新增一条文案要在 19 个语言文件里同加。标题键本身名词中立。
+  if (activeFolderId && (scopedPageIds ?? []).length === 0)
+    return <EmptyStateDetailed assetKey="page" title={t("wiki_collections.list.no_pages_title")} />;
+
   return (
     <>
       <ListLayout>
@@ -155,6 +197,7 @@ export const PagesListRoot = observer(function PagesListRoot(props: TPagesListRo
                 {isFolderRow ? (
                   <ProjectFolderListRow
                     pageId={line.pageId}
+                    itemLink={buildFolderLink(line.pageId)}
                     isExpanded={expandedSet.has(line.pageId)}
                     hasChildren={idsWithChildren.has(line.pageId)}
                     onToggle={() => handleToggle(line.pageId)}

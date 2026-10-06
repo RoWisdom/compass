@@ -6,7 +6,6 @@
 
 import { useRef } from "react";
 import { observer } from "mobx-react";
-import { useParams } from "next/navigation";
 import { ChevronRightIcon, Folder } from "lucide-react";
 // plane imports
 import { cn, getPageName } from "@plane/utils";
@@ -20,6 +19,8 @@ import { EPageStoreType, usePage } from "@/hooks/store";
 
 type Props = {
   pageId: string;
+  /** 点这一行去哪（由 `PagesListRoot` 造 —— 它才知道当前的 `?type=`）。 */
+  itemLink: string;
   /** 这一行现在是不是展开的（展开集里有它）。 */
   isExpanded: boolean;
   /**
@@ -44,17 +45,16 @@ type Props = {
 /**
  * 项目 Pages 列表里的一行**文件夹**（罗盘 Round J）。
  *
- * 与 wiki 的 `folder-list-row.tsx` **不能共用**：那一行是**链接**（点进
- * `?folder=<id>` 那个下钻视图），项目侧没有这个落点 —— 项目的列表只有一层。
- * 所以这里 `disableLink`，整行不可导航，只有箭头可点。
+ * 与 wiki 的 `folder-list-row.tsx` **不能共用**：那一行的落点写死在自己的文件里
+ * （wiki 的 `?folder=<id>` 下钻视图），而项目侧要先知道当前的 `?type=` 才能把链接
+ * 造对 —— 所以链接当 **prop** 收进来，由 `PagesListRoot` 造。**两条路并存**：
+ * 点行主体**下钻**（`itemLink`），点箭头**原地展开/收起**（`quickActionElement`）。
  *
  * 与 `PageListBlock` 共用底层原语（`ListItem`），所以行高/悬停/边框与同列表里的
  * 页面行一致；图标用 `Folder`，与 wiki 侧同一个图标（裁定 A「同一棵树」的同源要求）。
  */
 export const ProjectFolderListRow = observer(function ProjectFolderListRow(props: Props) {
-  const { pageId, isExpanded, hasChildren, onToggle, canWrite, onChanged } = props;
-  // router
-  const { workspaceSlug, projectId } = useParams();
+  const { pageId, itemLink, isExpanded, hasChildren, onToggle, canWrite, onChanged } = props;
   // refs —— 与 `PageListBlock` 同款：`ListItem` 的 `parentRef` 是行内浮层定位用的。
   const parentRef = useRef(null);
   // hooks
@@ -67,11 +67,8 @@ export const ProjectFolderListRow = observer(function ProjectFolderListRow(props
 
   return (
     <ListItem
-      // `itemLink` 是 `ListItem` 的**必填** prop，但这一行不是链接（见组件 docblock）：
-      // `disableLink` 让 `ControlLink` 走 `disabled` 分支，渲出一个**没有 href、
-      // 没有 onClick** 的 `<a>`，点行什么都不发生。这个值因此从不参与导航。
-      itemLink={`/${workspaceSlug}/projects/${projectId}/pages/`}
-      disableLink
+      // 点行主体 → 下钻进这个文件夹（链接由 `PagesListRoot` 造，见组件 docblock）。
+      itemLink={itemLink}
       prependTitleElement={<Folder className="h-4 w-4 flex-shrink-0 text-tertiary" />}
       title={getPageName(page.name)}
       // 折叠箭头放 `quickActionElement`，**不是** `prependTitleElement`：后者渲在

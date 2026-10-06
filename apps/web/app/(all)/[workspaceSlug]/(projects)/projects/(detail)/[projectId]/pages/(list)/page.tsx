@@ -39,6 +39,7 @@ function ProjectPagesPage({ params }: Route.ComponentProps) {
   const router = useAppRouter();
   const searchParams = useSearchParams();
   const type = searchParams.get("type");
+  const folderId = searchParams.get("folder");
   const { workspaceSlug, projectId } = params;
   // theme hook
   const { resolvedTheme } = useTheme();
@@ -80,8 +81,9 @@ function ProjectPagesPage({ params }: Route.ComponentProps) {
         projectId={projectId}
         storeType={EPageStoreType.PROJECT}
         workspaceSlug={workspaceSlug}
+        folderId={folderId}
       >
-        <PagesListRoot pageType={pageType} storeType={EPageStoreType.PROJECT} />
+        <PagesListRoot pageType={pageType} storeType={EPageStoreType.PROJECT} folderId={folderId} />
       </PagesListView>
     </>
   );

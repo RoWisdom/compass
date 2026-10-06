@@ -26,8 +26,11 @@ import { EPageStoreType, usePageStore } from "@/hooks/store";
  * toast）—— 这是纯抽取，不改行为。那句 `"Error!"` / `"Page could not be created.
  * Please try again."` 是**上游写死的英文字面量**，不是 i18n 键；本轮不顺手改它
  * （改成别的键会让这三处的文案一起变，属于另一个决定）。
+ *
+ * `parentId` 用于「在文件夹里新建」：下钻进某个文件夹后，新页面挂在它下面。
+ * **不传 = 顶层**（既有行为逐字不变）。
  */
-export const useProjectPageCreate = (pageType: TPageNavigationTabs) => {
+export const useProjectPageCreate = (pageType: TPageNavigationTabs, parentId?: string | null) => {
   // router
   const router = useRouter();
   const { workspaceSlug } = useParams();
@@ -40,9 +43,12 @@ export const useProjectPageCreate = (pageType: TPageNavigationTabs) => {
   const createUntitledPage = async () => {
     setIsCreatingPage(true);
 
-    const payload: Partial<TPage> = {
+    const payload: Partial<TPage> & { parent?: string } = {
       access: pageType === "private" ? EPageAccess.PRIVATE : EPageAccess.PUBLIC,
     };
+    // 下钻进某个文件夹时，新建的页面挂在那个文件夹下。展开而不是赋 `undefined`：
+    // 与 `ProjectPageStore.createFolder` 同款（不依赖 `JSON.stringify` 丢 `undefined`）。
+    if (parentId) payload.parent = parentId;
 
     await createPage(payload)
       // oxlint-disable-next-line promise/always-return

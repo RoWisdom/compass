@@ -20,10 +20,12 @@ type TPageView = {
   projectId: string;
   storeType: EPageStoreType.PROJECT;
   workspaceSlug: string;
+  /** 当前下钻的文件夹 id（来自 `?folder=`）。`null` = 根视图。 */
+  folderId?: string | null;
 };
 
 export const PagesListView = observer(function PagesListView(props: TPageView) {
-  const { children, pageType, projectId, storeType, workspaceSlug } = props;
+  const { children, pageType, projectId, storeType, workspaceSlug, folderId } = props;
   // store hooks
   const { isAnyPageAvailable, fetchPagesList } = usePageStore(storeType);
   // fetching pages list
@@ -44,7 +46,7 @@ export const PagesListView = observer(function PagesListView(props: TPageView) {
           workspaceSlug={workspaceSlug}
         />
       )}
-      <PagesListMainContent pageType={pageType} storeType={storeType}>
+      <PagesListMainContent pageType={pageType} storeType={storeType} folderId={folderId}>
         {children}
       </PagesListMainContent>
     </div>

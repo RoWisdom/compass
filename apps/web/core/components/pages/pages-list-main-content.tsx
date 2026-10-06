@@ -22,10 +22,12 @@ type Props = {
   children: React.ReactNode;
   pageType: TPageNavigationTabs;
   storeType: EPageStoreType.PROJECT;
+  /** 当前下钻的文件夹 id（来自 `?folder=`）。`null` = 根视图。 */
+  folderId?: string | null;
 };
 
 export const PagesListMainContent = observer(function PagesListMainContent(props: Props) {
-  const { children, pageType, storeType } = props;
+  const { children, pageType, storeType, folderId } = props;
   // plane hooks
   const { t } = useTranslation();
   // store hooks
@@ -42,6 +44,9 @@ export const PagesListMainContent = observer(function PagesListMainContent(props
   );
 
   if (loader === "init-loader") return <PageLoader />;
+  // 下钻中：项目级空态在这里没有意义（判的是整个项目），交给 `PagesListRoot`
+  // 用它自己的文件夹空态处理。
+  if (folderId) return <div className="h-full w-full overflow-hidden">{children}</div>;
   // if no pages exist in the active page type
   if (!isAnyPageAvailable || pageIds?.length === 0) {
     if (!isAnyPageAvailable) {

@@ -19,6 +19,8 @@ import { useProjectPageCreate } from "@/hooks/use-project-page-create";
 
 type Props = {
   pageType: TPageNavigationTabs;
+  /** 新建的东西落在哪个文件夹下。`null` = 顶层。 */
+  parentId?: string | null;
 };
 
 /**
@@ -28,23 +30,21 @@ type Props = {
  * `＋` 里并列「新建页面 / 新建文件夹」，不另开一颗按钮、不另开一个对话框
  * （Confluence F7，本仓的既定形状）。
  *
- * 落点**固定在顶层**：本轮只做列表 header 这一个入口，没有「在某个文件夹里建」
- * 的入口（wiki 侧那一个是每行的 `＋`）。`ProjectCreateFolderModal` 的 `parentId`
- * 因此永远传 `null` —— 留着这个参数是为了不让「顶层」写死在弹窗内部（下一轮要在
- * 文件夹行上加 `＋` 时，这层不用动）。
+ * 落点由调用方给（`parentId`）—— 在根视图是顶层（不传 / `null`），下钻进某个
+ * 文件夹后就是那个文件夹。两种建法都落同一个 `parentId`。
  *
  * 建页面**直接建、直接跳**（与原来那颗「Add page」按钮逐字同行为）；建文件夹要先
  * 起名字，所以开弹窗 —— 一个空名文件夹会在用户的**真实 vault** 里造出一个以 uuid
  * 命名的目录（`_file_stem` 在名字净化成空串时回落到 id），那不能接受。
  */
 export const ProjectCreateMenu = observer(function ProjectCreateMenu(props: Props) {
-  const { pageType } = props;
+  const { pageType, parentId } = props;
   // plane hooks
   const { t } = useTranslation();
   // states
   const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
   // hooks
-  const { createUntitledPage, isCreatingPage } = useProjectPageCreate(pageType);
+  const { createUntitledPage, isCreatingPage } = useProjectPageCreate(pageType, parentId);
 
   return (
     <>
@@ -62,7 +62,7 @@ export const ProjectCreateMenu = observer(function ProjectCreateMenu(props: Prop
       </CustomMenu>
       <ProjectCreateFolderModal
         isOpen={isCreateFolderOpen}
-        parentId={null}
+        parentId={parentId ?? null}
         pageType={pageType}
         handleClose={() => setIsCreateFolderOpen(false)}
       />
