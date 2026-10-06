@@ -91,6 +91,17 @@ def _project_directory_name(project_name: Optional[str], project_id: str) -> str
     return _sanitize_name(project_name or "") or str(project_id)
 
 
+def project_directory(workspace, project) -> Path:
+    """Return the directory a project's mirrored content lives in.
+
+    This is also the "island" an AI member is confined to (design §2): the DSH
+    sandbox's write root, and the tree that is snapshotted before and after a run
+    to compute the run's artifacts. Public so ``plane.utils.agent_run`` does not
+    have to reach for the private ``_project_directory_name``.
+    """
+    return get_markdown_root(workspace) / _project_directory_name(project.name, project.id)
+
+
 def _yaml_str(value: str) -> str:
     """Quote a string so it is safe to embed as a YAML scalar."""
     return '"' + value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", " ") + '"'
