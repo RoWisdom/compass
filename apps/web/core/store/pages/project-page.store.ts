@@ -8,7 +8,7 @@ import { unset, set } from "lodash-es";
 import { makeObservable, observable, runInAction, action, reaction, computed } from "mobx";
 import { computedFn } from "mobx-utils";
 // types
-import { EUserPermissions } from "@plane/constants";
+import { EPageAccess, EUserPermissions } from "@plane/constants";
 import type { TPage, TPageFilters, TPageNavigationTabs } from "@plane/types";
 import { EUserProjectRoles } from "@plane/types";
 // helpers
@@ -105,7 +105,8 @@ export interface IProjectPageStore {
     workspaceSlug: string,
     projectId: string,
     name: string,
-    parentId: string | null
+    parentId: string | null,
+    access: EPageAccess
   ) => Promise<TPage | undefined>;
   renameFolder: (workspaceSlug: string, folderId: string, name: string) => Promise<void>;
   deleteFolder: (workspaceSlug: string, folderId: string) => Promise<void>;
@@ -448,14 +449,27 @@ export class ProjectPageStore implements IProjectPageStore {
    * 不设 `loader`：`loader` 驱动的是整个主面板的加载骨架，而建文件夹只是往树里多插
    * 一行。与 wiki 侧 `createPage` 同一条理由（调用方自己有 submitting 态）。
    *
+   * **`access` 必须由调用方给**（罗盘 Round J 修复）：不传的话后端用模型默认值
+   * （Public），而在 `?type=private` 分页下 `filterPagesByPageType("private")`
+   * 只留 `access === 1`，新建的文件夹根本不显示 —— 用户以为「点了没反应」，
+   * 空态 CTA 还在，连点会造出多个同名文件夹。取值照
+   * `use-project-page-create.ts` 的同一处映射（`pageType === "private"` ⇒ PRIVATE）。
+   *
    * 返回值**透传 service 的新节点** —— 调用方可能要拿它的 id。
    */
-  createFolder = async (workspaceSlug: string, projectId: string, name: string, parentId: string | null) => {
+  createFolder = async (
+    workspaceSlug: string,
+    projectId: string,
+    name: string,
+    parentId: string | null,
+    access: EPageAccess
+  ) => {
     let page: TPage;
     try {
       const payload: Partial<TPage> & { node_type?: TPageNodeType; parent?: string } = {
         name,
         node_type: PAGE_NODE_TYPE_FOLDER,
+        access,
       };
       // 展开而不是赋 `undefined`：语义写在纸面上，不依赖 `JSON.stringify` 丢掉
       // `undefined` 这个隐含行为（与 wiki 的 `page-form-modal.tsx` 同款）。
@@ -595,6 +609,13 @@ export class ProjectPageStore implements IProjectPageStore {
       await this.service.remove(workspaceSlug, projectId, pageId);
       runInAction(() => {
         unset(this.data, [pageId]);
+        // **旁挂索引也要一并摘**（罗盘 Round J 修复）：删一行只摘 `data` 的话，
+        // 它的 id 仍留在 `pageParentIds` / `pageNodeTypes` 里 —— `ProjectMoveToModal`
+        // 的 `allIds` 正是 `Object.keys(pageParentIds)`，于是目标列表里会多出一行
+        // **空名字、可点选**的幽灵目标（点了后端 400）。与 `deleteFolder` 同一条纪律。
+        // 同样逐个 `unset(o, [id])`：lodash 把数组当深层路径解，不能写成 `unset(o, ids)`。
+        unset(this.pageParentIds, [pageId]);
+        unset(this.pageNodeTypes, [pageId]);
         if (this.rootStore.favorite.entityMap[pageId]) this.rootStore.favorite.removeFavoriteFromStore(pageId);
       });
     } catch (error) {

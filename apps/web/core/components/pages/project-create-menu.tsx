@@ -63,6 +63,7 @@ export const ProjectCreateMenu = observer(function ProjectCreateMenu(props: Prop
       <ProjectCreateFolderModal
         isOpen={isCreateFolderOpen}
         parentId={null}
+        pageType={pageType}
         handleClose={() => setIsCreateFolderOpen(false)}
       />
     </>

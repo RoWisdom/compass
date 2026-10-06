@@ -115,22 +115,32 @@ export const ProjectMoveToModal = observer(function ProjectMoveToModal(props: Pr
             <Box className="h-4 w-4 flex-shrink-0 text-tertiary" />
             <span className="truncate">{projectName}</span>
           </button>
-          {treeLines.map((line) => (
-            <button
-              key={line.pageId}
-              type="button"
-              disabled={forbidden.has(line.pageId)}
-              onClick={() => void handleMove(line.pageId)}
-              className={`flex items-center gap-2 rounded-md py-1.5 pr-2 text-left text-13 hover:bg-layer-1 disabled:cursor-not-allowed disabled:opacity-40 ${wikiTreeIndentClass(line.depth + 1)}`}
-            >
-              {pageNodeTypes[line.pageId] === PAGE_NODE_TYPE_FOLDER ? (
-                <Folder className="h-4 w-4 flex-shrink-0 text-tertiary" />
-              ) : (
-                <PageIcon className="h-4 w-4 flex-shrink-0 text-tertiary" />
-              )}
-              <span className="truncate">{getPageById(line.pageId)?.name ?? ""}</span>
-            </button>
-          ))}
+          {/* **只把文件夹列为目标**（外加上面那行「顶层」）。
+              项目列表里非文件夹父行**没有折叠箭头**（`list/root.tsx` 的 `isFolderRow`
+              分支），所以把一个文件夹移到**页面**下面之后，它的整棵子树在列表里永久
+              看不见（`isLineHiddenByExpansion` 需要父行进 `expandedSet`，而页面行永远
+              进不去），项目侧又没有补偿视图。这与设计「只有文件夹是容器」一致。
+              **`forbidden` 仍从完整的 `treeLines` 算**（见上），别跟着这里过滤 ——
+              一个节点的祖先链可能穿过某个页面（畸形数据 / R-2 兜底），从过滤后的列表
+              算会漏掉那些后代，环就guard 不住了。`depth` 同理仍按完整树算，缩进才对。 */}
+          {treeLines
+            .filter((line) => pageNodeTypes[line.pageId] === PAGE_NODE_TYPE_FOLDER)
+            .map((line) => (
+              <button
+                key={line.pageId}
+                type="button"
+                disabled={forbidden.has(line.pageId)}
+                onClick={() => void handleMove(line.pageId)}
+                className={`flex items-center gap-2 rounded-md py-1.5 pr-2 text-left text-13 hover:bg-layer-1 disabled:cursor-not-allowed disabled:opacity-40 ${wikiTreeIndentClass(line.depth + 1)}`}
+              >
+                {pageNodeTypes[line.pageId] === PAGE_NODE_TYPE_FOLDER ? (
+                  <Folder className="h-4 w-4 flex-shrink-0 text-tertiary" />
+                ) : (
+                  <PageIcon className="h-4 w-4 flex-shrink-0 text-tertiary" />
+                )}
+                <span className="truncate">{getPageById(line.pageId)?.name ?? ""}</span>
+              </button>
+            ))}
         </div>
         <div className="flex justify-end gap-2">
           <Button variant="secondary" size="lg" onClick={handleClose}>

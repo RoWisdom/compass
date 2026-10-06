@@ -8,9 +8,11 @@ import { useEffect, useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane imports
+import { EPageAccess } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
+import type { TPageNavigationTabs } from "@plane/types";
 import { EModalWidth, Input, ModalCore } from "@plane/ui";
 // hooks
 import { EPageStoreType, usePageStore } from "@/hooks/store";
@@ -22,6 +24,12 @@ type Props = {
   isOpen: boolean;
   /** 建在谁下面。`null` = 顶层。 */
   parentId: string | null;
+  /**
+   * 当前分页 —— 决定新建文件夹的 `access`。与 `use-project-page-create.ts` 的
+   * 同一处映射：`private` 分页下建私密节点，其余建公开节点。不传的话后端用模型
+   * 默认值（Public），文件夹在私密分页里**不显示**（见 store 的 `createFolder`）。
+   */
+  pageType: TPageNavigationTabs;
   handleClose: () => void;
 };
 
@@ -41,7 +49,7 @@ type Props = {
  *      不给文件夹开第二套。
  */
 export const ProjectCreateFolderModal = observer(function ProjectCreateFolderModal(props: Props) {
-  const { isOpen, parentId, handleClose } = props;
+  const { isOpen, parentId, pageType, handleClose } = props;
   // router
   const { workspaceSlug, projectId } = useParams();
   // plane hooks
@@ -61,11 +69,16 @@ export const ProjectCreateFolderModal = observer(function ProjectCreateFolderMod
   const trimmedName = name.trim();
   const isValid = trimmedName.length > 0 && trimmedName.length <= MAX_NAME_LENGTH;
 
+  // 逐字照 `use-project-page-create.ts:44` —— 建页面那条路径已经在用这同一个映射。
+  // 不这么算的话，`?type=private` 分页下新建的文件夹是 Public，被
+  // `filterPagesByPageType("private")` 滤掉 ⇒ 静默不显示。
+  const access = pageType === "private" ? EPageAccess.PRIVATE : EPageAccess.PUBLIC;
+
   const handleSubmit = async () => {
     if (!workspaceSlug || !projectId || !isValid || isSubmitting) return;
     setIsSubmitting(true);
     try {
-      await createFolder(workspaceSlug, projectId, trimmedName, parentId);
+      await createFolder(workspaceSlug, projectId, trimmedName, parentId, access);
     } catch {
       setToast({
         type: TOAST_TYPE.ERROR,

@@ -7,13 +7,18 @@
 import { useMemo, useState } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
+import { FileOutput } from "lucide-react";
 // types
 import type { TPageNavigationTabs } from "@plane/types";
 // plane imports
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
+import type { TContextMenuItem } from "@plane/ui";
 // components
 import { ListLayout } from "@/components/core/list";
+import type { TPageActions } from "@/components/pages/dropdowns";
 import { ProjectFolderListRow } from "@/components/pages/project-folder-list-row";
+import { ProjectMoveToModal } from "@/components/pages/project-move-to-modal";
 import { buildWikiTreeLines, isLineHiddenByExpansion, wikiTreeIndentClass } from "@/components/pages/tree/page-tree";
 // plane web hooks
 import { useUserPermissions } from "@/hooks/store/user";
@@ -33,10 +38,15 @@ export const PagesListRoot = observer(function PagesListRoot(props: TPagesListRo
   const { pageType, storeType } = props;
   // router
   const { workspaceSlug, projectId } = useParams();
+  // plane hooks
+  const { t } = useTranslation();
   // states —— **展开集**（空集 = 全部收起），口径与 wiki 侧逐字相同。
   // 存展开集而不是折叠集，理由写在 `tree/page-tree.ts` 的 `isLineHiddenByExpansion`
   // 上（默认值是空集，最省事也最不会漂）。
   const [expandedPageIds, setExpandedPageIds] = useState<string[]>([]);
+  // 正在被「移动到…」的那一行的 id。`null` = 弹窗关着（与 wiki 侧同款：一个
+  // 弹窗 + 用 state 记住被点的行，而不是每行各挂一个弹窗）。
+  const [pageIdToMove, setPageIdToMove] = useState<string | null>(null);
   // store hooks
   const { getCurrentProjectFilteredPageIdsByTab, pageParentIds, getPageNodeType, fetchPagesTree } =
     usePageStore(storeType);
@@ -103,34 +113,74 @@ export const PagesListRoot = observer(function PagesListRoot(props: TPagesListRo
     fetchPagesTree(workspaceSlug, projectId).catch(() => {});
   };
 
+  /**
+   * 页面行的行内动作 —— 目前只有「移动到…」一项（罗盘 Round J 修复）。
+   *
+   * 形状逐字照 wiki 的 `wiki-list-root.tsx:146-161`（`buildRowActions`）：给每一行造一个
+   * `TContextMenuItem & { key: "move-to" }`，经由 `PageListBlock` 的 `extraActions`
+   * 传到 `PageActions`（它会把 key 追加进 `optionsOrder`，否则菜单项不会被渲染）。
+   * 弹窗在**列表 root** 上渲染**一个**，用 `pageIdToMove` 记住被点的行 —— 不是每行各挂一个。
+   *
+   * 权限：**只在 `canWrite` 时传给行菜单**（调用处 `canWrite ? … : undefined`）。
+   * 移到别处是写操作，与文件夹行的 `•••`（同一个 `canWrite`）用**同一道门** ——
+   * 不跟着收窄就会让 GUEST 看见一个点下去必然 403 的项。同样用**隐藏**表达，
+   * 而不是渲染成 disabled。
+   *
+   * **只给页面行**：文件夹行已经有自己的 `•••`（`ProjectFolderListRow`），不要动它们。
+   */
+  const buildRowActions = (pageId: string): (TContextMenuItem & { key: TPageActions })[] => [
+    {
+      key: "move-to",
+      action: () => setPageIdToMove(pageId),
+      // 零新增键：复用 wiki 那一项（也是 `ProjectMoveToModal` 标题用的那个键）。
+      title: t("wiki_collections.menu.move_to"),
+      icon: FileOutput,
+    },
+  ];
+
   if (!filteredPageIds) return <></>;
   return (
-    <ListLayout>
-      {treeLines
-        .filter((line) => !isLineHiddenByExpansion(line, expandedSet))
-        .map((line) => {
-          // 类型从 store 的**旁挂索引**拿（不进 `BasePage`，理由见 `services/page`）。
-          // 取不到 ⇒ 按页面渲染，那正是今天的既有行为（MobX 一变就自愈）。
-          const isFolderRow = getPageNodeType(line.pageId) === PAGE_NODE_TYPE_FOLDER;
-          return (
-            // 缩进加在**外层 div** 上，不改共享的 `PageListBlock` —— 那个组件是
-            // 「一个 Page」，它没有也不该有「层级」这个概念（与 wiki 同款）。
-            <div key={line.pageId} className={wikiTreeIndentClass(line.depth)}>
-              {isFolderRow ? (
-                <ProjectFolderListRow
-                  pageId={line.pageId}
-                  isExpanded={expandedSet.has(line.pageId)}
-                  hasChildren={idsWithChildren.has(line.pageId)}
-                  onToggle={() => handleToggle(line.pageId)}
-                  canWrite={canWrite}
-                  onChanged={refreshTree}
-                />
-              ) : (
-                <PageListBlock pageId={line.pageId} storeType={storeType} />
-              )}
-            </div>
-          );
-        })}
-    </ListLayout>
+    <>
+      <ListLayout>
+        {treeLines
+          .filter((line) => !isLineHiddenByExpansion(line, expandedSet))
+          .map((line) => {
+            // 类型从 store 的**旁挂索引**拿（不进 `BasePage`，理由见 `services/page`）。
+            // 取不到 ⇒ 按页面渲染，那正是今天的既有行为（MobX 一变就自愈）。
+            const isFolderRow = getPageNodeType(line.pageId) === PAGE_NODE_TYPE_FOLDER;
+            return (
+              // 缩进加在**外层 div** 上，不改共享的 `PageListBlock` —— 那个组件是
+              // 「一个 Page」，它没有也不该有「层级」这个概念（与 wiki 同款）。
+              <div key={line.pageId} className={wikiTreeIndentClass(line.depth)}>
+                {isFolderRow ? (
+                  <ProjectFolderListRow
+                    pageId={line.pageId}
+                    isExpanded={expandedSet.has(line.pageId)}
+                    hasChildren={idsWithChildren.has(line.pageId)}
+                    onToggle={() => handleToggle(line.pageId)}
+                    canWrite={canWrite}
+                    onChanged={refreshTree}
+                  />
+                ) : (
+                  <PageListBlock
+                    pageId={line.pageId}
+                    storeType={storeType}
+                    extraActions={canWrite ? buildRowActions(line.pageId) : undefined}
+                  />
+                )}
+              </div>
+            );
+          })}
+      </ListLayout>
+      {/* 整棵列表共用一个弹窗。`pageId` 传被点的那一行的 id；`ProjectPageStore.moveTo`
+          对任何 page id 都成立（它只是发 `{ parent }`）。落库后重拉整棵树 —— 复用
+          文件夹行 `onChanged` 用的同一个 `refreshTree`。 */}
+      <ProjectMoveToModal
+        isOpen={!!pageIdToMove}
+        pageId={pageIdToMove}
+        onMoved={refreshTree}
+        handleClose={() => setPageIdToMove(null)}
+      />
+    </>
   );
 });
