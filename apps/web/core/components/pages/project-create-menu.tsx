@@ -50,7 +50,7 @@ export const ProjectCreateMenu = observer(function ProjectCreateMenu(props: Prop
     <>
       <CustomMenu
         customButton={<IconButton icon={Plus} variant="ghost" size="lg" loading={isCreatingPage} />}
-        ariaLabel={t("common.add_new")}
+        ariaLabel={t("add_new")}
         closeOnSelect
       >
         <CustomMenu.MenuItem onClick={() => void createUntitledPage()}>

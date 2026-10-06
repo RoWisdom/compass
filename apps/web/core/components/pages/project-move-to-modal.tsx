@@ -92,7 +92,7 @@ export const ProjectMoveToModal = observer(function ProjectMoveToModal(props: Pr
       // 复用现成键（「无法移动页面。请重试。」）—— 与 wiki 的同一处同款，不新增文案。
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: t("common.toast.error"),
+        title: t("toast.error"),
         message: t("wiki_collections.add_existing_page_modal.error_message"),
       });
       return;

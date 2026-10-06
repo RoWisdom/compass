@@ -69,7 +69,7 @@ export const ProjectCreateFolderModal = observer(function ProjectCreateFolderMod
     } catch {
       setToast({
         type: TOAST_TYPE.ERROR,
-        title: t("common.toast.error"),
+        title: t("toast.error"),
         message: t("wiki_collections.toasts.create_folder_error"),
       });
       setIsSubmitting(false);
@@ -82,7 +82,7 @@ export const ProjectCreateFolderModal = observer(function ProjectCreateFolderMod
   return (
     <ModalCore isOpen={isOpen} handleClose={handleClose} width={EModalWidth.LG}>
       <div className="flex flex-col gap-4 p-5">
-        <h3 className="text-16 font-medium">{t("common.new_folder")}</h3>
+        <h3 className="text-16 font-medium">{t("new_folder")}</h3>
         <Input
           value={name}
           onChange={(event) => setName(event.target.value)}
@@ -94,7 +94,7 @@ export const ProjectCreateFolderModal = observer(function ProjectCreateFolderMod
             {t("common.cancel")}
           </Button>
           <Button variant="primary" size="lg" onClick={handleSubmit} loading={isSubmitting} disabled={!isValid}>
-            {t("common.create_folder")}
+            {t("create_folder")}
           </Button>
         </div>
       </div>
