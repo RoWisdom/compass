@@ -568,3 +568,16 @@ if ENABLE_DRF_SPECTACULAR:
     REST_FRAMEWORK["DEFAULT_SCHEMA_CLASS"] = "drf_spectacular.openapi.AutoSchema"
     INSTALLED_APPS.append("drf_spectacular")
     from .openapi import SPECTACULAR_SETTINGS  # noqa: F401
+
+# ---------------------------------------------------------------------------
+# Compass: AI members
+# ---------------------------------------------------------------------------
+# The `dsh` binary is on the PATH of whoever starts the Celery worker, but the
+# worker's PATH is whatever the launching shell had — so let it be overridden from
+# .env instead of assuming an nvm path.
+DSH_BINARY = os.environ.get("DSH_BINARY") or "dsh"
+# The DSH profile the members run under — see the plan's Task 1.
+DSH_PROFILE = os.environ.get("DSH_PROFILE") or "compass-ai"
+# One headless call's wall-clock ceiling. A stuck model must not pin a worker slot
+# forever; the run is marked failed and the user is told (design §3 「收尾与失败」).
+DSH_RUN_TIMEOUT_SECONDS = int(os.environ.get("DSH_RUN_TIMEOUT_SECONDS") or 1800)
