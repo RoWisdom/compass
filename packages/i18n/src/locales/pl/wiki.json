@@ -41,7 +41,8 @@
       "name_placeholder": "Nazwa folderu"
     },
     "header": {
-      "add_page": "Dodaj stronę"
+      "add_page": "Dodaj stronę",
+      "add_folder": "Dodaj folder"
     },
     "menu": {
       "create_new_page": "Utwórz nową stronę",

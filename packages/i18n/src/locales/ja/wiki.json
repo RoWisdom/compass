@@ -41,7 +41,8 @@
       "name_placeholder": "フォルダー名"
     },
     "header": {
-      "add_page": "ページを追加"
+      "add_page": "ページを追加",
+      "add_folder": "フォルダを追加"
     },
     "menu": {
       "create_new_page": "新しいページを作成",

@@ -41,7 +41,8 @@
       "name_placeholder": "Název složky"
     },
     "header": {
-      "add_page": "Přidat stránku"
+      "add_page": "Přidat stránku",
+      "add_folder": "Přidat složku"
     },
     "menu": {
       "create_new_page": "Vytvořit novou stránku",

@@ -41,7 +41,8 @@
       "name_placeholder": "폴더 이름"
     },
     "header": {
-      "add_page": "페이지 추가"
+      "add_page": "페이지 추가",
+      "add_folder": "폴더 추가"
     },
     "menu": {
       "create_new_page": "새 페이지 만들기",

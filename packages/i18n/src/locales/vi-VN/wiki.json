@@ -41,7 +41,8 @@
       "name_placeholder": "Tên thư mục"
     },
     "header": {
-      "add_page": "Thêm trang"
+      "add_page": "Thêm trang",
+      "add_folder": "Thêm thư mục"
     },
     "menu": {
       "create_new_page": "Tạo trang mới",

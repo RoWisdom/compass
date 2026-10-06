@@ -41,7 +41,8 @@
       "name_placeholder": "Nome da pasta"
     },
     "header": {
-      "add_page": "Adicionar página"
+      "add_page": "Adicionar página",
+      "add_folder": "Adicionar pasta"
     },
     "menu": {
       "create_new_page": "Criar nova página",

@@ -41,7 +41,8 @@
       "name_placeholder": "文件夹名称"
     },
     "header": {
-      "add_page": "添加页面"
+      "add_page": "添加页面",
+      "add_folder": "添加文件夹"
     },
     "menu": {
       "create_new_page": "创建新页面",

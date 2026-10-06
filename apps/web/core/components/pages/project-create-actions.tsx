@@ -22,7 +22,7 @@ type Props = {
 };
 
 /**
- * 项目 Pages 列表的新建入口：**两颗直给的按钮** —— 「创建新页面」「新建文件夹」。
+ * 项目 Pages 列表的新建入口：**两颗直给的按钮** —— 「添加页面」「添加文件夹」。
  *
  * **没有下拉菜单**（用户裁定 2026-10-06，第三次浏览器验收）。此前这一处是一个
  * `＋` 打开菜单、菜单里再列这两项，菜单里那层点击被用户判为多余的一级
@@ -35,9 +35,16 @@ type Props = {
  * 同款。**顺带**：不再有 `CustomMenu`，就没有了「按钮套按钮」那个 HTML 非法结构
  * （`CustomMenu` 会给 `customButton` 再包一层 `<button>`）。
  *
- * 文案复用 `wiki_collections.menu.*` 两个现成的键（19 个 locale 都有，零新增键）。
- * **注意那对文案本身不齐**：zh-CN 是「创建新页面」对「新建文件夹」（上游的措辞漂移）。
- * 要对齐得改 19 个语言文件，本轮不碰。
+ * 文案「添加页面」「添加文件夹」（用户裁定 2026-10-06，第四次浏览器验收）。**不再复用
+ * `wiki_collections.menu.*`** —— 那对键是「创建新页面」对「新建文件夹」，措辞本身不齐
+ * （上游的漂移），用户这次直接把两颗都点成了「添加…」。
+ *
+ * 改读 `wiki_collections.header.*`：`add_page` 是现成的（19 个 locale 都有，wiki 顶栏
+ * 那颗按钮读的就是它）；`add_folder` 是本轮**新增**的兄弟键 —— 「添加文件夹」这个说法
+ * 全库原本一个键都没有。另 17 个语言的译法不是我随手编的：各自 `add_page` 里的「添加」
+ * 动词 + 各自 `create_new_folder` 里的「文件夹」名词，拼起来即得（cs `Přidat složku`、
+ * de `Ordner hinzufügen`、ja `フォルダを追加`…）。代价是一个新增键要写进 19 个语言文件
+ * —— 已付，`pnpm --filter=@plane/i18n check:sync` 回到 19/19 全 100.0%（3858 键）。
  *
  * 落点由调用方给（`parentId`）—— 在根视图是顶层（不传 / `null`），下钻进某个
  * 文件夹后就是那个文件夹。两种建法都落同一个 `parentId`。
@@ -62,10 +69,10 @@ export const ProjectCreateActions = observer(function ProjectCreateActions(props
   return (
     <>
       <Button variant="primary" size="lg" onClick={() => void createUntitledPage()} disabled={isCreatingPage}>
-        {t("wiki_collections.menu.create_new_page")}
+        {t("wiki_collections.header.add_page")}
       </Button>
       <Button variant="secondary" size="lg" onClick={() => setIsCreateFolderOpen(true)} disabled={isCreatingPage}>
-        {t("wiki_collections.menu.create_new_folder")}
+        {t("wiki_collections.header.add_folder")}
       </Button>
       <ProjectCreateFolderModal
         isOpen={isCreateFolderOpen}

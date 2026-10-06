@@ -41,7 +41,8 @@
       "name_placeholder": "Nome della cartella"
     },
     "header": {
-      "add_page": "Aggiungi pagina"
+      "add_page": "Aggiungi pagina",
+      "add_folder": "Aggiungi cartella"
     },
     "menu": {
       "create_new_page": "Crea nuova pagina",

@@ -41,7 +41,8 @@
       "name_placeholder": "Numele folderului"
     },
     "header": {
-      "add_page": "Adaugă o pagină"
+      "add_page": "Adaugă o pagină",
+      "add_folder": "Adaugă un folder"
     },
     "menu": {
       "create_new_page": "Creează o pagină nouă",

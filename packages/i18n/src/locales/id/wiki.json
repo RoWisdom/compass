@@ -41,7 +41,8 @@
       "name_placeholder": "Nama folder"
     },
     "header": {
-      "add_page": "Tambah halaman"
+      "add_page": "Tambah halaman",
+      "add_folder": "Tambah folder"
     },
     "menu": {
       "create_new_page": "Buat halaman baru",

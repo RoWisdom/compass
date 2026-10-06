@@ -41,7 +41,8 @@
       "name_placeholder": "Názov priečinka"
     },
     "header": {
-      "add_page": "Pridať stránku"
+      "add_page": "Pridať stránku",
+      "add_folder": "Pridať priečinok"
     },
     "menu": {
       "create_new_page": "Vytvoriť novú stránku",

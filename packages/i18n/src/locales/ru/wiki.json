@@ -41,7 +41,8 @@
       "name_placeholder": "Имя папки"
     },
     "header": {
-      "add_page": "Добавить страницу"
+      "add_page": "Добавить страницу",
+      "add_folder": "Добавить папку"
     },
     "menu": {
       "create_new_page": "Создать новую страницу",

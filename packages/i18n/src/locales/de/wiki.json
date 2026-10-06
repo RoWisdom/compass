@@ -41,7 +41,8 @@
       "name_placeholder": "Ordnername"
     },
     "header": {
-      "add_page": "Seite hinzufügen"
+      "add_page": "Seite hinzufügen",
+      "add_folder": "Ordner hinzufügen"
     },
     "menu": {
       "create_new_page": "Neue Seite erstellen",
