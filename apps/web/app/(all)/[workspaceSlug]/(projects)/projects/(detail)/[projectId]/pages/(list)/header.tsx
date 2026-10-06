@@ -51,6 +51,21 @@ export const PagesListHeader = observer(function PagesListHeader() {
     return chain;
   }, [activeFolderId, pageParentIds]);
 
+  /**
+   * 造面包屑链接：**保留当前 URL 的其余 query**（尤其 `?type=`），只改 `folder`。
+   *
+   * 不手写 `?folder=${id}` —— 那样在 `?type=private` 分页下钻进去后，点面包屑回根
+   * 会掉回 public 分页，与列表里 `PagesListRoot.buildFolderLink` 的口径也不一致
+   * （那个保留全部 query）。`null` = 回根，同时**摘掉** `folder`。
+   */
+  const buildPagesHref = (folderPageId: string | null) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (folderPageId) params.set("folder", folderPageId);
+    else params.delete("folder");
+    const query = params.toString();
+    return `/${workspaceSlug}/projects/${currentProjectDetails?.id}/pages/${query ? `?${query}` : ""}`;
+  };
+
   return (
     <Header>
       <Header.LeftItem>
@@ -60,7 +75,7 @@ export const PagesListHeader = observer(function PagesListHeader() {
             component={
               <BreadcrumbLink
                 label="Pages"
-                href={`/${workspaceSlug}/projects/${currentProjectDetails?.id}/pages/`}
+                href={buildPagesHref(null)}
                 icon={<PageIcon className="h-4 w-4 text-tertiary" />}
                 isLast={!activeFolderId}
               />
@@ -75,7 +90,7 @@ export const PagesListHeader = observer(function PagesListHeader() {
                 component={
                   <BreadcrumbLink
                     label={getPageName(getPageById(id)?.name)}
-                    href={`/${workspaceSlug}/projects/${currentProjectDetails?.id}/pages/?folder=${id}`}
+                    href={buildPagesHref(id)}
                     isLast={isCurrent}
                   />
                 }
