@@ -34,9 +34,12 @@ type Props = {
  * **样式用 `customButtonClassName={getButtonStyling(...)}` 而不是把 `<Button>` 塞进
  * `customButton`**：`CustomMenu` 拿到 `customButton` 时会**自己再包一层 `<button>`**
  * （`ui/src/dropdowns/custom-menu.tsx:249-262`），塞真按钮进去就是「按钮套按钮」、
- * HTML 非法（本仓有 10 处这么写，都是从上游抄的，本轮只修这一处）。把样式挂在
- * 它自己那颗 `<button>` 上，页面里就只有**一颗**按钮。这也是仓库既有的手法
- * （`rich-filters/add-filters/button.tsx:71`）。
+ * HTML 非法 —— 本仓 `customButton={<IconButton .../>}` **正好 10 处**踩这个坑
+ * （都从上游抄的，本轮只修这一处；`customButton` 传非按钮元素、样式走
+ * `customButtonClassName` 的也有，所以别拿 `customButton={<` 的总数当这个数）。
+ * 把样式挂在它自己那颗 `<button>` 上，页面里就只有**一颗**按钮 —— 这也是仓库既有的
+ * 手法：`rich-filters/add-filters/button.tsx:71` 把 `getButtonStyling(...)` 交给
+ * `AddFilterDropdown` 的 `customButtonClassName`，`customButton` 只传一个 `<div>`。
  *
  * 文案复用 `common.add_new`（「添加新的」/ "Add new"，19 个 locale 都有）—— 菜单里
  * 是两件事，所以**不能**沿用 `header.add_page`（那会把「能建文件夹」藏起来）；
