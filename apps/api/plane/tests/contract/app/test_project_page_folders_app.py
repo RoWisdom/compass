@@ -186,8 +186,13 @@ class TestCreatingAFolder:
     def test_a_folder_writes_no_mirror_file(self, session_client, workspace, project, tree, isolate_markdown_mirror):
         """**不是**「镜像会失败」—— 是对一个没有正文的节点跑一遍 markdown 落盘，
         会在用户的**真实笔记库**里凭空生出一个 `<文件夹名>.md` 空文件（设计 §4.3）。"""
-        session_client.post(_list_url(workspace, project), {"name": "不落盘", "node_type": "folder"}, format="json")
+        response = session_client.post(
+            _list_url(workspace, project), {"name": "不落盘", "node_type": "folder"}, format="json"
+        )
 
+        # 正向锚：先钉住建库这一步真的成功了，否则「没写镜像」可能只是因为
+        # 请求根本 400 了 —— 那样这个测试对回归毫无约束力。
+        assert response.status_code == status.HTTP_201_CREATED
         assert not list(r for r in isolate_markdown_mirror.rglob("*.md")), "文件夹不得写镜像"
 
     @pytest.mark.django_db
@@ -199,7 +204,10 @@ class TestCreatingAFolder:
         )
 
         assert response.status_code == status.HTTP_201_CREATED
-        assert Page.objects.get(pk=response.data["id"]).parent_id == tree["a"].id
+        created = Page.objects.get(pk=response.data["id"])
+        # 正向锚：只断言 parent_id 的话，实现回退成「新建一个页面」它也会过。
+        assert created.node_type == Page.NODE_TYPE_FOLDER
+        assert created.parent_id == tree["a"].id
 
     @pytest.mark.django_db
     def test_a_plain_page_still_defaults_to_doc(self, session_client, workspace, project, tree, no_broker):
