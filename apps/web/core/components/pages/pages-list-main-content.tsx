@@ -17,6 +17,8 @@ import { useUserPermissions } from "@/hooks/store/user";
 // plane web hooks
 import { EPageStoreType, usePageStore } from "@/hooks/store";
 import { useProjectPageCreate } from "@/hooks/use-project-page-create";
+// services
+import { PAGE_NODE_TYPE_FOLDER } from "@/services/page";
 
 type Props = {
   children: React.ReactNode;
@@ -31,8 +33,13 @@ export const PagesListMainContent = observer(function PagesListMainContent(props
   // plane hooks
   const { t } = useTranslation();
   // store hooks
-  const { isAnyPageAvailable, getCurrentProjectFilteredPageIdsByTab, getCurrentProjectPageIdsByTab, loader } =
-    usePageStore(storeType);
+  const {
+    isAnyPageAvailable,
+    getCurrentProjectFilteredPageIdsByTab,
+    getCurrentProjectPageIdsByTab,
+    loader,
+    getPageNodeType,
+  } = usePageStore(storeType);
   const { allowPermissions } = useUserPermissions();
   const { createUntitledPage, isCreatingPage } = useProjectPageCreate(pageType);
   // derived values
@@ -46,7 +53,13 @@ export const PagesListMainContent = observer(function PagesListMainContent(props
   if (loader === "init-loader") return <PageLoader />;
   // 下钻中：项目级空态在这里没有意义（判的是整个项目），交给 `PagesListRoot`
   // 用它自己的文件夹空态处理。
-  if (folderId) return <div className="h-full w-full overflow-hidden">{children}</div>;
+  //
+  // 判据必须与 `PagesListRoot` 的 `activeFolderId` **逐字同款**（真的指向一个文件夹），
+  // 不能只看 `folderId` 真假：一个失效的 `?folder=`（书签里的文件夹已被删 / 手改成
+  // 一个页面 id）在那里会退回根视图，这里若先放行，就会让「根视图 + 项目级空态」
+  // 只剩一块空白面板。
+  if (folderId && getPageNodeType(folderId) === PAGE_NODE_TYPE_FOLDER)
+    return <div className="h-full w-full overflow-hidden">{children}</div>;
   // if no pages exist in the active page type
   if (!isAnyPageAvailable || pageIds?.length === 0) {
     if (!isAnyPageAvailable) {

@@ -5,6 +5,7 @@
  */
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 // types
 import type { TPageNavigationTabs } from "@plane/types";
 // helpers
@@ -34,9 +35,21 @@ const pageTabs: { key: TPageNavigationTabs; label: string }[] = [
 
 export function PageTabNavigation(props: TPageTabNavigation) {
   const { workspaceSlug, projectId, pageType } = props;
+  const searchParams = useSearchParams();
 
   const handleTabClick = (e: React.MouseEvent<HTMLAnchorElement>, tabKey: TPageNavigationTabs) => {
     if (tabKey === pageType) e.preventDefault();
+  };
+
+  /**
+   * 保留当前 URL 的其余 query（尤其 `?folder=`）—— tab 是一个**作用域**，
+   * 与同一个 header 里的搜索 / 筛选 / 排序（都活在 store 里、下钻后自然保留）同级。
+   * 硬编码 `?type=` 会在下钻中切 tab 时把 `folder` 摘掉，静默把人踢回根视图。
+   */
+  const buildTabHref = (tabKey: TPageNavigationTabs) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("type", tabKey);
+    return `/${workspaceSlug}/projects/${projectId}/pages?${params.toString()}`;
   };
 
   return (
@@ -44,7 +57,7 @@ export function PageTabNavigation(props: TPageTabNavigation) {
       {pageTabs.map((tab) => (
         <Link
           key={tab.key}
-          href={`/${workspaceSlug}/projects/${projectId}/pages?type=${tab.key}`}
+          href={buildTabHref(tab.key)}
           onClick={(e) => handleTabClick(e, tab.key)}
           className="flex h-full flex-col"
         >
