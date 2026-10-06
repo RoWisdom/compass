@@ -28,6 +28,14 @@ from .integration import (
     SlackProjectSync,
     WorkspaceIntegration,
 )
+from .agent import (
+    AGENT_UNFINISHED_STATUSES,
+    AgentMember,
+    AgentRun,
+    AgentRunStatusEnum,
+    AgentRunTriggerEnum,
+    AgentTierEnum,
+)
 from .issue import (
     CommentReaction,
     Issue,

@@ -183,3 +183,74 @@ def workspace(create_user):
     WorkspaceMember.objects.create(workspace=created_workspace, member=create_user, role=20)
 
     return created_workspace
+
+
+@pytest.fixture
+def project(db, workspace, create_user):
+    """A project inside the ``workspace`` fixture, with ``create_user`` as its admin."""
+    from plane.db.models import Project, ProjectMember
+
+    created = Project.objects.create(
+        name="Test Project",
+        identifier="TPJ",
+        workspace=workspace,
+        created_by=create_user,
+    )
+    ProjectMember.objects.create(project=created, member=create_user, workspace=workspace, role=20)
+    return created
+
+
+@pytest.fixture
+def create_issue(db, workspace, project, create_user):
+    """A work item in the ``project`` fixture."""
+    from plane.db.models import Issue
+
+    return Issue.objects.create(
+        name="Test Work Item",
+        project=project,
+        workspace=workspace,
+        created_by=create_user,
+    )
+
+
+@pytest.fixture
+def create_state(db, workspace, project, create_user):
+    """A ``started`` state in the ``project`` fixture — the target the ledger tier moves to."""
+    from plane.db.models import State, StateGroup
+
+    return State.objects.create(
+        name="In Progress",
+        group=StateGroup.STARTED.value,
+        color="#F59E0B",
+        project=project,
+        workspace=workspace,
+        created_by=create_user,
+    )
+
+
+@pytest.fixture
+def bot_api_key_client(api_client, create_bot_user, workspace, project):
+    """An ``X-Api-Key`` client authenticated as a **bot** that can reach the project.
+
+    Deliberately not the existing ``api_key_client``: that one carries the
+    ``api_token`` fixture, whose holder is the human ``create_user``. The bot guard
+    keys on ``is_bot``, so its tests need a bot's token and a human's side by side —
+    this is the bot's, and the pre-existing ``api_key_client`` is the human's.
+    """
+    from plane.db.models import APIToken, ProjectMember, WorkspaceMember
+
+    WorkspaceMember.objects.get_or_create(
+        workspace=workspace, member=create_bot_user, defaults={"role": 15}
+    )
+    ProjectMember.objects.get_or_create(
+        project=project, member=create_bot_user, defaults={"workspace": workspace, "role": 15}
+    )
+    token = APIToken.objects.create(
+        user=create_bot_user,
+        user_type=1,  # Bot
+        workspace=workspace,
+        is_service=True,
+        label="bot test token",
+    )
+    api_client.credentials(HTTP_X_API_KEY=token.token)
+    return api_client
