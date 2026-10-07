@@ -78,7 +78,12 @@ class AgentDefinitionViewSet(BaseViewSet):
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         try:
-            definition = serializer.save(workspace=workspace, created_by_id=request.user.id)
+            # 套一层 atomic ⇒ 失败的 INSERT 退回**保存点**，外层事务仍可用。理由与
+            # `partial_update` 那段逐字相同：`AgentDefinition` 无 parent，`Model.save()`
+            # 走 ``mark_for_rollback_on_error``，在已有事务里它只置 ``needs_rollback``
+            # 而不回退 ⇒ 本支眼下没有后续查询所以不炸，但那是**凑巧**，两个兄弟保持一致。
+            with transaction.atomic():
+                definition = serializer.save(workspace=workspace, created_by_id=request.user.id)
         except IntegrityError:
             # 同一工作区里岗位名唯一（0129 的 unique_agent_definition_name_per_workspace）。
             # **别指望序列化器替你挡** —— DRF 确实会为这条条件唯一约束造一个

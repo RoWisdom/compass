@@ -454,11 +454,16 @@ def test_two_posts_cannot_share_a_name_in_one_workspace(session_client, workspac
     这条断言的是 **409 而不是 500** —— 序列化器的 `UniqueTogetherValidator` 因
     `workspace_id` 只读、无默认值而被 DRF 跳过，重名会一路撞到 INSERT。
     """
+    from plane.db.models import AgentDefinition
+
     url = f"/api/workspaces/{workspace.slug}/agent-definitions/"
     assert session_client.post(url, {"name": "需求分析"}, format="json").status_code == 201
     second = session_client.post(url, {"name": "需求分析"}, format="json")
     assert second.status_code == 409
     assert "需求分析" in second.json()["error"]
+    # 这句同时钉住 create 里那层 atomic（保存点）：去掉它，被 IntegrityError 染脏的
+    # 连接会让这次查询抛 TransactionManagementError，而不是 1。
+    assert AgentDefinition.objects.filter(workspace_id=workspace.id, deleted_at__isnull=True).count() == 1
 
 
 @pytest.mark.django_db
