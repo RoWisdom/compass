@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-"""项目镜像目录（= AI 成员的沙箱岛）按 **Plane 项目 id** 命名，不按项目名。
+"""项目镜像目录（= AI 成员的沙箱岛）按 **Plane 项目 identifier**（净化后）命名，
+不按项目名、也不按 UUID 主键。
 
 为什么（两条，都是真的）：
 
@@ -12,7 +13,8 @@
     不同的项目，却折进同一个目录 ⇒ 项目 A 上唤醒的 AI ``cwd`` 是那个共用目录、
     权限 ``workspace-write`` ⇒ **它读并覆盖项目 B 的镜像页面**。
   · **与用户自己的 vault 目录冲突**：镜像写进 ``2-项目/<项目名>/``，那正是用户
-    **手工命名**的项目文件夹所在的地方。id 目录不可能与手工命名的文件夹同名。
+    **手工命名**的项目文件夹所在的地方。identifier 目录不可能与手工命名的文件夹
+    同名。
 
 ``project_directory`` 的**签名不变**（``plane.bgtasks.agent_run_task`` 与
 ``tests/unit/bg_tasks/test_agent_run_task.py`` 都在按原样调它）—— 变的只是目录名。
@@ -47,13 +49,13 @@ def _project(workspace, create_user, name, identifier):
 
 
 @pytest.mark.unit
-class TestProjectDirectoryIsKeyedById:
-    def test_the_directory_is_the_project_id_not_its_name(self, workspace, create_user, tmp_path, monkeypatch):
-        """目录 = 项目 id。名字再怎么净化都不参与。"""
+class TestProjectDirectoryIsKeyedByIdentifier:
+    def test_the_directory_is_the_project_identifier_not_its_name(self, workspace, create_user, tmp_path, monkeypatch):
+        """目录 = 项目 identifier（净化后）。名字再怎么净化都不参与。"""
         monkeypatch.setenv(MARKDOWN_STORAGE_PATH_ENV, str(tmp_path / "mirror-root"))
         project = _project(workspace, create_user, "面料交易", "MIR1")
 
-        assert project_directory(workspace, project).name == str(project.id)
+        assert project_directory(workspace, project).name == "MIR1"
         assert project_directory(workspace, project).name != "面料交易"
 
     def test_two_projects_whose_names_sanitize_alike_get_different_directories(
@@ -101,11 +103,11 @@ class TestRenameProjectMirrorDirectoriesCommand:
         call_command("rename_project_mirror_directories", stdout=StringIO())
 
         assert (old / "sub" / "x.md").is_file(), "默认 dry-run 不得动盘"
-        assert not (root / str(project.id)).exists()
+        assert not (root / project.identifier).exists()
 
     def test_apply_moves_the_directory_and_is_idempotent(self, workspace, create_user, tmp_path, monkeypatch):
         root, project, old = self._seed(workspace, create_user, tmp_path, monkeypatch, "面料交易", "MOV2")
-        new = root / str(project.id)
+        new = root / project.identifier
 
         call_command("rename_project_mirror_directories", "--apply", stdout=StringIO())
 
@@ -127,7 +129,7 @@ class TestRenameProjectMirrorDirectoriesCommand:
 
         净化发生在 ``(name, workspace)`` 唯一约束**之后**，所以 ``官网/新版`` 与
         ``官网-新版`` 这两个合法项目折叠进同一个旧目录，两边的镜像交织在一起。
-        搬进任一个项目的 id 目录 = 另一个项目的页面进了它的沙箱岛 —— 正是改名要
+        搬进任一个项目的 identifier 目录 = 另一个项目的页面进了它的沙箱岛 —— 正是改名要
         消灭的越界。旧代码会把整个目录搬进先建的那个项目的 id 目录，这条测试在那时
         是**红的**。
         """
@@ -150,27 +152,27 @@ class TestRenameProjectMirrorDirectoriesCommand:
         call_command("rename_project_mirror_directories", stdout=out)
         assert out.getvalue().count("[shared]") == 2
         assert (old / "x.md").is_file(), "共用的旧目录不得被搬动"
-        assert not (root / str(slash.id)).exists()
-        assert not (root / str(dash.id)).exists()
+        assert not (root / slash.identifier).exists()
+        assert not (root / dash.identifier).exists()
 
         # --apply：仍然什么都不动 —— 这一条是本次修复的理由。旧代码会把目录搬进
-        # 先建的那个项目的 id 目录（后者的页面就此进了前者的沙箱岛）。
+        # 先建的那个项目的 identifier 目录（后者的页面就此进了前者的沙箱岛）。
         call_command("rename_project_mirror_directories", "--apply", stdout=StringIO())
         assert (old / "x.md").is_file(), "共用的旧目录不得被搬动"
-        assert not (root / str(slash.id)).exists()
-        assert not (root / str(dash.id)).exists()
+        assert not (root / slash.identifier).exists()
+        assert not (root / dash.identifier).exists()
 
     def test_a_conflicting_target_directory_refuses_to_merge(
         self, workspace, create_user, tmp_path, monkeypatch
     ):
-        """目标 id 目录**已存在**时拒绝搬，绝不合并两棵树。
+        """目标 identifier 目录**已存在**时拒绝搬，绝不合并两棵树。
 
         ``new.exists()`` 这道闸是这条命令唯一阻止「把两个项目的镜像合成一个目录」的
         地方，而它会真动用户的 vault —— 闸不该裸着。盘上同时有 ``<旧名>/x.md`` 与
-        ``<id>/y.md``（目标已存在 ⇒ 冲突）。
+        ``<identifier>/y.md``（目标已存在 ⇒ 冲突）。
         """
         root, project, old = self._seed(workspace, create_user, tmp_path, monkeypatch, "面料交易", "CFL1")
-        new = root / str(project.id)
+        new = root / project.identifier
         new.mkdir(parents=True)
         (new / "y.md").write_text("另一棵树", encoding="utf-8")
 
@@ -179,12 +181,12 @@ class TestRenameProjectMirrorDirectoriesCommand:
         call_command("rename_project_mirror_directories", stdout=out)
         assert "[conflict]" in out.getvalue()
         assert (old / "sub" / "x.md").is_file(), "旧名目录不得被搬走"
-        assert (new / "y.md").is_file(), "已存在的 id 目录不得被动"
+        assert (new / "y.md").is_file(), "已存在的 identifier 目录不得被动"
 
         # --apply：仍然什么都不动 —— 不搬、不合并。
         call_command("rename_project_mirror_directories", "--apply", stdout=StringIO())
         assert (old / "sub" / "x.md").is_file(), "旧名目录不得被搬走"
-        assert (new / "y.md").is_file(), "已存在的 id 目录不得被动"
+        assert (new / "y.md").is_file(), "已存在的 identifier 目录不得被动"
         assert not (new / "sub").exists(), "两棵树不得合并"
 
     def test_apply_refuses_while_an_agent_run_is_in_flight(
@@ -219,12 +221,12 @@ class TestRenameProjectMirrorDirectoriesCommand:
         call_command("rename_project_mirror_directories", "--apply", stdout=out)
         assert "[refused]" in out.getvalue()
         assert (old / "sub" / "x.md").is_file(), "在跑的 run 会拒整次搬迁，旧目录不得被动"
-        assert not (root / str(seeded.id)).exists(), "拒绝时不得搬出任何 id 目录"
+        assert not (root / seeded.identifier).exists(), "拒绝时不得搬出任何 identifier 目录"
 
         # 跑完：这次真的搬 —— 证明闸只挡在跑的那些。
         run.status = AgentRunStatusEnum.SUCCEEDED.value
         run.save(update_fields=["status"])
-        new = root / str(seeded.id)
+        new = root / seeded.identifier
         call_command("rename_project_mirror_directories", "--apply", stdout=StringIO())
         assert new.is_dir(), "没有在跑的 run 时，--apply 必须真的搬"
         assert (new / "sub" / "x.md").is_file()

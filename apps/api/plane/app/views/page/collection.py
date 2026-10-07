@@ -57,7 +57,7 @@ from ..base import BaseViewSet
 # how a page becomes markdown — do not "fix" this by inlining a copy.
 from .base import (
     _page_ancestors,
-    _project_name,
+    _project_identifier,
     _resolve_asset_url,
     _resolve_user_display_name,
     _write_page_mirror,
@@ -1099,8 +1099,7 @@ def _wiki_mirror_target(page, *, collection_id, name, ancestors):
     root = get_markdown_root(page.workspace)
     return (
         page_markdown_path(
-            project_name=_project_name(project_id),
-            project_id=str(project_id),
+            project_identifier=_project_identifier(project_id),
             ancestors=ancestors,
             name=name,
             page_id=str(page.id),

@@ -345,7 +345,7 @@ class TestDeletingAFolderDeletesTheMirrors:
     def scoped(self, workspace, project, create_user, isolate_markdown_mirror):
         """一棵**镜像已经落好**的项目小树：
 
-            项目目录 <项目镜像根>/<项目 id>/
+            项目目录 <项目镜像根>/<项目 identifier>/
             └── A（文件夹）
                 └── B（文件夹）
                     ├── t1（页面）    A/B/t1.md
@@ -375,7 +375,7 @@ class TestDeletingAFolderDeletesTheMirrors:
             )
 
         mirror_root = _project_mirror_root(project.id)
-        root = mirror_root / _project_directory_name(str(project.id))
+        root = mirror_root / _project_directory_name(project.identifier)
         assert (root / "A" / "B" / "t1.md").is_file(), "前置：t1 的镜像在 A/B/ 下"
         assert (root / "A" / "B" / "C2" / "t2.md").is_file(), "前置：t2 的镜像在 A/B/C2/ 下"
         return {"a": a, "b": b, "c2": c2, "t1": t1, "t2": t2, "root": root, "mirror_root": mirror_root}
@@ -397,7 +397,7 @@ class TestDeletingAFolderDeletesTheMirrors:
         返回的那个 `root`），它永不动。
 
         「删一个文件夹，把项目目录也一起收掉了」看着像越界，其实是这条规则的自然结果，
-        而且**无害**：目录只是按项目 id 拼出来的空壳，下次写页面时 `mkdir(parents=True)`
+        而且**无害**：目录只是按项目 identifier 拼出来的空壳，下次写页面时 `mkdir(parents=True)`
         会重建（`_write_page_file`）。真正不能碰的是**非空**目录 —— 下一条锁住它。
         """
         session_client.delete(_url(workspace, project, scoped["b"]))

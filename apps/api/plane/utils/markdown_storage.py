@@ -86,29 +86,45 @@ def _frontmatter_id(path: Path) -> Optional[str]:
     return None
 
 
-def _project_directory_name(project_id: str) -> str:
-    """Return a project's mirror-directory name — its id, and never its name.
+def _project_directory_name(project_identifier: str) -> str:
+    r"""项目镜像目录那一层 = ``_sanitize_name(project.identifier)``。
 
-    The directory is also the AI member's sandbox island (设计 §2), so it must be
-    unique per project. A sanitized *name* is not: ``_sanitize_name`` runs **after**
-    the ``(name, workspace)`` uniqueness the database enforces, so ``官网/新版`` and
-    ``官网-新版`` are two legal projects that fold to one directory — and then one
-    project's agent reads and overwrites the other's mirror. An id cannot collide with
-    anything, including a hand-named folder in the vault that the mirror would
-    otherwise write into.
+    这一层既是项目镜像目录，也是 AI 成员的沙箱岛（设计 §2），所以它必须**可读、
+    稳定、唯一**。按 identifier 命名三条都成立（都是真的）：
+
+      · **可读且稳定**：``2-项目/FABRIC/…`` 人一眼认得出，且与 work item 的编号前缀
+        同形；UUID 目录名对人没有意义。
+      · **唯一性有 DB 保证**：``Project.identifier`` 有
+        ``UniqueConstraint(["identifier", "workspace"], condition=Q(deleted_at__isnull=True))``
+        —— 与项目名**同一个作用域**，所以按 identifier 命名在同一 root 内不会撞。
+      · **文件名安全**：identifier 被 ``save()`` 强制 ``.strip().upper()``，且
+        ``FORBIDDEN_IDENTIFIER_CHARS_PATTERN`` 挡掉
+        ``& + , : ; $ ^ { } * = ? @ # | ' < > . ( ) % ! -``。
+
+    **与「按项目名」那条旧规则的关键差别**：旧规则下 ``_sanitize_name`` 作用在**名字**
+    上，而名字的唯一约束作用在**原始名**上 —— ``官网/新版`` 与 ``官网-新版`` 是两个
+    合法项目、却折进同一个目录。identifier 的合法字符集里**没有** ``-``，所以
+    「净化后相撞」在这条路上几乎不可能。
+
+    **残留**：``\ / : * ? " < > |`` 里只有 ``: * ? < >`` 被 identifier 挡掉，
+    ``/ \ "`` **没被挡** —— 理论上 ``A/B`` 与 ``A\B`` 两个合法 identifier 仍会折成
+    ``A-B``。极窄，不在本轮处理。
     """
-    return str(project_id)
+    return _sanitize_name(project_identifier)
 
 
 def project_directory(workspace, project) -> Path:
     """Return the directory a project's mirrored content lives in.
+
+    The directory name is the project's sanitized ``identifier`` — see
+    ``_project_directory_name`` for why the identifier and not the name.
 
     This is also the "island" an AI member is confined to (design §2): the DSH
     sandbox's write root, and the tree that is snapshotted before and after a run
     to compute the run's artifacts. Public so ``plane.utils.agent_run`` does not
     have to reach for the private ``_project_directory_name``.
     """
-    return get_markdown_root(workspace) / _project_directory_name(project.id)
+    return get_markdown_root(workspace) / _project_directory_name(project.identifier)
 
 
 def _yaml_str(value: str) -> str:
@@ -447,25 +463,22 @@ def move_mirror_file(
 
 def page_markdown_path(
     *,
-    project_name: Optional[str],
-    project_id: str,
+    project_identifier: str,
     ancestors: list,
     name: Optional[str],
     page_id: str,
     root: Path,
 ) -> Path:
     """Resolve the absolute path of a project page's Markdown file."""
-    # ``project_name`` is deliberately not part of the path any more (see
-    # ``_project_directory_name``); the parameter stays so the public signature and
-    # its callers do not churn.
-    directory = root / _project_directory_name(project_id)
+    # The project layer is the sanitized ``identifier`` — the work-item number
+    # prefix, not the UUID and not the name (see ``_project_directory_name``).
+    directory = root / _project_directory_name(project_identifier)
     return _resolve_page_path(directory, ancestors, name, page_id)
 
 
 def write_page_markdown(
     *,
-    project_name: Optional[str],
-    project_id: str,
+    project_identifier: str,
     ancestors: list,
     page_id: str,
     name: Optional[str],
@@ -480,8 +493,7 @@ def write_page_markdown(
     """
     try:
         path = page_markdown_path(
-            project_name=project_name,
-            project_id=project_id,
+            project_identifier=project_identifier,
             ancestors=ancestors,
             name=name,
             page_id=page_id,
@@ -494,8 +506,7 @@ def write_page_markdown(
 
 def move_page_markdown(
     *,
-    project_name: Optional[str],
-    project_id: str,
+    project_identifier: str,
     old_ancestors: list,
     new_ancestors: list,
     page_id: str,
@@ -506,16 +517,14 @@ def move_page_markdown(
     """Move a page's .md (and its sub-page folder) after a rename/reparent."""
     try:
         old_path = page_markdown_path(
-            project_name=project_name,
-            project_id=project_id,
+            project_identifier=project_identifier,
             ancestors=old_ancestors,
             name=old_name,
             page_id=page_id,
             root=root,
         )
         new_path = page_markdown_path(
-            project_name=project_name,
-            project_id=project_id,
+            project_identifier=project_identifier,
             ancestors=new_ancestors,
             name=new_name,
             page_id=page_id,
@@ -528,8 +537,7 @@ def move_page_markdown(
 
 def delete_page_markdown(
     *,
-    project_name: Optional[str],
-    project_id: str,
+    project_identifier: str,
     ancestors: list,
     page_id: str,
     name: Optional[str],
@@ -538,8 +546,7 @@ def delete_page_markdown(
     """Delete a page's local Markdown file (best-effort)."""
     try:
         page_markdown_path(
-            project_name=project_name,
-            project_id=project_id,
+            project_identifier=project_identifier,
             ancestors=ancestors,
             name=name,
             page_id=page_id,

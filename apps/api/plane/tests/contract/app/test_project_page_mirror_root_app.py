@@ -95,8 +95,9 @@ class TestProjectPageMirrorUsesTheWorkspaceField:
 
         written = list(field_root.rglob("*.md"))
         assert len(written) == 1, f"字段档应当写出恰好一份镜像：{written!r}"
-        # 目录名是**项目 id**那一层（用名字会撞车，id 不会）—— 证明镜像落进了字段根下项目自己的那一层，而不是别处。
-        assert written[0].parent == field_root / str(project.id)
+        # 目录名是**项目 identifier（净化后）**那一层（用名字会撞车，identifier
+        # 不会）—— 证明镜像落进了字段根下项目自己的那一层，而不是别处。
+        assert written[0].parent == field_root / project.identifier
         assert written[0].name == "字段档正文页.md"
         assert "字段档镜像" in written[0].read_text(encoding="utf-8")
 

@@ -87,15 +87,15 @@ def unarchive_archive_page_and_descendants(page_id, archived_at):
         cursor.execute(sql, [page_id, archived_at])
 
 
-def _project_name(project_id):
-    """Return a project's human name, falling back to its id when absent."""
-    return Project.objects.filter(pk=project_id).values_list("name", flat=True).first() or str(project_id)
+def _project_identifier(project_id):
+    """Return a project's identifier (the work-item prefix), falling back to its id when absent."""
+    return Project.objects.filter(pk=project_id).values_list("identifier", flat=True).first() or str(project_id)
 
 
 def _project_mirror_root(project_id):
     """Return the Markdown mirror root for a project's pages.
 
-    One query, the same shape as ``_project_name`` above: the workspace a project
+    One query, the same shape as ``_project_identifier`` above: the workspace a project
     belongs to carries the configured root. Falls back to ``None`` (which
     ``get_markdown_root`` reads as "use the env var / built-in default") when the
     project row is gone, so a deleted project can never crash a mirror call.
@@ -149,8 +149,7 @@ def _write_page_mirror(project_id, page_id, name, ancestors, description_html):
         resolve_asset_url=lambda aid: _resolve_asset_url(aid, asset_cache),
     )
     write_page_markdown(
-        project_name=_project_name(project_id),
-        project_id=str(project_id),
+        project_identifier=_project_identifier(project_id),
         ancestors=ancestors,
         page_id=str(page_id),
         name=name,
@@ -162,22 +161,20 @@ def _write_page_mirror(project_id, page_id, name, ancestors, description_html):
 def _project_mirror_target_resolver(project_id):
     """返回**项目侧**的镜像寻址函数，交给 ``_cascade_delete_pages`` 当 ``resolve_mirror``。
 
-    与 ``_write_page_mirror`` / ``destroy`` 的既有落盘路径逐字同源：项目 id + 祖先链 +
-    页面名，根是该项目的镜像根 —— 项目名**不参与**路径（``project_name`` 仍在传，只因
-    公开签名没变，落盘按 id 分层）。``ancestors`` 按 ``row.parent_id`` 现算 ——
+    与 ``_write_page_mirror`` / ``destroy`` 的既有落盘路径逐字同源：项目 identifier（净化后）
+    + 祖先链 + 页面名，根是该项目的镜像根。``ancestors`` 按 ``row.parent_id`` 现算 ——
     与 ``destroy`` 里 ``_page_ancestors(page.parent_id)`` 同一口径。
 
-    **项目名与镜像根只查一次**：它们不随行变化，而 ``_project_mirror_root`` 每次都打一条
-    SQL —— 一棵子树几十行就是几十条重复查询。
+    **项目 identifier 与镜像根只查一次**：它们不随行变化，而 ``_project_mirror_root`` 每次都打
+    一条 SQL —— 一棵子树几十行就是几十条重复查询。
     """
-    project_name = _project_name(project_id)
+    project_identifier = _project_identifier(project_id)
     root = _project_mirror_root(project_id)
 
     def resolve(row):
         return (
             page_markdown_path(
-                project_name=project_name,
-                project_id=str(project_id),
+                project_identifier=project_identifier,
                 ancestors=_page_ancestors(row.parent_id),
                 name=row.name,
                 page_id=str(row.id),
@@ -397,8 +394,7 @@ class PageViewSet(BaseViewSet):
                 # Mirror a rename/reparent as a local Markdown move (best-effort)
                 if page.name != old_name or page.parent_id != old_parent_id:
                     move_page_markdown(
-                        project_name=_project_name(project_id),
-                        project_id=str(project_id),
+                        project_identifier=_project_identifier(project_id),
                         old_ancestors=_page_ancestors(old_parent_id),
                         new_ancestors=_page_ancestors(page.parent_id),
                         page_id=str(page_id),
@@ -666,7 +662,7 @@ class PageViewSet(BaseViewSet):
         # Mirror: capture the page location and direct children before deleting
         page_name = page.name
         ancestors = _page_ancestors(page.parent_id)
-        project_name = _project_name(project_id)
+        project_identifier = _project_identifier(project_id)
         children = list(
             Page.objects.filter(
                 parent_id=page_id,
@@ -688,8 +684,7 @@ class PageViewSet(BaseViewSet):
 
         # Mirror: delete the page's .md and lift its sub-pages one level up
         delete_page_markdown(
-            project_name=project_name,
-            project_id=str(project_id),
+            project_identifier=project_identifier,
             ancestors=ancestors,
             page_id=str(page_id),
             name=page_name,
@@ -697,8 +692,7 @@ class PageViewSet(BaseViewSet):
         )
         for child_id, child_name in children:
             move_page_markdown(
-                project_name=project_name,
-                project_id=str(project_id),
+                project_identifier=project_identifier,
                 old_ancestors=ancestors + [(page_name or "", str(page_id))],
                 new_ancestors=ancestors,
                 page_id=str(child_id),

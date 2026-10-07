@@ -7,7 +7,7 @@
 | 页面 | 落点 |
 |---|---|
 | 有集合 | `3-Wiki/<集合名>/…` |
-| 无集合、有项目 | `2-项目/<项目 id>/…`（逐字不变，这里有回归锁；项目层是 **id**，项目名不参与拼路径） |
+| 无集合、有项目 | `2-项目/<项目 identifier>/…`（有回归锁；项目层是 **identifier（净化后）**，项目名不参与） |
 | 都没有 | `3-Wiki/常规/…`（Round H 之前是「不落盘 + warning」） |
 
 前两行的**顺序**是 Phase 1B 的裁定：集合优先于项目。第三行是 Round H 补的空格 ——
@@ -60,7 +60,7 @@ class TestMirrorRouting:
 
         _mirror_wiki_page(Page.objects.get(id=wiki_page.id), "<p>新正文</p>")
 
-        written = isolate_markdown_mirror / str(project.id) / "路由测试页.md"
+        written = isolate_markdown_mirror / project.identifier / "路由测试页.md"
         assert written.is_file()
         assert not (isolate_markdown_mirror.parent / "3-Wiki").exists()
 
@@ -76,7 +76,7 @@ class TestMirrorRouting:
         _mirror_wiki_page(Page.objects.get(id=wiki_page.id), "<p>新正文</p>")
 
         assert (isolate_markdown_mirror.parent / "3-Wiki" / "Claude Code" / "路由测试页.md").is_file()
-        assert not (isolate_markdown_mirror / str(project.id)).exists()
+        assert not (isolate_markdown_mirror / project.identifier).exists()
 
     @pytest.mark.django_db
     def test_page_with_neither_now_mirrors_into_the_general_folder(

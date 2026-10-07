@@ -43,7 +43,7 @@ class Command(BaseCommand):
         page_ids = []
         for link in links.iterator():
             project_index.setdefault(str(link.page_id), []).append(
-                (str(link.project_id), link.project.name, link.project.workspace)
+                (str(link.project_id), link.project.identifier, link.project.workspace)
             )
             page_ids.append(link.page_id)
 
@@ -96,17 +96,16 @@ class Command(BaseCommand):
                 depth += 1
             ancestors.reverse()
 
-            for project_id, project_name, project_workspace in project_index.get(str(page.id), []):
+            for project_id, project_identifier, project_workspace in project_index.get(str(page.id), []):
                 if dry_run:
                     prefix = "/".join(a[0] for a in ancestors)
                     self.stdout.write(
-                        f"[dry-run] {_project_directory_name(project_id)}/{prefix + '/' if prefix else ''}"
+                        f"[dry-run] {_project_directory_name(project_identifier)}/{prefix + '/' if prefix else ''}"
                         f"{page.name or str(page.id)} -> {len(markdown)} chars"
                     )
                 else:
                     write_page_markdown(
-                        project_name=project_name,
-                        project_id=project_id,
+                        project_identifier=project_identifier,
                         ancestors=ancestors,
                         page_id=str(page.id),
                         name=page.name,

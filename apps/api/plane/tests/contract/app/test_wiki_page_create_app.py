@@ -204,7 +204,7 @@ class TestWikiPageCreateWithoutAProject:
     def test_page_without_a_project_writes_no_mirror(self, session_client, workspace, isolate_markdown_mirror):
         """无项目 ⇒ 镜像根下**一个字节都不写**，且建页本身成功。
 
-        ``rglob("*")`` 而不是 ``rglob("*.md")``：无守卫时 ``_project_name(None)``
+        ``rglob("*")`` 而不是 ``rglob("*.md")``：无守卫时 ``_project_identifier(None)``
         会退化成字符串 ``"None"``、``mkdir`` 出一个**空目录** —— ``*.md`` 看不见它，
         断言照样通过，这条测试就空转了（同 ``test_wiki_pages_app.py:1316-1319``）。
         """
@@ -281,8 +281,8 @@ class TestWikiPageCreateWithAProject:
         # 与无项目页那条 skip 正好互为对照。
         mirrored = list(isolate_markdown_mirror.rglob("*.md"))
         assert len(mirrored) == 1, f"有项目的页面应当写出恰好一份镜像：{mirrored!r}"
-        # 目录名是**项目 id**，不是项目名 —— 这一行证明它落在了正确的那一层。
-        assert mirrored[0].parent.name == str(project.id)
+        # 目录名是**项目 identifier（净化后）**，不是项目名 —— 这一行证明它落在了正确的那一层。
+        assert mirrored[0].parent.name == project.identifier
         assert mirrored[0].name == "有项目的页.md"
         # frontmatter 里的 id 是页面的身份，改名搬移与去重都靠它。
         assert f"id: {page.id}" in mirrored[0].read_text(encoding="utf-8")
@@ -293,7 +293,7 @@ class TestWikiPageCreateWithAProject:
     ):
         """别的工作区的项目 id → 404，且**一页都不建**。
 
-        少了这个守卫，别家的项目 id 会被写进 ``ProjectPage``，而镜像路径按项目 id 分层
+        少了这个守卫，别家的项目 id 会被写进 ``ProjectPage``，而镜像路径按项目 identifier 分层
         —— 等于把正文写到别的工作区的目录里。
         """
         response = session_client.post(

@@ -3,7 +3,7 @@
 # See the LICENSE file for details.
 
 # One-off migration: a project's Markdown mirror directory used to be named after
-# the project's *sanitized name*; it is now named after the project's **id**
+# the project's *sanitized name*; it is now named after the project's **identifier**
 # (``_project_directory_name``). This command moves the existing directories so
 # the mirrors keep being found after the rename.
 #
@@ -21,7 +21,7 @@ from plane.utils.markdown_storage import _sanitize_name, get_markdown_root
 
 
 class Command(BaseCommand):
-    help = "Rename project Markdown mirror directories from the project name to its id"
+    help = "Rename project Markdown mirror directories from the project name to its identifier"
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -58,26 +58,27 @@ class Command(BaseCommand):
         # *after* the ``(name, workspace)`` uniqueness the database enforces, so two
         # legal projects can share one old directory name and their mirrors are then
         # interleaved inside that single directory. Moving it into either project's
-        # id would put the *other* project's pages inside an AI member's sandbox
-        # island — the very thing this rename exists to prevent. So a shared old name
-        # is refused, never arbitrated. (Keyed by resolved root, so two workspaces
-        # that resolve to different roots never share a key — and two that fall back
-        # to the same env root correctly do.)
+        # identifier would put the *other* project's pages inside an AI member's
+        # sandbox island — the very thing this rename exists to prevent. So a shared
+        # old name is refused, never arbitrated. (Keyed by resolved root, so two
+        # workspaces that resolve to different roots never share a key — and two that
+        # fall back to the same env root correctly do.)
         #
         # ⚠️ That rule belongs to history and to history only. It is here to *find*
         # the existing directories; it is **not** the source of truth any more — the
-        # live rule is ``_project_directory_name`` (the id). Do not copy the line
-        # below into anything new.
+        # live rule is ``_project_directory_name`` (the identifier). Do not copy the
+        # line below into anything new.
         shared = {}
         live = []
         for project in projects:
             root = get_markdown_root(project.workspace)
             old_name = _sanitize_name(project.name or "") or str(project.id)
-            new_name = str(project.id)
+            new_name = _sanitize_name(project.identifier or "") or str(project.id)
             if old_name == new_name:
-                # The name sanitized to empty, so the old rule already fell back to
-                # the id — nothing to move.
-                self.stdout.write(f"[skip] {project.name}: already named by id ({new_name})")
+                # The old directory already resolves to the name the live rule would
+                # give (both fell back to the id, or the name and the identifier
+                # sanitize alike) — nothing to move.
+                self.stdout.write(f"[skip] {project.name}: already named by its identifier ({new_name})")
                 continue
             live.append((project, root, old_name, new_name))
             shared[(str(root), old_name)] = shared.get((str(root), old_name), 0) + 1
