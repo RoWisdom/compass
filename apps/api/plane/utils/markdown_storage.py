@@ -94,9 +94,10 @@ def _project_directory_name(project_identifier: str) -> str:
 
       · **可读且稳定**：``2-项目/FABRIC/…`` 人一眼认得出，且与 work item 的编号前缀
         同形；UUID 目录名对人没有意义。
-      · **唯一性有 DB 保证**：``Project.identifier`` 有
+      · **唯一性有 DB 保证 —— 作用域是 workspace**：``Project.identifier`` 有
         ``UniqueConstraint(["identifier", "workspace"], condition=Q(deleted_at__isnull=True))``
-        —— 与项目名**同一个作用域**，所以按 identifier 命名在同一 root 内不会撞。
+        —— 与项目名**同一个作用域**，即**同一个 workspace 内**两个项目不可能取到同一个
+        identifier。（跨 workspace 的那一层见下面「两个前提」。）
       · **文件名安全**：identifier 的合法字符集被**两道**守卫收得很窄 ——
         ``FORBIDDEN_IDENTIFIER_CHARS_PATTERN`` 挡
         ``& + , : ; $ ^ { } * = ? @ # | ' < > . ( ) % ! -``（含 ``|``），
@@ -104,9 +105,9 @@ def _project_directory_name(project_identifier: str) -> str:
         以及 ``: * ? < > |``、控制符（``\x00-\x1f``）与**一切空白**（``\s``，
         Python 的 ``re`` 对 str 是 Unicode 感知的，故含不换行空格等）。
 
-    **不变量**：``_sanitize_name`` 对一个**合法** identifier 是**恒等映射**，所以
-    「净化后的 identifier」与「镜像目录名」一一对应 ⇒ **两个项目不可能共用一个沙箱
-    岛**。逐条对上 ``_sanitize_name`` 的每一步：
+    **不变量（作用域 = 一个 workspace）**：``_sanitize_name`` 对一个**合法** identifier 是
+    **恒等映射**，所以「净化后的 identifier」与「镜像目录名」一一对应 ⇒ **同一个
+    workspace 内**两个项目不可能共用一个沙箱岛。逐条对上 ``_sanitize_name`` 的每一步：
 
       · 非法字符 ``[\\/:*?"<>|\x00-\x1f]`` 替换成 ``-``：合法 identifier 一个字符都
         不含 ⇒ 不替换；
@@ -120,8 +121,8 @@ def _project_directory_name(project_identifier: str) -> str:
     合法项目、却折进同一个目录。identifier 的合法字符集里既**没有** ``-``，也没有
     ``/ \`` 或空白，所以「净化后相撞」在这条路上**不可能**。（此前 ``\ / "`` 曾是可被
     接受的残留：``A/B`` 与 ``A\B`` 都会折成 ``A-B``。F1 的
-    ``FORBIDDEN_IDENTIFIER_PATH_CHARS_PATTERN`` 把这个洞堵上，上面那条不变量现在
-    **无条件**成立，不再是「几乎不可能」。）
+    ``FORBIDDEN_IDENTIFIER_PATH_CHARS_PATTERN`` 把这个洞堵上，**字符这一轴上**这条
+    不变量现在成立，不再是「几乎不可能」；仍剩下的前提见下。）
 
     另两条**核实过、不构成 fold** 的途径，一并写明：
 
@@ -130,6 +131,20 @@ def _project_directory_name(project_identifier: str) -> str:
       · **Unicode 归一化（NFC/NFD）**：``_sanitize_name`` 与 DB 唯一约束都不做归一化
         ⇒ 前组合式与分解式的两种写法会落成**两个不同**的目录。是「看着像」的问题，
         不是「共用一个岛」的问题 —— 失败方向是「多一个目录」，不是越界。
+
+    **上面那条不变量的两个前提（写明，别当成无条件）**：
+
+      · **一个 root 只服务一个 workspace**。目录名只由 identifier 给，而 root 来自
+        ``workspace.project_markdown_path`` > ``MARKDOWN_STORAGE_PATH`` > 默认 —— 后两者是
+        **实例级**的。所以若有**多个 workspace 共用同一个 root**（各自都不设
+        ``project_markdown_path``），两个 workspace 里 identifier 相同的项目会落进
+        **同一个目录、同一个沙箱岛**。本实例当前只有一个 workspace、一个 live 项目 ⇒
+        不触发，属**潜在**问题，记录在案；要真正支持「多 workspace 共用 root」，得让
+        目录带上 workspace 那一层 —— 那是设计改动，不在本轮。
+      · **守卫只在 serializer 层**。4 道校验都挂在 DRF serializer 上，**ORM 直写不受
+        约束** —— 例如造数任务 ``plane/bgtasks/dummy_data_task.py`` 的
+        ``Project.objects.create(identifier=…)`` 能产出带 ``.``／空格的 identifier。
+        非生产路径（只有 ``create_dummy_data`` 命令可达），一并记录，免得被当成已闭环。
 
     **已知残留（用户裁定「记录、不加守卫」）**：``Project.identifier`` **可被管理员事后
     修改**（DRF ``fields="__all__"`` + ``read_only_fields=["workspace", "deleted_at"]``；

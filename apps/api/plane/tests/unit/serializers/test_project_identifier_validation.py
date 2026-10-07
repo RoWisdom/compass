@@ -77,14 +77,17 @@ class TestApiProjectCreateSerializerIdentifierGuard:
 
     @pytest.mark.parametrize("identifier", REJECTED_IDENTIFIERS)
     def test_rejects_identifiers_that_sanitize_onto_another(self, workspace, identifier):
-        """每个必须被拒的 identifier 都抛 ``ValidationError``。
+        """每个必须被拒的 identifier 都抛 ``ValidationError``，文案是本家族那句散文。
 
-        这里**不**钉死错误文本：``A:B`` 命中的是**旧**那道（prose 文案），F1 新挡的那批
-        命中的是 ``PROJECT_IDENTIFIER_CANNOT_CONTAIN_SPECIAL_CHARACTERS`` 码。两者都
-        是「被拒」，而本测试要锁的正是「被拒」。
+        本家族（public API）的既有守卫一律发散文 ``"Project identifier cannot contain
+        special characters."``（只有 app 家族发错误码 —— web UI 要拿码映射 i18n）。旧规则
+        挡下的 ``A:B`` 与 F1 新收口的那批**落在同一句文案**上（新守卫已对齐本文件惯例），
+        故这里可以把文案钉死。
         """
-        with pytest.raises(serializers.ValidationError):
+        with pytest.raises(serializers.ValidationError) as exc_info:
             self._validate(workspace, identifier)
+
+        assert "Project identifier cannot contain special characters." in str(exc_info.value)
 
     @pytest.mark.parametrize("identifier", ACCEPTED_IDENTIFIERS)
     def test_accepts_legal_identifiers(self, workspace, identifier):
