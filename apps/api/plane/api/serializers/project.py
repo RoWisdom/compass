@@ -117,7 +117,7 @@ class ProjectCreateSerializer(BaseSerializer):
         if project_identifier is not None and re.match(
             Project.FORBIDDEN_IDENTIFIER_PATH_CHARS_PATTERN, project_identifier
         ):
-            raise serializers.ValidationError(detail="PROJECT_IDENTIFIER_CANNOT_CONTAIN_SPECIAL_CHARACTERS")
+            raise serializers.ValidationError("Project identifier cannot contain special characters.")
 
         project_lead = data.get("project_lead")
         if (
@@ -197,7 +197,7 @@ class ProjectUpdateSerializer(ProjectCreateSerializer):
         if project_identifier is not None and re.match(
             Project.FORBIDDEN_IDENTIFIER_PATH_CHARS_PATTERN, project_identifier
         ):
-            raise serializers.ValidationError(detail="PROJECT_IDENTIFIER_CANNOT_CONTAIN_SPECIAL_CHARACTERS")
+            raise serializers.ValidationError("Project identifier cannot contain special characters.")
 
         """Update a project"""
         if (
@@ -261,7 +261,7 @@ class ProjectSerializer(BaseSerializer):
         if project_identifier is not None and re.match(
             Project.FORBIDDEN_IDENTIFIER_PATH_CHARS_PATTERN, project_identifier
         ):
-            raise serializers.ValidationError(detail="PROJECT_IDENTIFIER_CANNOT_CONTAIN_SPECIAL_CHARACTERS")
+            raise serializers.ValidationError("Project identifier cannot contain special characters.")
 
         # Check project lead should be a member of the workspace
         if (
