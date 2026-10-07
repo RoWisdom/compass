@@ -117,14 +117,19 @@ def project_directory(workspace, project) -> Path:
     """Return the directory a project's mirrored content lives in.
 
     The directory name is the project's sanitized ``identifier`` — see
-    ``_project_directory_name`` for why the identifier and not the name.
+    ``_project_directory_name`` for why the identifier and not the name. An empty
+    identifier falls back to the project id, the same fallback
+    ``rename_project_mirror_directories`` uses: the DB column admits an empty
+    string (only the API layer forbids it), and ``root / ""`` would otherwise
+    collapse the directory — and with it the island's write scope — onto the
+    mirror root itself.
 
     This is also the "island" an AI member is confined to (design §2): the DSH
     sandbox's write root, and the tree that is snapshotted before and after a run
     to compute the run's artifacts. Public so ``plane.utils.agent_run`` does not
     have to reach for the private ``_project_directory_name``.
     """
-    return get_markdown_root(workspace) / _project_directory_name(project.identifier)
+    return get_markdown_root(workspace) / _project_directory_name(project.identifier or str(project.id))
 
 
 def _yaml_str(value: str) -> str:

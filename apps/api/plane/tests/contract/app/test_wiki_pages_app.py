@@ -1313,7 +1313,7 @@ class TestRenameMovesTheMirror:
         assert response.status_code == status.HTTP_200_OK
         wiki_page.refresh_from_db()
         assert wiki_page.name == "无项目也改名"
-        # `rglob("*")` 而不是 `rglob("*.md")`：无守卫时 `_project_name(None)` 退化成
+        # `rglob("*")` 而不是 `rglob("*.md")`：无守卫时 `_project_identifier(None)` 退化成
         # 字符串 "None"、`mkdir` 出一个**空目录** —— `*.md` 看不见它，断言照样通过，
         # 这条测试就空转了。`*` 能看见目录本身，缺守卫立刻变红。
         assert list(isolate_markdown_mirror.rglob("*")) == []

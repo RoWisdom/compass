@@ -42,8 +42,13 @@ class Command(BaseCommand):
         project_index = {}
         page_ids = []
         for link in links.iterator():
+            # An empty identifier falls back to the project id — the same fallback
+            # the live write path uses (``base._project_identifier``) and the one
+            # ``rename_project_mirror_directories`` uses, so the backfill lands on
+            # the same directory the live path writes to.
+            identifier = link.project.identifier or str(link.project_id)
             project_index.setdefault(str(link.page_id), []).append(
-                (str(link.project_id), link.project.identifier, link.project.workspace)
+                (str(link.project_id), identifier, link.project.workspace)
             )
             page_ids.append(link.page_id)
 

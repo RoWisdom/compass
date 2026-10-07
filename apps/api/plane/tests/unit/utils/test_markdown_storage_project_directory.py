@@ -58,6 +58,19 @@ class TestProjectDirectoryIsKeyedByIdentifier:
         assert project_directory(workspace, project).name == "MIR1"
         assert project_directory(workspace, project).name != "面料交易"
 
+    def test_an_empty_identifier_falls_back_to_the_project_id(self, workspace, create_user, tmp_path, monkeypatch):
+        """identifier 为空时退回项目 id —— 否则 ``root / ""`` 塌成镜像根本身。
+
+        正常走不到这条路：identifier 在 DRF 上是必填（``blank=False``），UI 与 API 都
+        造不出空的。但 DB 列不过滤空串，而 ``project_directory`` 同时是 AI 成员的沙箱
+        岛 —— 一旦塌成根，整个镜像根都落进沙箱。退回口径与
+        ``rename_project_mirror_directories``（都用项目 id）一致，两处不漂。
+        """
+        monkeypatch.setenv(MARKDOWN_STORAGE_PATH_ENV, str(tmp_path / "mirror-root"))
+        project = _project(workspace, create_user, "无标识项目", "")
+
+        assert project_directory(workspace, project).name == str(project.id)
+
     def test_two_projects_whose_names_sanitize_alike_get_different_directories(
         self, workspace, create_user, tmp_path, monkeypatch
     ):
