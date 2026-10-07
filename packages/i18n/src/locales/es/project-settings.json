@@ -522,5 +522,59 @@
         }
       }
     }
+  },
+  "ai_members": {
+    "roster": {
+      "title": "Miembros de IA",
+      "description": "Puestos de la biblioteca de este espacio de trabajo, activos en este proyecto.",
+      "empty": "Aún no hay miembros de IA. Agregue uno desde la biblioteca.",
+      "add": "Agregar miembro",
+      "add_title": "Agregar un miembro de IA",
+      "add_description": "Seleccione puestos de la biblioteca de este espacio de trabajo.",
+      "add_confirm": "Agregar seleccionados",
+      "add_none_left": "Cada puesto de la biblioteca ya está en este proyecto.",
+      "create_post": "Nuevo puesto",
+      "active": "Habilitado",
+      "inactive": "Deshabilitado",
+      "enable": "Habilitar",
+      "disable": "Deshabilitar",
+      "remove": "Quitar del proyecto",
+      "remove_confirm_title": "¿Quitar a este miembro?",
+      "remove_confirm_body": "El bot perderá su acceso a este proyecto y su token se revocará. El puesto permanece en la biblioteca.",
+      "never_run": "Nunca ejecutado",
+      "last_run": "Última ejecución"
+    },
+    "pool": {
+      "title": "Puestos de IA",
+      "description": "Roles de IA reutilizables para este espacio de trabajo. Un puesto agregado a varios proyectos tiene un solo manual.",
+      "empty": "Aún no hay puestos. Cree uno para agregarlo a un proyecto.",
+      "create": "Nuevo puesto",
+      "create_title": "Nuevo puesto",
+      "edit_title": "Editar puesto",
+      "name": "Nombre",
+      "name_placeholder": "Análisis de requisitos",
+      "description_label": "Descripción",
+      "description_placeholder": "Convierte un elemento de trabajo impreciso en una pregunta decidible.",
+      "instructions": "Manual",
+      "instructions_hint": "El brief completo que recibe la IA. Redactado en Plane; DSH solo recibe el texto renderizado.",
+      "skills": "Habilidades",
+      "skills_hint": "Solo nombres — el contenido de cada habilidad se encuentra en el sistema de ejecución, en ~/.dsh/skills/<name>/SKILL.md.",
+      "skills_add": "Agregar una habilidad",
+      "model": "Modelo",
+      "model_placeholder": "Deje en blanco para usar el valor predeterminado del perfil.",
+      "profile": "DSH profile",
+      "tier": "Capacidad",
+      "tier_readonly": "Solo lectura",
+      "tier_readonly_hint": "Lee el proyecto; solo puede comentar los elementos de trabajo.",
+      "tier_writer": "Escribe en su propio directorio",
+      "tier_writer_hint": "Lo anterior, más archivos dentro de su propio directorio.",
+      "tier_ledger": "Modifica los elementos de trabajo",
+      "tier_ledger_hint": "Lo anterior, más campos de los elementos de trabajo y los sub-elementos. Sus planes requieren aprobación previa.",
+      "used_by": "Utilizado por {count} proyectos",
+      "used_by_none": "No se utiliza en ningún proyecto",
+      "delete": "Eliminar puesto",
+      "delete_confirm_title": "¿Eliminar este puesto?",
+      "delete_confirm_body": "Esta acción no se puede deshacer."
+    }
   }
 }

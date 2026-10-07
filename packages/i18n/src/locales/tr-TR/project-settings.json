@@ -522,5 +522,59 @@
         }
       }
     }
+  },
+  "ai_members": {
+    "roster": {
+      "title": "Yapay zeka üyeleri",
+      "description": "Bu çalışma alanının kitaplığından, bu projede çalışan pozisyonlar.",
+      "empty": "Henüz yapay zeka üyesi yok. Kitaplıktan bir tane ekleyin.",
+      "add": "Üye ekle",
+      "add_title": "Yapay zeka üyesi ekleyin",
+      "add_description": "Bu çalışma alanının kitaplığından pozisyon seçin.",
+      "add_confirm": "Seçilenleri ekle",
+      "add_none_left": "Kitaplıktaki her pozisyon zaten bu projede.",
+      "create_post": "Yeni pozisyon",
+      "active": "Etkin",
+      "inactive": "Devre dışı",
+      "enable": "Etkinleştir",
+      "disable": "Devre dışı bırak",
+      "remove": "Projeden kaldır",
+      "remove_confirm_title": "Bu üye kaldırılsın mı?",
+      "remove_confirm_body": "Bot bu projeye erişimini kaybedecek ve tokenı iptal edilecek. Pozisyonun kendisi kitaplıkta kalır.",
+      "never_run": "Hiç çalıştırılmadı",
+      "last_run": "Son çalıştırma"
+    },
+    "pool": {
+      "title": "Yapay zeka pozisyonları",
+      "description": "Bu çalışma alanı için yeniden kullanılabilir yapay zeka pozisyonları. Birden çok projeye eklenen bir pozisyonun tek bir el kitabı olur.",
+      "empty": "Henüz pozisyon yok. Bir projeye eklemek için bir tane oluşturun.",
+      "create": "Yeni pozisyon",
+      "create_title": "Yeni pozisyon",
+      "edit_title": "Pozisyonu düzenle",
+      "name": "Ad",
+      "name_placeholder": "Gereksinim analizi",
+      "description_label": "Açıklama",
+      "description_placeholder": "Belirsiz bir iş öğesini karara bağlanabilir bir soruya dönüştürür.",
+      "instructions": "El kitabı",
+      "instructions_hint": "Yapay zekanın aldığı tüm brifing. Plane'de yazılır; DSH yalnızca işlenmiş metni alır.",
+      "skills": "Beceriler",
+      "skills_hint": "Yalnızca adlar — her becerinin gövdesi yürütücüde, ~/.dsh/skills/<name>/SKILL.md konumunda bulunur.",
+      "skills_add": "Beceri ekle",
+      "model": "Model",
+      "model_placeholder": "Profil varsayılanını kullanmak için boş bırakın",
+      "profile": "DSH profile",
+      "tier": "Yetenek",
+      "tier_readonly": "Salt okunur",
+      "tier_readonly_hint": "Projeyi okur; yalnızca iş öğelerine yorum yapabilir.",
+      "tier_writer": "Kendi dizininde yazar",
+      "tier_writer_hint": "Yukarıdakiler, artı kendi dizinindeki dosyalar.",
+      "tier_ledger": "İş öğelerini değiştirir",
+      "tier_ledger_hint": "Yukarıdakiler, artı iş öğesi alanları ve alt öğeler. Planları önce onay gerektirir.",
+      "used_by": "{count} projede kullanılıyor",
+      "used_by_none": "Hiçbir projede kullanılmıyor",
+      "delete": "Pozisyonu sil",
+      "delete_confirm_title": "Bu pozisyon silinsin mi?",
+      "delete_confirm_body": "Bu işlem geri alınamaz."
+    }
   }
 }

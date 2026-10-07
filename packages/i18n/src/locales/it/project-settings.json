@@ -522,5 +522,59 @@
         }
       }
     }
+  },
+  "ai_members": {
+    "roster": {
+      "title": "Membri IA",
+      "description": "Posizioni della libreria di questo spazio di lavoro, attive in questo progetto.",
+      "empty": "Nessun membro IA ancora. Ne aggiunga uno dalla libreria.",
+      "add": "Aggiungi membro",
+      "add_title": "Aggiungi un membro IA",
+      "add_description": "Selezioni le posizioni dalla libreria di questo spazio di lavoro.",
+      "add_confirm": "Aggiungi selezionati",
+      "add_none_left": "Ogni posizione della libreria è già in questo progetto.",
+      "create_post": "Nuova posizione",
+      "active": "Abilitato",
+      "inactive": "Disabilitato",
+      "enable": "Abilita",
+      "disable": "Disabilita",
+      "remove": "Rimuovi dal progetto",
+      "remove_confirm_title": "Rimuovere questo membro?",
+      "remove_confirm_body": "Il bot perderà l’accesso a questo progetto e il suo token verrà revocato. La posizione resta nella libreria.",
+      "never_run": "Mai eseguito",
+      "last_run": "Ultima esecuzione"
+    },
+    "pool": {
+      "title": "Posizioni IA",
+      "description": "Ruoli IA riutilizzabili per questo spazio di lavoro. Una posizione aggiunta a più progetti ha un solo manuale.",
+      "empty": "Nessuna posizione ancora. Ne crei una per aggiungerla a un progetto.",
+      "create": "Nuova posizione",
+      "create_title": "Nuova posizione",
+      "edit_title": "Modifica posizione",
+      "name": "Nome",
+      "name_placeholder": "Analisi dei requisiti",
+      "description_label": "Descrizione",
+      "description_placeholder": "Trasforma un elemento di lavoro vago in una domanda decidibile.",
+      "instructions": "Manuale",
+      "instructions_hint": "Il brief completo che riceve l’IA. Scritto in Plane; DSH riceve solo il testo renderizzato.",
+      "skills": "Competenze",
+      "skills_hint": "Solo nomi — il contenuto di ogni competenza risiede sul sistema di esecuzione in ~/.dsh/skills/<name>/SKILL.md.",
+      "skills_add": "Aggiungi una competenza",
+      "model": "Modello",
+      "model_placeholder": "Lasciare vuoto per usare il valore predefinito del profilo.",
+      "profile": "DSH profile",
+      "tier": "Capacità",
+      "tier_readonly": "Solo lettura",
+      "tier_readonly_hint": "Legge il progetto; può solo commentare gli elementi di lavoro.",
+      "tier_writer": "Scrive nella propria directory",
+      "tier_writer_hint": "Quanto sopra, più i file nella propria directory.",
+      "tier_ledger": "Modifica gli elementi di lavoro",
+      "tier_ledger_hint": "Quanto sopra, più i campi degli elementi di lavoro e dei sotto-elementi. I suoi piani richiedono prima un’approvazione.",
+      "used_by": "Utilizzata da {count} progetti",
+      "used_by_none": "Non utilizzata da nessun progetto",
+      "delete": "Elimina posizione",
+      "delete_confirm_title": "Eliminare questa posizione?",
+      "delete_confirm_body": "Questa azione non può essere annullata."
+    }
   }
 }

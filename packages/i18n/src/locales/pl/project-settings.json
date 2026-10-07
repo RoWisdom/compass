@@ -522,5 +522,59 @@
         }
       }
     }
+  },
+  "ai_members": {
+    "roster": {
+      "title": "Członkowie AI",
+      "description": "Stanowiska z biblioteki tej przestrzeni roboczej, pracujące w tym projekcie.",
+      "empty": "Nie ma jeszcze członków AI. Dodaj jednego z biblioteki.",
+      "add": "Dodaj członka",
+      "add_title": "Dodaj członka AI",
+      "add_description": "Wybierz stanowiska z biblioteki tej przestrzeni roboczej.",
+      "add_confirm": "Dodaj wybrane",
+      "add_none_left": "Każde stanowisko z biblioteki jest już w tym projekcie.",
+      "create_post": "Nowe stanowisko",
+      "active": "Włączone",
+      "inactive": "Wyłączone",
+      "enable": "Włącz",
+      "disable": "Wyłącz",
+      "remove": "Usuń z projektu",
+      "remove_confirm_title": "Usunąć tego członka?",
+      "remove_confirm_body": "Bot utraci dostęp do tego projektu, a jego token zostanie unieważniony. Stanowisko pozostaje w bibliotece.",
+      "never_run": "Nigdy nie uruchomiono",
+      "last_run": "Ostatnie uruchomienie"
+    },
+    "pool": {
+      "title": "Stanowiska AI",
+      "description": "Role AI wielokrotnego użytku dla tej przestrzeni roboczej. Stanowisko dodane do kilku projektów ma jeden podręcznik.",
+      "empty": "Nie ma jeszcze stanowisk. Utwórz stanowisko i dodaj je do projektu.",
+      "create": "Nowe stanowisko",
+      "create_title": "Nowe stanowisko",
+      "edit_title": "Edytuj stanowisko",
+      "name": "Nazwa",
+      "name_placeholder": "Analiza wymagań",
+      "description_label": "Opis",
+      "description_placeholder": "Zamienia niejasną kartę w rozstrzygalne pytanie.",
+      "instructions": "Podręcznik",
+      "instructions_hint": "Całe zlecenie, które otrzymuje AI. Napisane w Plane; DSH otrzymuje wyłącznie wyrenderowany tekst.",
+      "skills": "Umiejętności",
+      "skills_hint": "Tylko nazwy — treść każdej umiejętności znajduje się na wykonawcy w ~/.dsh/skills/<name>/SKILL.md.",
+      "skills_add": "Dodaj umiejętność",
+      "model": "Model",
+      "model_placeholder": "Pozostaw puste, aby użyć domyślnego ustawienia DSH profile",
+      "profile": "DSH profile",
+      "tier": "Uprawnienia",
+      "tier_readonly": "Tylko do odczytu",
+      "tier_readonly_hint": "Odczytuje projekt; może tylko komentować karty.",
+      "tier_writer": "Zapisuje na swojej wyspie",
+      "tier_writer_hint": "Powyższe oraz pliki w katalogu jego własnej wyspy.",
+      "tier_ledger": "Sięga do rejestru",
+      "tier_ledger_hint": "Powyższe oraz pola kart i podkarty. Jego plany wymagają najpierw zatwierdzenia.",
+      "used_by": "Używane w {count} projektach",
+      "used_by_none": "Nie jest używane w żadnym projekcie",
+      "delete": "Usuń stanowisko",
+      "delete_confirm_title": "Usunąć to stanowisko?",
+      "delete_confirm_body": "Tej akcji nie można cofnąć."
+    }
   }
 }

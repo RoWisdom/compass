@@ -522,5 +522,59 @@
         }
       }
     }
+  },
+  "ai_members": {
+    "roster": {
+      "title": "KI-Mitglieder",
+      "description": "Stellen aus der Bibliothek dieses Arbeitsbereichs, die in diesem Projekt tätig sind.",
+      "empty": "Noch keine KI-Mitglieder. Fügen Sie eines aus der Bibliothek hinzu.",
+      "add": "Mitglied hinzufügen",
+      "add_title": "KI-Mitglied hinzufügen",
+      "add_description": "Stellen aus der Bibliothek dieses Arbeitsbereichs auswählen.",
+      "add_confirm": "Ausgewählte hinzufügen",
+      "add_none_left": "Jede Stelle aus der Bibliothek ist bereits in diesem Projekt.",
+      "create_post": "Neue Stelle",
+      "active": "Aktiviert",
+      "inactive": "Deaktiviert",
+      "enable": "Aktivieren",
+      "disable": "Deaktivieren",
+      "remove": "Aus dem Projekt entfernen",
+      "remove_confirm_title": "Dieses Mitglied entfernen?",
+      "remove_confirm_body": "Der Bot verliert seinen Zugriff auf dieses Projekt und sein Token wird widerrufen. Die Stelle selbst bleibt in der Bibliothek.",
+      "never_run": "Nie ausgeführt",
+      "last_run": "Zuletzt ausgeführt"
+    },
+    "pool": {
+      "title": "KI-Stellen",
+      "description": "Wiederverwendbare KI-Rollen für diesen Arbeitsbereich. Eine Stelle, die mehreren Projekten hinzugefügt wurde, hat nur ein Handbuch.",
+      "empty": "Noch keine Stellen. Erstellen Sie eine, um sie einem Projekt hinzuzufügen.",
+      "create": "Neue Stelle",
+      "create_title": "Neue Stelle",
+      "edit_title": "Stelle bearbeiten",
+      "name": "Name",
+      "name_placeholder": "Anforderungsanalyse",
+      "description_label": "Beschreibung",
+      "description_placeholder": "Macht aus einem vagen Arbeitselement eine entscheidbare Frage.",
+      "instructions": "Handbuch",
+      "instructions_hint": "Der vollständige Auftrag, den die KI erhält. In Plane verfasst; DSH erhält ausschließlich den gerenderten Text.",
+      "skills": "Fähigkeiten",
+      "skills_hint": "Nur Namen — der Inhalt jeder Fähigkeit liegt auf dem ausführenden System unter ~/.dsh/skills/<name>/SKILL.md.",
+      "skills_add": "Fähigkeit hinzufügen",
+      "model": "Modell",
+      "model_placeholder": "Leer lassen, um den Profilstandard zu verwenden.",
+      "profile": "DSH profile",
+      "tier": "Berechtigung",
+      "tier_readonly": "Schreibgeschützt",
+      "tier_readonly_hint": "Liest das Projekt; kann nur Arbeitselemente kommentieren.",
+      "tier_writer": "Schreibt im eigenen Verzeichnis",
+      "tier_writer_hint": "Wie oben, plus Dateien im eigenen Verzeichnis.",
+      "tier_ledger": "Bearbeitet Arbeitselemente",
+      "tier_ledger_hint": "Wie oben, plus Felder von Arbeitselementen und untergeordneten Elementen. Pläne müssen zuerst genehmigt werden.",
+      "used_by": "Von {count} Projekten verwendet",
+      "used_by_none": "Von keinem Projekt verwendet",
+      "delete": "Stelle löschen",
+      "delete_confirm_title": "Diese Stelle löschen?",
+      "delete_confirm_body": "Dies kann nicht rückgängig gemacht werden."
+    }
   }
 }

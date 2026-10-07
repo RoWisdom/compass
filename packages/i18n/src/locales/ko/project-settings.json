@@ -522,5 +522,59 @@
         }
       }
     }
+  },
+  "ai_members": {
+    "roster": {
+      "title": "AI 멤버",
+      "description": "이 워크스페이스 라이브러리의 포스트 중 이 프로젝트에서 작업하는 포스트입니다.",
+      "empty": "아직 AI 멤버가 없습니다. 라이브러리에서 추가하세요.",
+      "add": "멤버 추가",
+      "add_title": "AI 멤버 추가",
+      "add_description": "이 워크스페이스의 라이브러리에서 포스트를 선택하세요.",
+      "add_confirm": "선택 항목 추가",
+      "add_none_left": "라이브러리의 모든 포스트가 이미 이 프로젝트에 추가되어 있습니다.",
+      "create_post": "새 포스트",
+      "active": "활성화됨",
+      "inactive": "비활성화됨",
+      "enable": "활성화",
+      "disable": "비활성화",
+      "remove": "프로젝트에서 제거",
+      "remove_confirm_title": "이 멤버를 제거하시겠습니까?",
+      "remove_confirm_body": "봇은 이 프로젝트에 대한 액세스 권한을 잃고 토큰은 폐기됩니다. 포스트 자체는 라이브러리에 남습니다.",
+      "never_run": "실행 기록 없음",
+      "last_run": "마지막 실행"
+    },
+    "pool": {
+      "title": "AI 포스트",
+      "description": "이 워크스페이스에서 재사용할 수 있는 AI 역할입니다. 여러 프로젝트에 추가된 포스트는 하나의 설명서를 공유합니다.",
+      "empty": "아직 포스트가 없습니다. 포스트를 만들어 프로젝트에 추가하세요.",
+      "create": "새 포스트",
+      "create_title": "새 포스트",
+      "edit_title": "포스트 편집",
+      "name": "이름",
+      "name_placeholder": "요구사항 분석",
+      "description_label": "설명",
+      "description_placeholder": "모호한 카드를 판단 가능한 질문으로 바꿉니다.",
+      "instructions": "설명서",
+      "instructions_hint": "AI가 받는 전체 지시문입니다. Plane에서 작성하며, DSH는 최종 텍스트만 받습니다.",
+      "skills": "스킬",
+      "skills_hint": "이름만 표시됩니다. 각 스킬의 본문은 실행기의 ~/.dsh/skills/<name>/SKILL.md에 있습니다.",
+      "skills_add": "스킬 추가",
+      "model": "모델",
+      "model_placeholder": "비워 두면 프로필 기본값이 사용됩니다.",
+      "profile": "DSH profile",
+      "tier": "권한 수준",
+      "tier_readonly": "읽기 전용",
+      "tier_readonly_hint": "프로젝트를 읽으며, 카드에 댓글만 남길 수 있습니다.",
+      "tier_writer": "자체 디렉터리에 쓰기",
+      "tier_writer_hint": "위 내용에 더해 자체 디렉터리 안의 파일까지 쓸 수 있습니다.",
+      "tier_ledger": "장부 변경",
+      "tier_ledger_hint": "위 내용에 더해 카드 필드와 하위 카드까지 다룰 수 있습니다. 계획을 실행하려면 먼저 승인이 필요합니다.",
+      "used_by": "{count}개 프로젝트에서 사용 중",
+      "used_by_none": "어떤 프로젝트에서도 사용되지 않습니다",
+      "delete": "포스트 삭제",
+      "delete_confirm_title": "이 포스트를 삭제하시겠습니까?",
+      "delete_confirm_body": "이 작업은 취소할 수 없습니다."
+    }
   }
 }

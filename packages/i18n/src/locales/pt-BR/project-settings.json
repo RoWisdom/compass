@@ -522,5 +522,59 @@
         }
       }
     }
+  },
+  "ai_members": {
+    "roster": {
+      "title": "Membros de IA",
+      "description": "Posições da biblioteca deste espaço de trabalho, trabalhando neste projeto.",
+      "empty": "Ainda não há membros de IA. Adicione um da biblioteca.",
+      "add": "Adicionar membro",
+      "add_title": "Adicionar um membro de IA",
+      "add_description": "Escolha posições da biblioteca deste espaço de trabalho.",
+      "add_confirm": "Adicionar selecionadas",
+      "add_none_left": "Todas as posições da biblioteca já estão neste projeto.",
+      "create_post": "Nova posição",
+      "active": "Habilitado",
+      "inactive": "Desabilitado",
+      "enable": "Habilitar",
+      "disable": "Desabilitar",
+      "remove": "Remover do projeto",
+      "remove_confirm_title": "Remover este membro?",
+      "remove_confirm_body": "O robô perderá o acesso a este projeto e o token dele será revogado. A posição em si permanece na biblioteca.",
+      "never_run": "Nunca executado",
+      "last_run": "Última execução"
+    },
+    "pool": {
+      "title": "Posições de IA",
+      "description": "Posições de IA reutilizáveis para este espaço de trabalho. Uma posição adicionada a vários projetos tem um único manual.",
+      "empty": "Ainda não há posições. Crie uma para adicioná-la a um projeto.",
+      "create": "Nova posição",
+      "create_title": "Nova posição",
+      "edit_title": "Editar posição",
+      "name": "Nome",
+      "name_placeholder": "Análise de requisitos",
+      "description_label": "Descrição",
+      "description_placeholder": "Transforma um item de trabalho vago em uma pergunta decidível.",
+      "instructions": "Manual",
+      "instructions_hint": "Todo o briefing que a IA recebe. Escrito no Plane; o DSH só recebe o texto renderizado.",
+      "skills": "Habilidades",
+      "skills_hint": "Apenas nomes — o corpo de cada habilidade fica no executor, em ~/.dsh/skills/<name>/SKILL.md.",
+      "skills_add": "Adicionar uma habilidade",
+      "model": "Modelo",
+      "model_placeholder": "Deixe em branco para usar o padrão do perfil",
+      "profile": "DSH profile",
+      "tier": "Capacidade",
+      "tier_readonly": "Somente leitura",
+      "tier_readonly_hint": "Lê o projeto; só pode comentar nos itens de trabalho.",
+      "tier_writer": "Escreve em seu diretório",
+      "tier_writer_hint": "Além do anterior, arquivos dentro de seu próprio diretório.",
+      "tier_ledger": "Altera os itens de trabalho",
+      "tier_ledger_hint": "Além do anterior, campos de itens de trabalho e subitens. Os planos dele precisam de aprovação primeiro.",
+      "used_by": "Usada por {count} projetos",
+      "used_by_none": "Não é usada por nenhum projeto",
+      "delete": "Excluir posição",
+      "delete_confirm_title": "Excluir esta posição?",
+      "delete_confirm_body": "Isso não pode ser desfeito."
+    }
   }
 }

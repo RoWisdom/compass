@@ -522,5 +522,59 @@
         }
       }
     }
+  },
+  "ai_members": {
+    "roster": {
+      "title": "Membri AI",
+      "description": "Posturi din biblioteca acestui spațiu de lucru, care lucrează în acest proiect.",
+      "empty": "Încă nu există membri AI. Adaugă unul din bibliotecă.",
+      "add": "Adaugă membru",
+      "add_title": "Adaugă un membru AI",
+      "add_description": "Alege posturi din biblioteca acestui spațiu de lucru.",
+      "add_confirm": "Adaugă cele selectate",
+      "add_none_left": "Toate posturile din bibliotecă sunt deja în acest proiect.",
+      "create_post": "Post nou",
+      "active": "Activat",
+      "inactive": "Dezactivat",
+      "enable": "Activează",
+      "disable": "Dezactivează",
+      "remove": "Elimină din proiect",
+      "remove_confirm_title": "Elimini acest membru?",
+      "remove_confirm_body": "Botul își va pierde accesul la acest proiect, iar tokenul său va fi revocat. Postul în sine rămâne în bibliotecă.",
+      "never_run": "Niciodată executat",
+      "last_run": "Ultima rulare"
+    },
+    "pool": {
+      "title": "Posturi AI",
+      "description": "Posturi AI reutilizabile pentru acest spațiu de lucru. Un post adăugat în mai multe proiecte are un singur manual.",
+      "empty": "Încă nu există posturi. Creează unul pentru a-l adăuga într-un proiect.",
+      "create": "Post nou",
+      "create_title": "Post nou",
+      "edit_title": "Editează postul",
+      "name": "Nume",
+      "name_placeholder": "Analiză de cerințe",
+      "description_label": "Descriere",
+      "description_placeholder": "Transformă un element de lucru vag într-o întrebare decidabilă.",
+      "instructions": "Manual",
+      "instructions_hint": "Întregul brief pe care îl primește AI. Scris în Plane; DSH primește doar textul redat.",
+      "skills": "Abilități",
+      "skills_hint": "Doar nume — corpul fiecărei abilități se află pe executor, la ~/.dsh/skills/<name>/SKILL.md.",
+      "skills_add": "Adaugă o abilitate",
+      "model": "Model",
+      "model_placeholder": "Lasă gol pentru a folosi profilul implicit",
+      "profile": "DSH profile",
+      "tier": "Capacitate",
+      "tier_readonly": "Doar citire",
+      "tier_readonly_hint": "Citește proiectul; poate comenta doar la elementele de lucru.",
+      "tier_writer": "Scrie în propriul director",
+      "tier_writer_hint": "Cele de mai sus, plus fișiere în propriul director.",
+      "tier_ledger": "Modifică elementele de lucru",
+      "tier_ledger_hint": "Cele de mai sus, plus câmpuri ale elementelor de lucru și subelemente. Planurile sale necesită aprobare în prealabil.",
+      "used_by": "Folosit de {count} proiecte",
+      "used_by_none": "Nefolosit de niciun proiect",
+      "delete": "Șterge postul",
+      "delete_confirm_title": "Ștergi acest post?",
+      "delete_confirm_body": "Această acțiune nu poate fi anulată."
+    }
   }
 }

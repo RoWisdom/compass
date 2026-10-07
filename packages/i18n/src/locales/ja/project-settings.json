@@ -522,5 +522,59 @@
         }
       }
     }
+  },
+  "ai_members": {
+    "roster": {
+      "title": "AIメンバー",
+      "description": "このワークスペースのライブラリにあるポストのうち、このプロジェクトで動作するものです。",
+      "empty": "まだAIメンバーがいません。ライブラリから追加してください。",
+      "add": "メンバーを追加",
+      "add_title": "AIメンバーを追加",
+      "add_description": "このワークスペースのライブラリからポストを選択します。",
+      "add_confirm": "選択項目を追加",
+      "add_none_left": "ライブラリ内のすべてのポストがすでにこのプロジェクトに追加されています。",
+      "create_post": "新規ポスト",
+      "active": "有効",
+      "inactive": "無効",
+      "enable": "有効化",
+      "disable": "無効化",
+      "remove": "プロジェクトから削除",
+      "remove_confirm_title": "このメンバーを削除しますか？",
+      "remove_confirm_body": "ボットはこのプロジェクトへのアクセスを失い、トークンは失効します。ポスト自体はライブラリに残ります。",
+      "never_run": "未実行",
+      "last_run": "最終実行"
+    },
+    "pool": {
+      "title": "AIポスト",
+      "description": "このワークスペースで再利用できるAIロールです。複数のプロジェクトに追加されたポストは、1つの手引きを共有します。",
+      "empty": "まだポストがありません。ポストを作成してプロジェクトに追加してください。",
+      "create": "新規ポスト",
+      "create_title": "新規ポスト",
+      "edit_title": "ポストを編集",
+      "name": "名前",
+      "name_placeholder": "要件分析",
+      "description_label": "説明",
+      "description_placeholder": "曖昧なカードを、判断可能な問いに変えます。",
+      "instructions": "手引き",
+      "instructions_hint": "AIが受け取る指示の全体です。Planeで作成し、DSHは最終的なテキストのみを受け取ります。",
+      "skills": "スキル",
+      "skills_hint": "名前のみです。各スキルの本体は実行環境の ~/.dsh/skills/<name>/SKILL.md にあります。",
+      "skills_add": "スキルを追加",
+      "model": "モデル",
+      "model_placeholder": "空白のままにすると、プロフィールの既定値が使用されます。",
+      "profile": "DSH profile",
+      "tier": "権限レベル",
+      "tier_readonly": "読み取り専用",
+      "tier_readonly_hint": "プロジェクトを読み取ります。カードへのコメントのみ可能です。",
+      "tier_writer": "自分の島への書き込み",
+      "tier_writer_hint": "上記に加えて、自分の島ディレクトリ内のファイルを扱えます。",
+      "tier_ledger": "台帳の変更",
+      "tier_ledger_hint": "上記に加えて、カードのフィールドとサブカードを扱えます。計画の実行には事前の承認が必要です。",
+      "used_by": "{count} 件のプロジェクトで使用中",
+      "used_by_none": "どのプロジェクトでも使用されていません",
+      "delete": "ポストを削除",
+      "delete_confirm_title": "このポストを削除しますか？",
+      "delete_confirm_body": "この操作は元に戻せません。"
+    }
   }
 }

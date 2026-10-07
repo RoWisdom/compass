@@ -522,5 +522,59 @@
         }
       }
     }
+  },
+  "ai_members": {
+    "roster": {
+      "title": "AI 成員",
+      "description": "來自此工作區職位庫的職位，在本專案中工作。",
+      "empty": "尚無 AI 成員。請從職位庫新增。",
+      "add": "新增成員",
+      "add_title": "新增 AI 成員",
+      "add_description": "從此工作區的職位庫中挑選職位。",
+      "add_confirm": "新增所選項目",
+      "add_none_left": "職位庫中的每個職位都已在本專案中。",
+      "create_post": "新增職位",
+      "active": "已啟用",
+      "inactive": "已停用",
+      "enable": "啟用",
+      "disable": "停用",
+      "remove": "從專案移除",
+      "remove_confirm_title": "要移除此成員嗎？",
+      "remove_confirm_body": "機器人將失去對此專案的存取權，其權杖也會被撤銷。職位本身仍會保留在職位庫中。",
+      "never_run": "從未執行",
+      "last_run": "最後執行"
+    },
+    "pool": {
+      "title": "AI 職位",
+      "description": "可重複用於此工作區的 AI 角色。一個職位加入多個專案時，只會有一份說明書。",
+      "empty": "尚無職位。建立一個職位即可將其加入專案。",
+      "create": "新增職位",
+      "create_title": "新增職位",
+      "edit_title": "編輯職位",
+      "name": "名稱",
+      "name_placeholder": "需求分析",
+      "description_label": "描述",
+      "description_placeholder": "把模糊的卡片轉換成可判定的問題。",
+      "instructions": "說明書",
+      "instructions_hint": "AI 收到的完整指示內容。在 Plane 中撰寫；DSH 只會收到最終呈現的文字。",
+      "skills": "技能",
+      "skills_hint": "僅有名字，每個技能的內容位於執行器上的 ~/.dsh/skills/<name>/SKILL.md。",
+      "skills_add": "新增技能",
+      "model": "模型",
+      "model_placeholder": "留空以使用 DSH profile 的預設值",
+      "profile": "DSH profile",
+      "tier": "能力等級",
+      "tier_readonly": "僅讀",
+      "tier_readonly_hint": "可讀取專案；只能在卡片上留言。",
+      "tier_writer": "可在自己的島內寫入",
+      "tier_writer_hint": "上述權限，外加自己的島目錄內的檔案。",
+      "tier_ledger": "可觸及台帳",
+      "tier_ledger_hint": "上述權限，外加卡片欄位與子卡片。它的計畫需要先經過核准。",
+      "used_by": "已被 {count} 個專案使用",
+      "used_by_none": "沒有任何專案使用",
+      "delete": "刪除職位",
+      "delete_confirm_title": "要刪除此職位嗎？",
+      "delete_confirm_body": "此操作無法復原。"
+    }
   }
 }

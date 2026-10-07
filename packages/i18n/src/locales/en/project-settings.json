@@ -522,5 +522,59 @@
         }
       }
     }
+  },
+  "ai_members": {
+    "roster": {
+      "title": "AI members",
+      "description": "Posts from this workspace's library, working in this project.",
+      "empty": "No AI members yet. Add one from the library.",
+      "add": "Add member",
+      "add_title": "Add an AI member",
+      "add_description": "Pick posts from this workspace's library.",
+      "add_confirm": "Add selected",
+      "add_none_left": "Every post in the library is already in this project.",
+      "create_post": "New post",
+      "active": "Enabled",
+      "inactive": "Disabled",
+      "enable": "Enable",
+      "disable": "Disable",
+      "remove": "Remove from project",
+      "remove_confirm_title": "Remove this member?",
+      "remove_confirm_body": "The bot will lose its access to this project and its token will be revoked. The post itself stays in the library.",
+      "never_run": "Never run",
+      "last_run": "Last run"
+    },
+    "pool": {
+      "title": "AI posts",
+      "description": "Reusable AI roles for this workspace. A post added to several projects has one handbook.",
+      "empty": "No posts yet. Create one to add it to a project.",
+      "create": "New post",
+      "create_title": "New post",
+      "edit_title": "Edit post",
+      "name": "Name",
+      "name_placeholder": "Requirement analysis",
+      "description_label": "Description",
+      "description_placeholder": "Turns a vague card into a decidable question.",
+      "instructions": "Handbook",
+      "instructions_hint": "The whole brief the AI receives. Written in Plane; DSH only ever receives the rendered text.",
+      "skills": "Skills",
+      "skills_hint": "Names only — each skill's body lives on the executor at ~/.dsh/skills/<name>/SKILL.md.",
+      "skills_add": "Add a skill",
+      "model": "Model",
+      "model_placeholder": "Leave blank to use the profile default",
+      "profile": "DSH profile",
+      "tier": "Capability",
+      "tier_readonly": "Read only",
+      "tier_readonly_hint": "Reads the project; can only comment on cards.",
+      "tier_writer": "Writes in its island",
+      "tier_writer_hint": "The above, plus files inside its own island directory.",
+      "tier_ledger": "Touches the ledger",
+      "tier_ledger_hint": "The above, plus card fields and sub-cards. Its plans need approval first.",
+      "used_by": "Used by {count} projects",
+      "used_by_none": "Not used by any project",
+      "delete": "Delete post",
+      "delete_confirm_title": "Delete this post?",
+      "delete_confirm_body": "This cannot be undone."
+    }
   }
 }

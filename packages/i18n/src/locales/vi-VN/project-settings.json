@@ -522,5 +522,59 @@
         }
       }
     }
+  },
+  "ai_members": {
+    "roster": {
+      "title": "Thành viên AI",
+      "description": "Các vị trí từ thư viện của không gian làm việc này, đang làm việc trong dự án này.",
+      "empty": "Chưa có thành viên AI nào. Hãy thêm một thành viên từ thư viện.",
+      "add": "Thêm thành viên",
+      "add_title": "Thêm thành viên AI",
+      "add_description": "Chọn vị trí từ thư viện của không gian làm việc này.",
+      "add_confirm": "Thêm mục đã chọn",
+      "add_none_left": "Mọi vị trí trong thư viện đều đã có trong dự án này.",
+      "create_post": "Vị trí mới",
+      "active": "Đã bật",
+      "inactive": "Đã tắt",
+      "enable": "Bật",
+      "disable": "Tắt",
+      "remove": "Xóa khỏi dự án",
+      "remove_confirm_title": "Xóa thành viên này?",
+      "remove_confirm_body": "Bot sẽ mất quyền truy cập vào dự án này và token của nó sẽ bị thu hồi. Bản thân vị trí vẫn ở lại trong thư viện.",
+      "never_run": "Chưa từng chạy",
+      "last_run": "Lần chạy cuối"
+    },
+    "pool": {
+      "title": "Vị trí AI",
+      "description": "Các vai trò AI có thể tái sử dụng cho không gian làm việc này. Một vị trí được thêm vào nhiều dự án sẽ chỉ có một cẩm nang.",
+      "empty": "Chưa có vị trí nào. Tạo một vị trí để thêm vào dự án.",
+      "create": "Vị trí mới",
+      "create_title": "Vị trí mới",
+      "edit_title": "Chỉnh sửa vị trí",
+      "name": "Tên",
+      "name_placeholder": "Phân tích yêu cầu",
+      "description_label": "Mô tả",
+      "description_placeholder": "Biến một thẻ mơ hồ thành một câu hỏi có thể quyết định.",
+      "instructions": "Cẩm nang",
+      "instructions_hint": "Toàn bộ đề bài mà AI nhận được. Được viết trong Plane; DSH chỉ nhận được văn bản đã kết xuất.",
+      "skills": "Kỹ năng",
+      "skills_hint": "Chỉ có tên — nội dung của mỗi kỹ năng nằm trên trình thực thi tại ~/.dsh/skills/<name>/SKILL.md.",
+      "skills_add": "Thêm kỹ năng",
+      "model": "Mô hình",
+      "model_placeholder": "Để trống để dùng mặc định của DSH profile",
+      "profile": "DSH profile",
+      "tier": "Mức năng lực",
+      "tier_readonly": "Chỉ đọc",
+      "tier_readonly_hint": "Đọc dự án; chỉ có thể bình luận trên thẻ.",
+      "tier_writer": "Ghi trong đảo của chính nó",
+      "tier_writer_hint": "Như trên, cộng thêm các tệp trong thư mục đảo của chính nó.",
+      "tier_ledger": "Tác động vào sổ cái",
+      "tier_ledger_hint": "Như trên, cộng thêm trường của thẻ và thẻ con. Kế hoạch của nó cần được phê duyệt trước.",
+      "used_by": "Được dùng bởi {count} dự án",
+      "used_by_none": "Không được dự án nào sử dụng",
+      "delete": "Xóa vị trí",
+      "delete_confirm_title": "Xóa vị trí này?",
+      "delete_confirm_body": "Không thể hoàn tác thao tác này."
+    }
   }
 }

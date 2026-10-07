@@ -522,5 +522,59 @@
         }
       }
     }
+  },
+  "ai_members": {
+    "roster": {
+      "title": "Anggota AI",
+      "description": "Posisi dari pustaka ruang kerja ini, yang bekerja di proyek ini.",
+      "empty": "Belum ada anggota AI. Tambahkan satu dari pustaka.",
+      "add": "Tambah anggota",
+      "add_title": "Tambah anggota AI",
+      "add_description": "Pilih posisi dari pustaka ruang kerja ini.",
+      "add_confirm": "Tambahkan yang dipilih",
+      "add_none_left": "Semua posisi di pustaka sudah ada di proyek ini.",
+      "create_post": "Posisi baru",
+      "active": "Diaktifkan",
+      "inactive": "Dinonaktifkan",
+      "enable": "Aktifkan",
+      "disable": "Nonaktifkan",
+      "remove": "Hapus dari proyek",
+      "remove_confirm_title": "Hapus anggota ini?",
+      "remove_confirm_body": "Bot akan kehilangan aksesnya ke proyek ini dan tokennya akan dicabut. Posisinya sendiri tetap ada di pustaka.",
+      "never_run": "Belum pernah dijalankan",
+      "last_run": "Terakhir dijalankan"
+    },
+    "pool": {
+      "title": "Posisi AI",
+      "description": "Posisi AI yang dapat digunakan ulang untuk ruang kerja ini. Posisi yang ditambahkan ke beberapa proyek memiliki satu panduan.",
+      "empty": "Belum ada posisi. Buat satu untuk menambahkannya ke proyek.",
+      "create": "Posisi baru",
+      "create_title": "Posisi baru",
+      "edit_title": "Sunting posisi",
+      "name": "Nama",
+      "name_placeholder": "Analisis kebutuhan",
+      "description_label": "Deskripsi",
+      "description_placeholder": "Mengubah item kerja yang samar menjadi pertanyaan yang dapat diputuskan.",
+      "instructions": "Panduan",
+      "instructions_hint": "Seluruh arahan yang diterima AI. Ditulis di Plane; DSH hanya menerima teks yang telah dirender.",
+      "skills": "Keterampilan",
+      "skills_hint": "Hanya nama — isi setiap keterampilan berada di executor, di ~/.dsh/skills/<name>/SKILL.md.",
+      "skills_add": "Tambah keterampilan",
+      "model": "Model",
+      "model_placeholder": "Biarkan kosong untuk memakai default profil",
+      "profile": "DSH profile",
+      "tier": "Kemampuan",
+      "tier_readonly": "Hanya baca",
+      "tier_readonly_hint": "Membaca proyek; hanya dapat mengomentari item kerja.",
+      "tier_writer": "Menulis di direktori sendiri",
+      "tier_writer_hint": "Seperti di atas, plus file di dalam direktorinya sendiri.",
+      "tier_ledger": "Mengubah item kerja",
+      "tier_ledger_hint": "Seperti di atas, plus bidang item kerja dan sub-item. Rencananya perlu disetujui terlebih dahulu.",
+      "used_by": "Digunakan oleh {count} proyek",
+      "used_by_none": "Tidak digunakan oleh proyek mana pun",
+      "delete": "Hapus posisi",
+      "delete_confirm_title": "Hapus posisi ini?",
+      "delete_confirm_body": "Tindakan ini tidak dapat dibatalkan."
+    }
   }
 }

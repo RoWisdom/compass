@@ -522,5 +522,59 @@
         }
       }
     }
+  },
+  "ai_members": {
+    "roster": {
+      "title": "AI 成员",
+      "description": "工作区岗位库里的岗位，在这个项目里干活。",
+      "empty": "还没有 AI 成员。从岗位库里加一个。",
+      "add": "添加成员",
+      "add_title": "添加 AI 成员",
+      "add_description": "从本工作区的岗位库里挑岗位。",
+      "add_confirm": "加入所选",
+      "add_none_left": "岗位库里的岗位都加进这个项目了。",
+      "create_post": "新建岗位",
+      "active": "已启用",
+      "inactive": "已停用",
+      "enable": "启用",
+      "disable": "停用",
+      "remove": "从项目移除",
+      "remove_confirm_title": "移除这个成员？",
+      "remove_confirm_body": "机器人将失去对这个项目的访问权，令牌会被吊销。岗位本身仍留在岗位库里。",
+      "never_run": "从未运行",
+      "last_run": "最近一次运行"
+    },
+    "pool": {
+      "title": "AI 岗位",
+      "description": "本工作区可复用的 AI 岗位。一个岗位加进几个项目，说明书只有一份。",
+      "empty": "还没有岗位。新建一个，再把它加进项目。",
+      "create": "新建岗位",
+      "create_title": "新建岗位",
+      "edit_title": "编辑岗位",
+      "name": "名称",
+      "name_placeholder": "需求分析",
+      "description_label": "简介",
+      "description_placeholder": "把一张含糊的卡片变成可判断的问题。",
+      "instructions": "说明书",
+      "instructions_hint": "AI 收到的全部说明。在 Plane 里撰写；DSH 只会收到渲染后的文本。",
+      "skills": "技能",
+      "skills_hint": "只写名字 —— 技能本体在执行器的 ~/.dsh/skills/<name>/SKILL.md 里。",
+      "skills_add": "添加技能",
+      "model": "模型",
+      "model_placeholder": "留空则使用 profile 默认",
+      "profile": "DSH profile",
+      "tier": "能力档位",
+      "tier_readonly": "只读",
+      "tier_readonly_hint": "读项目；只能给卡片加评论。",
+      "tier_writer": "岛内写",
+      "tier_writer_hint": "以上全部，外加自己岛目录里的文件。",
+      "tier_ledger": "动台账",
+      "tier_ledger_hint": "以上全部，外加卡片字段和子卡片。它的计划要先经批准。",
+      "used_by": "被 {count} 个项目使用",
+      "used_by_none": "还没有项目使用",
+      "delete": "删除岗位",
+      "delete_confirm_title": "删除这个岗位？",
+      "delete_confirm_body": "此操作无法撤销。"
+    }
   }
 }

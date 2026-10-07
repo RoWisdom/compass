@@ -522,5 +522,59 @@
         }
       }
     }
+  },
+  "ai_members": {
+    "roster": {
+      "title": "AI členové",
+      "description": "Pozice z knihovny tohoto pracovního prostoru, které pracují v tomto projektu.",
+      "empty": "Zatím žádní AI členové. Přidejte jednoho z knihovny.",
+      "add": "Přidat člena",
+      "add_title": "Přidat AI člena",
+      "add_description": "Vyberte pozice z knihovny tohoto pracovního prostoru.",
+      "add_confirm": "Přidat vybrané",
+      "add_none_left": "Každá pozice z knihovny už je v tomto projektu.",
+      "create_post": "Nová pozice",
+      "active": "Povoleno",
+      "inactive": "Zakázáno",
+      "enable": "Povolit",
+      "disable": "Zakázat",
+      "remove": "Odebrat z projektu",
+      "remove_confirm_title": "Odebrat tohoto člena?",
+      "remove_confirm_body": "Bot ztratí přístup k tomuto projektu a jeho token bude odvolán. Pozice zůstane v knihovně.",
+      "never_run": "Nikdy nespouštěno",
+      "last_run": "Naposledy spuštěno"
+    },
+    "pool": {
+      "title": "AI pozice",
+      "description": "Opakovaně použitelné AI role pro tento pracovní prostor. Pozice přidaná do několika projektů má jednu příručku.",
+      "empty": "Zatím žádné pozice. Vytvořte pozici a přidejte ji do projektu.",
+      "create": "Nová pozice",
+      "create_title": "Nová pozice",
+      "edit_title": "Upravit pozici",
+      "name": "Název",
+      "name_placeholder": "Analýza požadavků",
+      "description_label": "Popis",
+      "description_placeholder": "Promění vágní kartu v rozhodnutelnou otázku.",
+      "instructions": "Příručka",
+      "instructions_hint": "Celé zadání, které AI dostává. Napsáno v Plane; DSH dostává pouze vykreslený text.",
+      "skills": "Dovednosti",
+      "skills_hint": "Pouze názvy — obsah každé dovednosti je na vykonavateli v ~/.dsh/skills/<name>/SKILL.md.",
+      "skills_add": "Přidat dovednost",
+      "model": "Model",
+      "model_placeholder": "Ponechte prázdné pro výchozí nastavení DSH profile",
+      "profile": "DSH profile",
+      "tier": "Oprávnění",
+      "tier_readonly": "Pouze pro čtení",
+      "tier_readonly_hint": "Čte projekt; může pouze komentovat karty.",
+      "tier_writer": "Zapisuje na svém ostrově",
+      "tier_writer_hint": "Výše uvedené plus soubory v adresáři vlastního ostrova.",
+      "tier_ledger": "Zasahuje do evidence",
+      "tier_ledger_hint": "Výše uvedené plus pole karet a podkarty. Jeho plány vyžadují nejprve schválení.",
+      "used_by": "Používá se v {count} projektech",
+      "used_by_none": "Nepoužívá se v žádném projektu",
+      "delete": "Smazat pozici",
+      "delete_confirm_title": "Smazat tuto pozici?",
+      "delete_confirm_body": "Tuto akci nelze vrátit zpět."
+    }
   }
 }

@@ -522,5 +522,59 @@
         }
       }
     }
+  },
+  "ai_members": {
+    "roster": {
+      "title": "Membres IA",
+      "description": "Des postes de la bibliothèque de cet espace de travail, actifs dans ce projet.",
+      "empty": "Aucun membre IA pour le moment. Ajoutez-en un depuis la bibliothèque.",
+      "add": "Ajouter un membre",
+      "add_title": "Ajouter un membre IA",
+      "add_description": "Sélectionnez des postes dans la bibliothèque de cet espace de travail.",
+      "add_confirm": "Ajouter la sélection",
+      "add_none_left": "Chaque poste de la bibliothèque est déjà dans ce projet.",
+      "create_post": "Nouveau poste",
+      "active": "Activé",
+      "inactive": "Désactivé",
+      "enable": "Activer",
+      "disable": "Désactiver",
+      "remove": "Retirer du projet",
+      "remove_confirm_title": "Retirer ce membre ?",
+      "remove_confirm_body": "Le bot perdra son accès à ce projet et son jeton sera révoqué. Le poste lui-même reste dans la bibliothèque.",
+      "never_run": "Jamais exécuté",
+      "last_run": "Dernière exécution"
+    },
+    "pool": {
+      "title": "Postes IA",
+      "description": "Des rôles IA réutilisables pour cet espace de travail. Un poste ajouté à plusieurs projets n’a qu’un seul manuel.",
+      "empty": "Aucun poste pour le moment. Créez-en un pour l’ajouter à un projet.",
+      "create": "Nouveau poste",
+      "create_title": "Nouveau poste",
+      "edit_title": "Modifier le poste",
+      "name": "Nom",
+      "name_placeholder": "Analyse des besoins",
+      "description_label": "Description",
+      "description_placeholder": "Transforme un élément de travail flou en une question décidable.",
+      "instructions": "Manuel",
+      "instructions_hint": "La consigne complète que reçoit l’IA. Rédigée dans Plane ; DSH ne reçoit que le texte rendu.",
+      "skills": "Compétences",
+      "skills_hint": "Noms uniquement — le contenu de chaque compétence réside sur le système d’exécution à l’emplacement ~/.dsh/skills/<name>/SKILL.md.",
+      "skills_add": "Ajouter une compétence",
+      "model": "Modèle",
+      "model_placeholder": "Laissez vide pour utiliser la valeur par défaut du profil.",
+      "profile": "DSH profile",
+      "tier": "Capacité",
+      "tier_readonly": "Lecture seule",
+      "tier_readonly_hint": "Lit le projet ; peut uniquement commenter les éléments de travail.",
+      "tier_writer": "Écrit dans son propre répertoire",
+      "tier_writer_hint": "Comme ci-dessus, plus les fichiers dans son propre répertoire.",
+      "tier_ledger": "Modifie les éléments de travail",
+      "tier_ledger_hint": "Comme ci-dessus, plus les champs des éléments de travail et des sous-éléments. Ses plans doivent d’abord être approuvés.",
+      "used_by": "Utilisé par {count} projets",
+      "used_by_none": "Utilisé par aucun projet",
+      "delete": "Supprimer le poste",
+      "delete_confirm_title": "Supprimer ce poste ?",
+      "delete_confirm_body": "Cette action ne peut pas être annulée."
+    }
   }
 }
