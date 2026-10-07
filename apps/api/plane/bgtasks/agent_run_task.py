@@ -98,9 +98,9 @@ def _run_headless(*, prompt, island, member, env_extra):
     """
     env = dict(os.environ)
     env.update(env_extra)
-    env["DSH_PERMISSION_MODE"] = permission_mode_for_tier(member.tier)
+    env["DSH_PERMISSION_MODE"] = permission_mode_for_tier(member.definition.tier)
     completed = subprocess.run(  # noqa: S603
-        [settings.DSH_BINARY, "--profile", member.profile or settings.DSH_PROFILE, "headless", prompt],
+        [settings.DSH_BINARY, "--profile", member.definition.profile or settings.DSH_PROFILE, "headless", prompt],
         cwd=str(island),
         env=env,
         capture_output=True,
@@ -123,7 +123,9 @@ def run_agent_member(run_id):
     """
     try:
         run = (
-            AgentRun.objects.select_related("member", "member__bot_user", "member__service_token")
+            AgentRun.objects.select_related(
+                "member", "member__definition", "member__bot_user", "member__service_token"
+            )
             .filter(pk=run_id)
             .first()
         )
@@ -170,7 +172,7 @@ def _execute(run):
     token = getattr(member.service_token, "token", "") or ""
 
     # 丙档第一轮 = 「是丙档」且「还没有计划」。`plan` 非空即表示已过闸。
-    is_plan_round = member.tier == AgentTierEnum.LEDGER.value and not run.plan
+    is_plan_round = member.definition.tier == AgentTierEnum.LEDGER.value and not run.plan
 
     if is_plan_round:
         prompt = build_plan_prompt(member=member, project=project, issue=issue, island=island)
@@ -277,7 +279,7 @@ def _execute(run):
         run.error = (stderr.strip() or stdout.strip() or f"exit code {exit_code}")[:5000]
         run.save(update_fields=["status", "error", "exit_code", "artifacts", "session_ref", "finished_at"])
 
-    group = state_group_for_run_outcome(run.status, tier=member.tier)
+    group = state_group_for_run_outcome(run.status, tier=member.definition.tier)
     if group:
         set_issue_state_group(issue, group)
 

@@ -32,7 +32,14 @@ from io import StringIO
 import pytest
 from django.core.management import call_command
 
-from plane.db.models import AgentMember, AgentRun, AgentRunStatusEnum, AgentTierEnum, Project
+from plane.db.models import (
+    AgentDefinition,
+    AgentMember,
+    AgentRun,
+    AgentRunStatusEnum,
+    AgentTierEnum,
+    Project,
+)
 from plane.utils.markdown_storage import (
     MARKDOWN_STORAGE_PATH_ENV,
     _sanitize_name,
@@ -218,9 +225,11 @@ class TestRenameProjectMirrorDirectoriesCommand:
         """
         root, seeded, old = self._seed(workspace, create_user, tmp_path, monkeypatch, "面料交易", "RUN1")
 
+        definition = AgentDefinition.objects.create(
+            workspace_id=workspace.id, name="需求分析", tier=AgentTierEnum.READONLY.value
+        )
         member = AgentMember.objects.create(
-            name="需求分析",
-            tier=AgentTierEnum.READONLY.value,
+            definition=definition,
             project_id=project.id,
             workspace_id=workspace.id,
             bot_user_id=create_bot_user.id,

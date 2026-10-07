@@ -8,6 +8,7 @@ import pytest
 
 from plane.db.models import (
     APIToken,
+    AgentDefinition,
     AgentMember,
     AgentRun,
     AgentRunStatusEnum,
@@ -18,17 +19,25 @@ from plane.bgtasks.agent_run_task import run_agent_member
 from plane.utils.markdown_storage import project_directory
 
 
+def _definition(workspace, name="需求分析", tier=AgentTierEnum.READONLY.value, **kwargs):
+    return AgentDefinition.objects.create(workspace_id=workspace.id, name=name, tier=tier, **kwargs)
+
+
+def _member(project, workspace, bot_user, name="需求分析", tier=AgentTierEnum.READONLY.value, **kwargs):
+    return AgentMember.objects.create(
+        definition=_definition(workspace, name=name, tier=tier),
+        project_id=project.id,
+        workspace_id=workspace.id,
+        bot_user_id=bot_user.id,
+        **kwargs,
+    )
+
+
 @pytest.mark.django_db
 def test_successful_non_ledger_run_posts_comment_and_moves_nothing(
     create_bot_user, workspace, project, create_issue, monkeypatch
 ):
-    member = AgentMember.objects.create(
-        name="需求分析",
-        tier=AgentTierEnum.READONLY.value,
-        project_id=project.id,
-        workspace_id=workspace.id,
-        bot_user_id=create_bot_user.id,
-    )
+    member = _member(project, workspace, create_bot_user, name="需求分析", tier=AgentTierEnum.READONLY.value)
     run = AgentRun.objects.create(
         member=member, issue_id=create_issue.id,
         project_id=project.id, workspace_id=workspace.id,
@@ -59,13 +68,7 @@ def test_successful_non_ledger_run_posts_comment_and_moves_nothing(
 def test_ledger_first_round_stops_at_awaiting_approval(
     create_bot_user, workspace, project, create_issue, monkeypatch
 ):
-    member = AgentMember.objects.create(
-        name="任务拆解",
-        tier=AgentTierEnum.LEDGER.value,
-        project_id=project.id,
-        workspace_id=workspace.id,
-        bot_user_id=create_bot_user.id,
-    )
+    member = _member(project, workspace, create_bot_user, name="任务拆解", tier=AgentTierEnum.LEDGER.value)
     run = AgentRun.objects.create(
         member=member, issue_id=create_issue.id,
         project_id=project.id, workspace_id=workspace.id,
@@ -90,13 +93,7 @@ def test_ledger_first_round_stops_at_awaiting_approval(
 def test_ledger_second_round_executes_the_stored_plan(
     create_bot_user, workspace, project, create_issue, create_state, monkeypatch
 ):
-    member = AgentMember.objects.create(
-        name="任务拆解",
-        tier=AgentTierEnum.LEDGER.value,
-        project_id=project.id,
-        workspace_id=workspace.id,
-        bot_user_id=create_bot_user.id,
-    )
+    member = _member(project, workspace, create_bot_user, name="任务拆解", tier=AgentTierEnum.LEDGER.value)
     run = AgentRun.objects.create(
         member=member, issue_id=create_issue.id, project_id=project.id,
         workspace_id=workspace.id, plan="计划：建两张子卡。",
@@ -146,13 +143,7 @@ def test_failure_posts_a_comment_and_does_not_move_the_card(
     create_issue.refresh_from_db()
     assert create_issue.state_id == started.id
 
-    member = AgentMember.objects.create(
-        name="任务拆解",
-        tier=AgentTierEnum.LEDGER.value,
-        project_id=project.id,
-        workspace_id=workspace.id,
-        bot_user_id=create_bot_user.id,
-    )
+    member = _member(project, workspace, create_bot_user, name="任务拆解", tier=AgentTierEnum.LEDGER.value)
     run = AgentRun.objects.create(
         member=member, issue_id=create_issue.id, project_id=project.id,
         workspace_id=workspace.id, plan="已经批过的计划",
@@ -179,10 +170,7 @@ def test_failure_posts_a_comment_and_does_not_move_the_card(
 def test_task_is_idempotent_on_a_finished_run(
     create_bot_user, workspace, project, create_issue, monkeypatch
 ):
-    member = AgentMember.objects.create(
-        name="需求分析", project_id=project.id, workspace_id=workspace.id,
-        bot_user_id=create_bot_user.id,
-    )
+    member = _member(project, workspace, create_bot_user, name="需求分析")
     run = AgentRun.objects.create(
         member=member, issue_id=create_issue.id, project_id=project.id,
         workspace_id=workspace.id, status=AgentRunStatusEnum.SUCCEEDED.value,
@@ -202,13 +190,7 @@ def test_a_missing_dsh_binary_still_posts_a_comment(
     create_bot_user, workspace, project, create_issue, monkeypatch
 ):
     """Step 7 的那个部署事故：PATH 里没有 `dsh`。它也得在卡片上说话。"""
-    member = AgentMember.objects.create(
-        name="任务拆解",
-        tier=AgentTierEnum.LEDGER.value,
-        project_id=project.id,
-        workspace_id=workspace.id,
-        bot_user_id=create_bot_user.id,
-    )
+    member = _member(project, workspace, create_bot_user, name="任务拆解", tier=AgentTierEnum.LEDGER.value)
     run = AgentRun.objects.create(
         member=member, issue_id=create_issue.id, project_id=project.id,
         workspace_id=workspace.id, plan="已经批过的计划",
@@ -233,13 +215,7 @@ def test_a_crash_inside_execute_still_posts_a_comment(
     create_bot_user, workspace, project, create_issue, monkeypatch
 ):
     """`_execute` 自己炸了（不是子进程炸了）也要说话 —— 兜底那条路的判据。"""
-    member = AgentMember.objects.create(
-        name="任务拆解",
-        tier=AgentTierEnum.LEDGER.value,
-        project_id=project.id,
-        workspace_id=workspace.id,
-        bot_user_id=create_bot_user.id,
-    )
+    member = _member(project, workspace, create_bot_user, name="任务拆解", tier=AgentTierEnum.LEDGER.value)
     run = AgentRun.objects.create(
         member=member, issue_id=create_issue.id, project_id=project.id,
         workspace_id=workspace.id,
@@ -270,12 +246,8 @@ def test_a_leaked_token_is_redacted_in_the_comment_and_the_log(
     service_token = APIToken.objects.create(
         label="agent service token", user=create_bot_user, user_type=1, token=secret
     )
-    member = AgentMember.objects.create(
-        name="任务拆解",
-        tier=AgentTierEnum.LEDGER.value,
-        project_id=project.id,
-        workspace_id=workspace.id,
-        bot_user_id=create_bot_user.id,
+    member = _member(
+        project, workspace, create_bot_user, name="任务拆解", tier=AgentTierEnum.LEDGER.value,
         service_token=service_token,
     )
     run = AgentRun.objects.create(
@@ -307,13 +279,7 @@ def test_a_raising_success_comment_does_not_turn_a_success_into_a_failure(
     create_bot_user, workspace, project, create_issue, create_state, monkeypatch
 ):
     """M-24：说话失败不能把一次成功的落地改写成失败，也不能吞掉那次搬卡。"""
-    member = AgentMember.objects.create(
-        name="任务拆解",
-        tier=AgentTierEnum.LEDGER.value,
-        project_id=project.id,
-        workspace_id=workspace.id,
-        bot_user_id=create_bot_user.id,
-    )
+    member = _member(project, workspace, create_bot_user, name="任务拆解", tier=AgentTierEnum.LEDGER.value)
     run = AgentRun.objects.create(
         member=member, issue_id=create_issue.id, project_id=project.id,
         workspace_id=workspace.id, plan="已经批过的计划",
@@ -338,13 +304,7 @@ def test_html_in_the_output_is_escaped(
     create_bot_user, workspace, project, create_issue, monkeypatch
 ):
     """M-21：< 和 & 必须原样显示，而不是被 HTML 解析器吃掉。"""
-    member = AgentMember.objects.create(
-        name="需求分析",
-        tier=AgentTierEnum.READONLY.value,
-        project_id=project.id,
-        workspace_id=workspace.id,
-        bot_user_id=create_bot_user.id,
-    )
+    member = _member(project, workspace, create_bot_user, name="需求分析", tier=AgentTierEnum.READONLY.value)
     run = AgentRun.objects.create(
         member=member, issue_id=create_issue.id, project_id=project.id,
         workspace_id=workspace.id,
@@ -372,13 +332,7 @@ def test_a_second_delivery_of_the_same_run_starts_no_second_subprocess(
     于是第二次调用恰好模拟了「第一次还在跑、第二次投递到了」那个窗口。
     旧写法（读-改-写）下两次都会通过 `status != pending` 判断 ⇒ 这条会红。
     """
-    member = AgentMember.objects.create(
-        name="任务拆解",
-        tier=AgentTierEnum.LEDGER.value,
-        project_id=project.id,
-        workspace_id=workspace.id,
-        bot_user_id=create_bot_user.id,
-    )
+    member = _member(project, workspace, create_bot_user, name="任务拆解", tier=AgentTierEnum.LEDGER.value)
     run = AgentRun.objects.create(
         member=member, issue_id=create_issue.id, project_id=project.id, workspace_id=workspace.id,
     )

@@ -4,7 +4,7 @@
 
 import pytest
 
-from plane.db.models import AgentMember, AgentRunStatusEnum, IssueComment
+from plane.db.models import AgentDefinition, AgentMember, AgentRunStatusEnum, IssueComment
 from plane.utils.agent_callback import (
     post_bot_comment,
     set_issue_state_group,
@@ -14,8 +14,9 @@ from plane.utils.agent_callback import (
 
 @pytest.mark.django_db
 def test_post_bot_comment_authors_it_as_the_bot(create_bot_user, workspace, project, create_issue):
+    definition = AgentDefinition.objects.create(workspace_id=workspace.id, name="需求分析师")
     member = AgentMember.objects.create(
-        name="需求分析师",
+        definition=definition,
         project_id=project.id,
         workspace_id=workspace.id,
         bot_user_id=create_bot_user.id,

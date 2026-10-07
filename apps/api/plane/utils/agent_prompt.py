@@ -21,9 +21,13 @@ PLAN_DISCLAIMER = (
 
 
 def member_handbook(member) -> str:
-    """岗位说明书 + 挂载技能的正文，顺序拼接（设计 §8：挂载 = 拼接）。"""
-    parts = [f"# 你是谁：{member.name}", "", (member.instructions or "").strip()]
-    for name in member.skills or []:
+    """岗位说明书 + 挂载技能的正文，顺序拼接（设计 §8：挂载 = 拼接）。
+
+    **现场读定义，不读副本** —— 成员行上没有说明书（第二期设计 §2）。
+    """
+    definition = member.definition
+    parts = [f"# 你是谁：{definition.name}", "", (definition.instructions or "").strip()]
+    for name in definition.skills or []:
         body = skill_body(name)
         if body:
             parts += ["", f"# 技能：{name}", "", body.strip()]

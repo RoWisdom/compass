@@ -4,7 +4,14 @@
 
 import pytest
 
-from plane.db.models import AgentMember, AgentRun, AgentRunStatusEnum, AgentTierEnum, IssueComment
+from plane.db.models import (
+    AgentDefinition,
+    AgentMember,
+    AgentRun,
+    AgentRunStatusEnum,
+    AgentTierEnum,
+    IssueComment,
+)
 from plane.db.signals.agent_approval import APPROVAL_PREFIX, _claim_for_rerun
 
 # Every save below is wrapped in ``django_capture_on_commit_callbacks(execute=True)``.
@@ -15,9 +22,13 @@ from plane.db.signals.agent_approval import APPROVAL_PREFIX, _claim_for_rerun
 # no matter what the signal did.
 
 
+def _definition(workspace, name="任务拆解", tier=AgentTierEnum.LEDGER.value):
+    return AgentDefinition.objects.create(workspace_id=workspace.id, name=name, tier=tier)
+
+
 def _member(project, workspace, bot_user, tier=AgentTierEnum.LEDGER.value):
     return AgentMember.objects.create(
-        name="任务拆解", tier=tier,
+        definition=_definition(workspace, name="任务拆解", tier=tier),
         project_id=project.id, workspace_id=workspace.id, bot_user_id=bot_user.id,
     )
 

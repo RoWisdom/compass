@@ -7,7 +7,7 @@ from pathlib import Path
 from plane.utils.agent_prompt import build_execute_prompt, build_plan_prompt, member_handbook
 
 
-class FakeMember:
+class FakeDefinition:
     def __init__(self, **kwargs):
         self.name = "架构设计"
         self.instructions = "你负责把方案写清楚。"
@@ -15,6 +15,14 @@ class FakeMember:
         self.tier = "writer"
         for key, value in kwargs.items():
             setattr(self, key, value)
+
+
+class FakeMember:
+    """说明书/技能/档位住在 ``definition`` 上，成员行上什么都没有 ——
+    运行通路现场读定义（第二期设计 §2），所以这里的替身也必须长成那个形状。"""
+
+    def __init__(self, **kwargs):
+        self.definition = FakeDefinition(**kwargs)
 
 
 class FakeProject:
