@@ -422,5 +422,11 @@
       "label": "Tiêu đề sử thi",
       "required": "Tiêu đề sử thi là bắt buộc"
     }
+  },
+  "agent": {
+    "wake": "Đánh thức",
+    "woken": "Đã đánh thức — kết luận sẽ trở lại mục công việc này",
+    "no_members": "Dự án này chưa có thành viên AI",
+    "wake_failed": "Không thể đánh thức thành viên"
   }
 }

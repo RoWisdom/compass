@@ -422,5 +422,11 @@
       "label": "Názov epiky",
       "required": "Názov epiky je povinný."
     }
+  },
+  "agent": {
+    "wake": "Prebudiť",
+    "woken": "Prebudené – jeho záver sa vráti na túto pracovnú položku",
+    "no_members": "Tento projekt nemá žiadnych AI členov",
+    "wake_failed": "Člena sa nepodarilo prebudiť"
   }
 }

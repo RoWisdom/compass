@@ -422,5 +422,11 @@
       "label": "Titolo Epic",
       "required": "Il titolo dell'Epic è obbligatorio."
     }
+  },
+  "agent": {
+    "wake": "Sveglia",
+    "woken": "Sveglia — la sua conclusione tornerà su questo work item",
+    "no_members": "Questo progetto non ha membri IA",
+    "wake_failed": "Impossibile svegliare il membro"
   }
 }

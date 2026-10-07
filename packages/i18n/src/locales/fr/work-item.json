@@ -422,5 +422,11 @@
       "label": "Titre de l’Epic",
       "required": "Le titre de l’Epic est requis."
     }
+  },
+  "agent": {
+    "wake": "Réveiller",
+    "woken": "Réveillé – sa conclusion reviendra sur cet élément de travail",
+    "no_members": "Ce projet n'a pas de membres IA",
+    "wake_failed": "Impossible de réveiller le membre"
   }
 }

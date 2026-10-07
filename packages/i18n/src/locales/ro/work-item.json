@@ -422,5 +422,11 @@
       "label": "Titlu sarcină majoră",
       "required": "Titlul sarcinii majore este obligatoriu."
     }
+  },
+  "agent": {
+    "wake": "Trezește",
+    "woken": "Trezit — concluzia lui se va întoarce pe acest element de lucru",
+    "no_members": "Acest proiect nu are membri AI",
+    "wake_failed": "Membrul nu a putut fi trezit"
   }
 }

@@ -422,5 +422,11 @@
       "label": "Epic-Titel",
       "required": "Ein Titel für das Epic ist erforderlich."
     }
+  },
+  "agent": {
+    "wake": "Aufwecken",
+    "woken": "Aufgeweckt – seine Schlussfolgerung kommt zu diesem Work Item zurück",
+    "no_members": "In diesem Projekt gibt es keine KI-Mitglieder",
+    "wake_failed": "Mitglied konnte nicht aufgeweckt werden"
   }
 }

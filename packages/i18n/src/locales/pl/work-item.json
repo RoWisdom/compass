@@ -422,5 +422,11 @@
       "label": "Tytuł epiku",
       "required": "Tytuł epiku jest wymagany."
     }
+  },
+  "agent": {
+    "wake": "Obudź",
+    "woken": "Obudzono – jego wniosek wróci do tego elementu pracy",
+    "no_members": "Ten projekt nie ma członków AI",
+    "wake_failed": "Nie udało się obudzić członka"
   }
 }

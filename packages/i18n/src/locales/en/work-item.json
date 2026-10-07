@@ -422,5 +422,11 @@
       "label": "Epic Title",
       "required": "Epic title is required."
     }
+  },
+  "agent": {
+    "wake": "Wake",
+    "woken": "Woken — its conclusion will come back to this work item",
+    "no_members": "No AI members in this project",
+    "wake_failed": "Could not wake the member"
   }
 }

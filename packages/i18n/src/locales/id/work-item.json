@@ -422,5 +422,11 @@
       "label": "Judul Epik",
       "required": "Judul epik wajib diisi."
     }
+  },
+  "agent": {
+    "wake": "Bangunkan",
+    "woken": "Dibangunkan — kesimpulannya akan kembali ke item kerja ini",
+    "no_members": "Proyek ini belum memiliki anggota AI",
+    "wake_failed": "Gagal membangunkan anggota"
   }
 }

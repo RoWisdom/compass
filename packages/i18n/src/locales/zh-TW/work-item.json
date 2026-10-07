@@ -422,5 +422,11 @@
       "label": "Epic 標題",
       "required": "Epic 標題為必填。"
     }
+  },
+  "agent": {
+    "wake": "喚醒",
+    "woken": "已喚醒，它的結論會回到這張卡片上",
+    "no_members": "本專案還沒有可用的 AI 成員",
+    "wake_failed": "喚醒失敗"
   }
 }

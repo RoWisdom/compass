@@ -422,5 +422,11 @@
       "label": "Título do Épico",
       "required": "O título do épico é obrigatório."
     }
+  },
+  "agent": {
+    "wake": "Despertar",
+    "woken": "Despertado — a conclusão dele voltará para este item de trabalho",
+    "no_members": "Este projeto não tem membros de IA",
+    "wake_failed": "Não foi possível despertar o membro"
   }
 }

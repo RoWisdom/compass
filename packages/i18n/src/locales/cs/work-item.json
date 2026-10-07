@@ -422,5 +422,11 @@
       "label": "Název epiku",
       "required": "Název epiku je povinný."
     }
+  },
+  "agent": {
+    "wake": "Probudit",
+    "woken": "Probuzeno – jeho závěr se vrátí na tento pracovní úkol",
+    "no_members": "V tomto projektu nejsou žádní AI členové",
+    "wake_failed": "Člena se nepodařilo probudit"
   }
 }

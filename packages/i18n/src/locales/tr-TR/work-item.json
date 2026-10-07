@@ -422,5 +422,11 @@
       "label": "Epik Başlığı",
       "required": "Epik başlığı gereklidir."
     }
+  },
+  "agent": {
+    "wake": "Uyandır",
+    "woken": "Uyandırıldı — sonucu bu iş öğesine dönecek",
+    "no_members": "Bu projede yapay zeka üyesi yok",
+    "wake_failed": "Üye uyandırılamadı"
   }
 }
