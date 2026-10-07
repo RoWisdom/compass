@@ -69,14 +69,16 @@ def set_issue_state_group(issue, group: str) -> bool:
 def state_group_for_run_outcome(status: str, *, tier: str):
     """The state group Plane should move the card to, or ``None`` to leave it alone.
 
-    设计 §4 的档位表 + §5 的回程三条合起来给出这条规则：**只有丙档（动台账）
-    才允许 Plane 搬卡**。甲/乙 被唤醒后卡片状态必须一字不动 —— 这是设计 §6
-    剧本第 7 步的判据。等待批准不是一个「结果」，所以它不搬。
+    设计 §4 的档位表 + §5 的「回程三条」：**只有丙档（动台账）且成功**才允许 Plane
+    搬卡，唯一档位是「进行中」。其余一律 ``None``：
+
+    - 甲/乙 被唤醒后卡片状态必须一字不动（设计 §6 剧本第 7 步的判据）。
+    - 等待批准不是一个「结果」。
+    - **失败不搬卡** —— 设计 §5「失败也回程」明文「不动状态，人可以重试」。
+      （§5「回程三条」第 2 条那句「失败 → 退回待办」经用户裁定作废，以「失败也回程」为准。）
     """
     if tier != "ledger":
         return None
     if status == AgentRunStatusEnum.SUCCEEDED.value:
         return StateGroup.STARTED.value
-    if status == AgentRunStatusEnum.FAILED.value:
-        return StateGroup.UNSTARTED.value
     return None

@@ -115,8 +115,29 @@ def test_ledger_second_round_executes_the_stored_plan(
 
 @pytest.mark.django_db
 def test_failure_posts_a_comment_and_does_not_move_the_card(
-    create_bot_user, workspace, project, create_issue, monkeypatch
+    create_bot_user, create_user, workspace, project, create_issue, monkeypatch
 ):
+    """设计 §5「失败也回程」：失败要说话，但**不动状态**。
+
+    卡片先停在「进行中」（上一轮成功搬过去的），项目里也真的建了「待办」——
+    所以下面那条断言有一个它**本来会被搬去**的地方。没有这两下，这个测试是空转的。
+    """
+    from plane.db.models import Issue, State, StateGroup
+
+    started = State.objects.create(
+        name="进行中", group=StateGroup.STARTED.value, color="#F59E0B",
+        project_id=project.id, workspace_id=workspace.id, created_by=create_user,
+    )
+    State.objects.create(
+        name="待办", group=StateGroup.UNSTARTED.value, color="#E5E5E5",
+        project_id=project.id, workspace_id=workspace.id, created_by=create_user,
+    )
+    # 用 ``.update()`` 而不是 ``save()``：绕开 ``Issue.save`` 的默认状态逻辑，
+    # 让这条测试的起点毫不含糊就是「进行中」。
+    Issue.objects.filter(pk=create_issue.pk).update(state_id=started.id)
+    create_issue.refresh_from_db()
+    assert create_issue.state_id == started.id
+
     member = AgentMember.objects.create(
         name="任务拆解",
         tier=AgentTierEnum.LEDGER.value,
@@ -141,7 +162,9 @@ def test_failure_posts_a_comment_and_does_not_move_the_card(
     comment = IssueComment.objects.get(issue_id=create_issue.id)
     assert "headless_aborted" in comment.comment_html
     create_issue.refresh_from_db()
-    assert create_issue.state_id is None
+    assert create_issue.state_id == started.id
+    # 「待办」真的在 —— 上面那条断言本来可以失败（防止它再变回空转）
+    assert State.objects.filter(project_id=project.id, group=StateGroup.UNSTARTED.value).exists()
 
 
 @pytest.mark.django_db
@@ -164,3 +187,65 @@ def test_task_is_idempotent_on_a_finished_run(
 
     run_agent_member(str(run.id))
     assert called["n"] == 0
+
+
+@pytest.mark.django_db
+def test_a_missing_dsh_binary_still_posts_a_comment(
+    create_bot_user, workspace, project, create_issue, monkeypatch
+):
+    """Step 7 的那个部署事故：PATH 里没有 `dsh`。它也得在卡片上说话。"""
+    member = AgentMember.objects.create(
+        name="任务拆解",
+        tier=AgentTierEnum.LEDGER.value,
+        project_id=project.id,
+        workspace_id=workspace.id,
+        bot_user_id=create_bot_user.id,
+    )
+    run = AgentRun.objects.create(
+        member=member, issue_id=create_issue.id, project_id=project.id,
+        workspace_id=workspace.id, plan="已经批过的计划",
+    )
+
+    def raise_missing(**kwargs):
+        raise FileNotFoundError("[Errno 2] No such file or directory: 'dsh'")
+
+    monkeypatch.setattr("plane.bgtasks.agent_run_task._run_headless", raise_missing)
+
+    run_agent_member(str(run.id))
+    run.refresh_from_db()
+
+    assert run.status == AgentRunStatusEnum.FAILED.value
+    assert run.exit_code == 127
+    comment = IssueComment.objects.get(issue_id=create_issue.id)
+    assert "Could not start" in comment.comment_html
+
+
+@pytest.mark.django_db
+def test_a_crash_inside_execute_still_posts_a_comment(
+    create_bot_user, workspace, project, create_issue, monkeypatch
+):
+    """`_execute` 自己炸了（不是子进程炸了）也要说话 —— 兜底那条路的判据。"""
+    member = AgentMember.objects.create(
+        name="任务拆解",
+        tier=AgentTierEnum.LEDGER.value,
+        project_id=project.id,
+        workspace_id=workspace.id,
+        bot_user_id=create_bot_user.id,
+    )
+    run = AgentRun.objects.create(
+        member=member, issue_id=create_issue.id, project_id=project.id,
+        workspace_id=workspace.id,
+    )
+
+    def boom(_run):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr("plane.bgtasks.agent_run_task._execute", boom)
+
+    run_agent_member(str(run.id))
+    run.refresh_from_db()
+
+    assert run.status == AgentRunStatusEnum.FAILED.value
+    assert run.error == "boom"
+    comment = IssueComment.objects.get(issue_id=create_issue.id)
+    assert "boom" in comment.comment_html

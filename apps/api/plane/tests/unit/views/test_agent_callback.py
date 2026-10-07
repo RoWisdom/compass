@@ -51,10 +51,8 @@ def test_state_group_for_run_outcome_only_ledger_moves():
         )
         == "started"
     )
-    assert (
-        state_group_for_run_outcome(AgentRunStatusEnum.FAILED.value, tier="ledger")
-        == "unstarted"
-    )
+    # 失败也不搬 —— 设计 §5「失败也回程」：回一条评论，卡片留在原地让人重试
+    assert state_group_for_run_outcome(AgentRunStatusEnum.FAILED.value, tier="ledger") is None
     # 甲/乙 不动台账 —— 设计 §6 剧本第 7 步「卡片状态没变」
     assert state_group_for_run_outcome(AgentRunStatusEnum.SUCCEEDED.value, tier="readonly") is None
     assert state_group_for_run_outcome(AgentRunStatusEnum.SUCCEEDED.value, tier="writer") is None

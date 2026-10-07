@@ -49,6 +49,18 @@ def _failure_html(run) -> str:
     )
 
 
+def _post_failure_comment(run) -> None:
+    """失败就得说话 —— 静默失败是最坏的形态（设计 §5「失败也回程」）。
+
+    尽力而为：如果连评论都发不出去，那已经没什么可做的了，记一笔就走，绝不能
+    让发评论这件事本身把任务炸掉。
+    """
+    try:
+        post_bot_comment(member=run.member, issue=run.issue, html=_failure_html(run))
+    except Exception as e:
+        log_exception(e)
+
+
 def _success_html(stdout: str, artifacts) -> str:
     """回程第一条：结论贴成评论 + 产物路径清单（设计 §3「卡片评论里给路径清单」）。"""
     if artifacts:
@@ -103,11 +115,15 @@ def run_agent_member(run_id):
         _execute(run)
     except Exception as e:
         log_exception(e)
+        run.status = AgentRunStatusEnum.FAILED.value
+        run.error = str(e)
+        run.finished_at = timezone.now()
         AgentRun.objects.filter(pk=run.pk).update(
-            status=AgentRunStatusEnum.FAILED.value,
-            error=str(e),
-            finished_at=timezone.now(),
+            status=run.status,
+            error=run.error,
+            finished_at=run.finished_at,
         )
+        _post_failure_comment(run)
 
 
 def _execute(run):
@@ -158,6 +174,13 @@ def _execute(run):
         )
     except subprocess.TimeoutExpired:
         exit_code, stdout, stderr = 124, "", f"Timed out after {settings.DSH_RUN_TIMEOUT_SECONDS}s"
+    except OSError as e:
+        # `FileNotFoundError`（PATH 里没有 `dsh`）是这里最可能的部署事故，也正是
+        # Task 8 Step 7 要防的那一个；它必须和别的失败一样，在卡片上说话
+        # （设计 §5「失败也回程」）。127 = shell 的「命令找不到」。
+        exit_code = 127
+        stdout = ""
+        stderr = f"Could not start {settings.DSH_BINARY}: {e}"
 
     artifacts = diff_snapshot(before_files, snapshot_tree(island))
     session_ref = new_session_ref(before_sessions, session_dirs())
@@ -215,4 +238,4 @@ def _execute(run):
 
     if run.status == AgentRunStatusEnum.FAILED.value:
         # 模型这时候多半已经死了，不能指望它自己说（设计 §5）。
-        post_bot_comment(member=member, issue=issue, html=_failure_html(run))
+        _post_failure_comment(run)
