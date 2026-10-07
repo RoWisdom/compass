@@ -31,7 +31,7 @@ export const WakeAgentDropdown = observer(function WakeAgentDropdown(props: Prop
     void fetchMembers(workspaceSlug, projectId).catch(() => {});
   }, [fetchMembers, workspaceSlug, projectId]);
 
-  const members = getMembersByProject(projectId);
+  const members = getMembersByProject(projectId).filter((member) => member.is_active);
 
   const handleWake = async (memberId: string) => {
     if (isWaking) return;
