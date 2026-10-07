@@ -13,8 +13,12 @@
     不同的项目，却折进同一个目录 ⇒ 项目 A 上唤醒的 AI ``cwd`` 是那个共用目录、
     权限 ``workspace-write`` ⇒ **它读并覆盖项目 B 的镜像页面**。
   · **与用户自己的 vault 目录冲突**：镜像写进 ``2-项目/<项目名>/``，那正是用户
-    **手工命名**的项目文件夹所在的地方。identifier 目录不可能与手工命名的文件夹
-    同名。
+    **手工命名**的项目文件夹所在的地方。按 identifier 命名**减少**了这类相撞，但
+    **不保证杜绝**：``FABRIC`` 这样的 identifier 完全可以和用户手建的 vault 文件夹
+    **同名** —— ``rename_project_mirror_directories`` 里 ``[conflict]`` 那道闸存在的
+    理由正是这个。identifier 保证的是**两个项目之间不共用目录**（由
+    ``(identifier, workspace)`` 这条 DB 唯一约束给），**不**保证「不与用户手建的
+    文件夹撞名」。这两件事不是一回事，别混。
 
 ``project_directory`` 的**签名不变**（``plane.bgtasks.agent_run_task`` 与
 ``tests/unit/bg_tasks/test_agent_run_task.py`` 都在按原样调它）—— 变的只是目录名。

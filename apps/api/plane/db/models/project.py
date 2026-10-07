@@ -141,6 +141,13 @@ class Project(BaseModel):
         return f"{self.name} <{self.workspace.name}>"
 
     FORBIDDEN_IDENTIFIER_CHARS_PATTERN = r"^.*[&+,:;$^}{*=?@#|'<>.()%!-].*$"
+    # Identifier-only. ``_sanitize_name`` rewrites exactly these characters (or
+    # collapses whitespace runs), so an identifier carrying one would fold onto a
+    # *different* legal identifier's directory — ``A/B`` and ``A\B`` both become
+    # ``A-B``, giving two projects one island. Kept separate from
+    # ``FORBIDDEN_IDENTIFIER_CHARS_PATTERN`` above on purpose: that one also
+    # validates project *names*, and names are not path-keyed.
+    FORBIDDEN_IDENTIFIER_PATH_CHARS_PATTERN = r'^.*[\\/:*?"<>|\x00-\x1f\s].*$'
 
     class Meta:
         unique_together = [

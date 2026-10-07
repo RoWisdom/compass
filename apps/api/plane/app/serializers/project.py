@@ -62,6 +62,9 @@ class ProjectSerializer(BaseSerializer):
         if re.match(Project.FORBIDDEN_IDENTIFIER_CHARS_PATTERN, identifier):
             raise serializers.ValidationError(detail="PROJECT_IDENTIFIER_CANNOT_CONTAIN_SPECIAL_CHARACTERS")
 
+        if re.match(Project.FORBIDDEN_IDENTIFIER_PATH_CHARS_PATTERN, identifier):
+            raise serializers.ValidationError(detail="PROJECT_IDENTIFIER_CANNOT_CONTAIN_SPECIAL_CHARACTERS")
+
         project = Project.objects.filter(identifier=identifier, workspace_id=workspace_id)
 
         if project_id:

@@ -97,18 +97,52 @@ def _project_directory_name(project_identifier: str) -> str:
       · **唯一性有 DB 保证**：``Project.identifier`` 有
         ``UniqueConstraint(["identifier", "workspace"], condition=Q(deleted_at__isnull=True))``
         —— 与项目名**同一个作用域**，所以按 identifier 命名在同一 root 内不会撞。
-      · **文件名安全**：identifier 被 ``save()`` 强制 ``.strip().upper()``，且
-        ``FORBIDDEN_IDENTIFIER_CHARS_PATTERN`` 挡掉
-        ``& + , : ; $ ^ { } * = ? @ # | ' < > . ( ) % ! -``。
+      · **文件名安全**：identifier 的合法字符集被**两道**守卫收得很窄 ——
+        ``FORBIDDEN_IDENTIFIER_CHARS_PATTERN`` 挡
+        ``& + , : ; $ ^ { } * = ? @ # | ' < > . ( ) % ! -``（含 ``|``），
+        ``FORBIDDEN_IDENTIFIER_PATH_CHARS_PATTERN`` 再挡 ``\``、``/``、``"``
+        以及 ``: * ? < > |``、控制符（``\x00-\x1f``）与**一切空白**（``\s``，
+        Python 的 ``re`` 对 str 是 Unicode 感知的，故含不换行空格等）。
+
+    **不变量**：``_sanitize_name`` 对一个**合法** identifier 是**恒等映射**，所以
+    「净化后的 identifier」与「镜像目录名」一一对应 ⇒ **两个项目不可能共用一个沙箱
+    岛**。逐条对上 ``_sanitize_name`` 的每一步：
+
+      · 非法字符 ``[\\/:*?"<>|\x00-\x1f]`` 替换成 ``-``：合法 identifier 一个字符都
+        不含 ⇒ 不替换；
+      · 去掉结尾 ``.md``：``.`` 本就被挡，identifier 不可能以 ``.md`` 结尾 ⇒ 不动；
+      · 空白串折成单空格再 ``strip(" .")``：合法 identifier 不含空白、不含 ``.``
+        ⇒ 不动；
+      · ``[:80]`` 截断：``identifier`` 是 ``max_length=12``，12 ≤ 80 ⇒ 不可能截断。
 
     **与「按项目名」那条旧规则的关键差别**：旧规则下 ``_sanitize_name`` 作用在**名字**
     上，而名字的唯一约束作用在**原始名**上 —— ``官网/新版`` 与 ``官网-新版`` 是两个
-    合法项目、却折进同一个目录。identifier 的合法字符集里**没有** ``-``，所以
-    「净化后相撞」在这条路上几乎不可能。
+    合法项目、却折进同一个目录。identifier 的合法字符集里既**没有** ``-``，也没有
+    ``/ \`` 或空白，所以「净化后相撞」在这条路上**不可能**。（此前 ``\ / "`` 曾是可被
+    接受的残留：``A/B`` 与 ``A\B`` 都会折成 ``A-B``。F1 的
+    ``FORBIDDEN_IDENTIFIER_PATH_CHARS_PATTERN`` 把这个洞堵上，上面那条不变量现在
+    **无条件**成立，不再是「几乎不可能」。）
 
-    **残留**：``\ / : * ? " < > |`` 里只有 ``: * ? < >`` 被 identifier 挡掉，
-    ``/ \ "`` **没被挡** —— 理论上 ``A/B`` 与 ``A\B`` 两个合法 identifier 仍会折成
-    ``A-B``。极窄，不在本轮处理。
+    另两条**核实过、不构成 fold** 的途径，一并写明：
+
+      · **大小写**：``Project.save()`` 强制 ``.strip().upper()``，DB 唯一约束作用在
+        **大写之后**的值上 ⇒ ``abc`` 与 ``ABC`` 存不进两个项目，不会折。
+      · **Unicode 归一化（NFC/NFD）**：``_sanitize_name`` 与 DB 唯一约束都不做归一化
+        ⇒ 前组合式与分解式的两种写法会落成**两个不同**的目录。是「看着像」的问题，
+        不是「共用一个岛」的问题 —— 失败方向是「多一个目录」，不是越界。
+
+    **已知残留（用户裁定「记录、不加守卫」）**：``Project.identifier`` **可被管理员事后
+    修改**（DRF ``fields="__all__"`` + ``read_only_fields=["workspace", "deleted_at"]``；
+    UI ``form.tsx`` 的 ``handleIdentifierChange``）。改一次就把岛**重新指向**新目录 ——
+    旧目录里的镜像文件在应用内不再可达（**孤儿化**）。这是**已知并接受的残留**；本轮
+    **不加**守卫：加守卫＝给 Plane 核心端点新增行为，无授权。
+
+    这条残留**不影响单次 run**（已核实，非猜测）：``agent_run_task._execute`` 把
+    ``project``（:162）与 ``island``（:165）**只算一次**，并在整个函数内复用同一个
+    ``island`` 局部变量 —— ``_run_headless`` 的 ``cwd``、以及前后**两次**
+    ``snapshot_tree`` 都取自它。故同一次 run 的两次快照必然落在同一目录，**不会**出现
+    「SUCCEEDED 却没有改动文件」。（改 identifier 的影响面是**跨 run** 的旧镜像孤儿化，
+    不是单次 run 的快照错配。）
     """
     return _sanitize_name(project_identifier)
 
