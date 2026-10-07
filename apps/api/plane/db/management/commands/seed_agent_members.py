@@ -22,7 +22,17 @@ from django.contrib.auth.hashers import make_password
 from django.utils import timezone
 
 # Module imports
-from plane.db.models import APIToken, AgentMember, AgentTierEnum, BotTypeEnum, Project, ProjectMember, User, Workspace, WorkspaceMember
+from plane.db.models import (
+    AgentMember,
+    AgentTierEnum,
+    APIToken,
+    BotTypeEnum,
+    Project,
+    ProjectMember,
+    User,
+    Workspace,
+    WorkspaceMember,
+)
 
 READONLY = AgentTierEnum.READONLY.value
 WRITER = AgentTierEnum.WRITER.value
@@ -103,7 +113,7 @@ class Command(BaseCommand):
     def _seed_one(self, *, workspace, project, spec):
         slot = f"{workspace.slug}-{project.id}-{spec['tier']}"
         username = f"agent_{slot}"
-        bot_user, created = User.objects.get_or_create(
+        bot_user, _ = User.objects.get_or_create(
             username=username,
             defaults={
                 "display_name": spec["name"],
@@ -159,5 +169,9 @@ class Command(BaseCommand):
             member.service_token = token
             member.save(update_fields=["service_token"])
 
-        member._seeded_token = member.service_token.token if created else "(existing)"
+        # ``--show-tokens`` echoes the *current* token, not only a freshly minted one.
+        # The documented flow is: seed once, then re-run with the flag to copy the
+        # tokens out. Gating this on "the bot user was just created" left that second
+        # run printing "(existing)" — which is the flag's entire job, undone.
+        member._seeded_token = member.service_token.token
         return member

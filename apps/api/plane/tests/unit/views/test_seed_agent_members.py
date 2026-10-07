@@ -47,3 +47,22 @@ def test_seed_is_idempotent(workspace, project):
     assert AgentMember.objects.filter(project_id=project.id).count() == 3
     assert User.objects.filter(is_bot=True, bot_type="AGENT").count() == 3
     assert APIToken.objects.filter(is_service=True).count() == 3
+
+
+@pytest.mark.django_db
+def test_show_tokens_prints_the_current_token_on_a_rerun(workspace, project, capsys):
+    """``--show-tokens`` 必须给出**当前** token，而不是只在首次 seed 那次才有值。
+
+    回归：它原先读的是 **bot 用户**的 ``get_or_create`` 返回值 ⇒ 第二次跑（bot 用户
+    已存在）只打印 ``(existing)``。而「先跑一次 seed、再加开关跑第二次、把 token 抄给
+    自己」正是 brief Step 5 规定的取 token 姿势 —— 那一步会静默失效。
+    """
+    call_command("seed_agent_members", workspace=workspace.slug, project=str(project.id))
+    capsys.readouterr()  # 丢掉第一次的输出
+
+    call_command("seed_agent_members", workspace=workspace.slug, project=str(project.id), show_tokens=True)
+    out = capsys.readouterr().out
+
+    assert "(existing)" not in out
+    for member in AgentMember.objects.filter(project_id=project.id):
+        assert member.service_token.token in out
