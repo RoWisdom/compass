@@ -4,6 +4,7 @@
 
 # Django imports
 from django.db import IntegrityError, transaction
+from django.db.models import Count, OuterRef, Q, Subquery
 from django.utils import timezone
 
 # Third-party imports
@@ -12,24 +13,268 @@ from rest_framework.response import Response
 
 # Module imports
 from plane.app.permissions import ROLE, allow_permission
-from plane.app.serializers import AgentMemberSerializer, AgentRunSerializer
+from plane.app.serializers import (
+    AgentDefinitionSerializer,
+    AgentMemberSerializer,
+    AgentRunSerializer,
+)
 from plane.bgtasks.agent_run_task import run_agent_member
-from plane.db.models import AGENT_UNFINISHED_STATUSES, AgentMember, AgentRun, AgentRunStatusEnum, Issue
+from plane.db.models import (
+    AGENT_UNFINISHED_STATUSES,
+    AgentDefinition,
+    AgentMember,
+    AgentRun,
+    AgentRunStatusEnum,
+    Issue,
+    Project,
+    Workspace,
+)
+from plane.utils.agent_identity import deploy, retire
 from plane.utils.exception_logger import log_exception
 
 from .base import BaseViewSet
+
+
+class AgentDefinitionViewSet(BaseViewSet):
+    """岗位库（工作区级）。设计 §4.1。
+
+    读 `[ADMIN, MEMBER, GUEST]`；**写只有 ADMIN** —— 岗位是共享资产，
+    在某一个项目的设置页里改它，会静默改掉另外几个项目里那个成员的行为。
+    """
+
+    serializer_class = AgentDefinitionSerializer
+    model = AgentDefinition
+
+    def get_queryset(self):
+        return (
+            AgentDefinition.objects.filter(workspace__slug=self.kwargs.get("slug"))
+            .annotate(
+                project_count=Count(
+                    "members",
+                    filter=Q(members__deleted_at__isnull=True),
+                    distinct=True,
+                )
+            )
+            .order_by("created_at")
+        )
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    def list(self, request, slug):
+        return Response(self.get_serializer(self.get_queryset(), many=True).data)
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    def retrieve(self, request, slug, pk):
+        definition = self.get_queryset().filter(pk=pk).first()
+        if definition is None:
+            return Response({"error": "No such AI post"}, status=status.HTTP_404_NOT_FOUND)
+        return Response(self.get_serializer(definition).data)
+
+    @allow_permission([ROLE.ADMIN], level="WORKSPACE")
+    def create(self, request, slug):
+        workspace = Workspace.objects.filter(slug=slug).first()
+        if workspace is None:
+            return Response({"error": "No such workspace"}, status=status.HTTP_404_NOT_FOUND)
+        serializer = self.get_serializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            definition = serializer.save(workspace=workspace, created_by_id=request.user.id)
+        except IntegrityError:
+            # 同一工作区里岗位名唯一（0129 的 unique_agent_definition_name_per_workspace）。
+            # **别指望序列化器替你挡** —— DRF 确实会为这条条件唯一约束造一个
+            # UniqueTogetherValidator，但因为 ``workspace_id`` 是只读字段、又没有默认值，
+            # DRF **会跳过**那条校验（实测 DRF 3.17.1）⇒ 重名会一路撞到 INSERT，
+            # 不打这个 except 就是 **500 + 栈**，而不是 400。唯一约束才是仲裁者。
+            name = serializer.validated_data.get("name")
+            return Response(
+                {"error": f"这个工作区里已经有叫「{name}」的岗位了。"},
+                status=status.HTTP_409_CONFLICT,
+            )
+        # 走一遍**带注解的** queryset：``project_count`` 是注解，刚建的对象上没有这个属性，
+        # 直接序列化会抛 AttributeError。成员那边的 create 出于同样理由也这么做。
+        return Response(
+            self.get_serializer(self.get_queryset().filter(pk=definition.pk).first()).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    @allow_permission([ROLE.ADMIN], level="WORKSPACE")
+    def partial_update(self, request, slug, pk):
+        definition = self.get_queryset().filter(pk=pk).first()
+        if definition is None:
+            return Response({"error": "No such AI post"}, status=status.HTTP_404_NOT_FOUND)
+        serializer = self.get_serializer(definition, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            # 套一层 atomic ⇒ 失败的 UPDATE 退回**保存点**，外层事务仍可用。
+            # 不套的话 `Model.save()` 走的是 `mark_for_rollback_on_error`，在已有事务里它只把
+            # `needs_rollback` 置真、不回退任何东西 ⇒ 同一请求/测试里再查一次库就是
+            # `TransactionManagementError`（实测：改名失败后读原名的那句断言就是这样炸的）。
+            with transaction.atomic():
+                serializer.save()
+        except IntegrityError:
+            # 改名撞上另一个岗位（同 create 的理由：DRF 跳过了那条 UniqueTogetherValidator）。
+            name = serializer.validated_data.get("name") or definition.name
+            return Response(
+                {"error": f"这个工作区里已经有叫「{name}」的岗位了。"},
+                status=status.HTTP_409_CONFLICT,
+            )
+        return Response(self.get_serializer(definition).data)
+
+    @allow_permission([ROLE.ADMIN], level="WORKSPACE")
+    def destroy(self, request, slug, pk):
+        """被引用就拒绝，并把挡路的项目名报出来。设计 §6③。
+
+        本期**不做级联**：级联要跨项目删 bot 用户、废 token、摘 ProjectMember，
+        是重破坏。守卫 + 报出阻挡者就够了。
+
+        ⚠️ **这道守卫是唯一的栅栏。** 不要以为 `AgentMember.definition` 上的
+        `on_delete=PROTECT` 兜得住 —— 软删路径**走不到 PROTECT**：
+          * ``SoftDeleteModel.delete()`` 默认 `soft=True`，只 `save(deleted_at=now)`
+            + 发一个 Celery 任务，**不进 Django 的 FK collector** ⇒ `ProtectedError`
+            永不触发；
+          * 那个任务（``soft_delete_related_objects``，``bgtasks/deletion_task.py``）
+            把反向关系里**除了 DO_NOTHING / SET_NULL 之外的一切**都当 CASCADE
+            软删，**PROTECT 也落进那个分支**。
+        所以一旦用实例的 ``.delete()``，这个岗位在**所有项目**的成员行会被一起
+        软删 —— 正是本节说不做的那种跨项目破坏，且绕过了守卫。
+        ⇒ 必须用下面的 **queryset 形式**（只 `update(deleted_at=now)`，不发级联任务）。
+        """
+        definition = self.get_queryset().filter(pk=pk).first()
+        if definition is None:
+            return Response({"error": "No such AI post"}, status=status.HTTP_404_NOT_FOUND)
+
+        blockers = (
+            AgentMember.objects.filter(definition=definition, deleted_at__isnull=True)
+            .select_related("project")
+        )
+        names = sorted({m.project.name for m in blockers})
+        if names:
+            listed = "、".join(names)
+            return Response(
+                {
+                    "error": (
+                        f"「{definition.name}」仍被 {len(names)} 个项目使用：{listed}。"
+                        "先从那些项目移除。"
+                    )
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        # **queryset 形式，不是 definition.delete()** —— 理由见上面 docstring 的 ⚠️。
+        # AgentMember 那边的 destroy 出于同样的理由也走 queryset 形式。
+        AgentDefinition.objects.filter(pk=definition.pk).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class AgentMemberViewSet(BaseViewSet):
     serializer_class = AgentMemberSerializer
     model = AgentMember
 
+    def get_queryset(self):
+        """本项目的成员行，**含停用的**，各带最近一次运行。
+
+        ``last_run_*`` 用 Subquery 注解，一行一条 —— 名册要显示「运行状态」，
+        但绝不把它当成「在线」。设计 §3。
+        """
+        latest = (
+            AgentRun.objects.filter(member=OuterRef("pk"))
+            .order_by("-created_at")
+        )
+        return (
+            AgentMember.objects.filter(
+                workspace__slug=self.kwargs.get("slug"),
+                project_id=self.kwargs.get("project_id"),
+                deleted_at__isnull=True,
+            )
+            .select_related("definition")
+            .annotate(
+                last_run_status=Subquery(latest.values("status")[:1]),
+                last_run_at=Subquery(latest.values("created_at")[:1]),
+            )
+            .order_by("created_at")
+        )
+
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST])
     def list(self, request, slug, project_id):
-        members = AgentMember.objects.filter(
-            workspace__slug=slug, project_id=project_id, is_active=True
-        ).order_by("created_at")
-        return Response(AgentMemberSerializer(members, many=True).data, status=status.HTTP_200_OK)
+        return Response(self.get_serializer(self.get_queryset(), many=True).data)
+
+    @allow_permission([ROLE.ADMIN])
+    def create(self, request, slug, project_id):
+        """把一个岗位加进这个项目。设计 §4.2。"""
+        definition_id = request.data.get("definition_id")
+        definition = AgentDefinition.objects.filter(
+            workspace__slug=slug, pk=definition_id, deleted_at__isnull=True
+        ).first()
+        if definition is None:
+            return Response({"error": "No such AI post in this workspace"}, status=status.HTTP_400_BAD_REQUEST)
+
+        project = Project.objects.filter(workspace__slug=slug, pk=project_id).first()
+        if project is None:
+            return Response({"error": "No such project"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if AgentMember.objects.filter(
+            project=project, definition=definition, deleted_at__isnull=True
+        ).exists():
+            return Response(
+                {"error": f"「{definition.name}」已经在这个项目里了。"},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        try:
+            member = deploy(definition=definition, project=project, created_by_id=request.user.id)
+        except IntegrityError:
+            # 上面那次 exists() 与本行 INSERT 之间输了竞速 —— 唯一约束是仲裁者。
+            return Response(
+                {"error": f"「{definition.name}」已经在这个项目里了。"},
+                status=status.HTTP_409_CONFLICT,
+            )
+        return Response(
+            self.get_serializer(self.get_queryset().filter(pk=member.pk).first()).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    @allow_permission([ROLE.ADMIN])
+    def partial_update(self, request, slug, project_id, pk):
+        """**只有 `is_active` 可改。** 说明书不是这一行的字段（设计 §2）。
+
+        ⚠️ **必须显式拒绝 `definition_id`，不能指望序列化器。** DRF 的 ``update()``
+        会对 ``validated_data`` 里**每一个**键 ``setattr``，而序列化器把
+        ``definition_id`` 声明成了可写字段 ⇒ 不拦的话一次
+        ``PATCH {"definition_id": …}`` 就能把这个成员**悄悄改挂到另一个岗位**，
+        却仍留着旧的 ``bot_user`` / ``service_token``：从此它按**新**岗位的说明书、
+        用**旧**岗位的凭证跑。跨工作区的 UUID 也进得来（那个字段没有 queryset 校验）。
+        设计 §2 明说只能「移除后重加」。
+        """
+        member = self.get_queryset().filter(pk=pk).first()
+        if member is None:
+            return Response({"error": "No such AI member"}, status=status.HTTP_404_NOT_FOUND)
+        if "definition_id" in request.data:
+            return Response(
+                {"error": "岗位不能改。要换岗位，请先把这一行移除，再重新添加。"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        serializer = self.get_serializer(member, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        serializer.save()
+        return Response(self.get_serializer(member).data)
+
+    @allow_permission([ROLE.ADMIN])
+    def destroy(self, request, slug, project_id, pk):
+        """从项目移除。设计 §6②：软删成员行 + 摘项目身份 + 废 token。"""
+        member = self.get_queryset().filter(pk=pk).first()
+        if member is None:
+            return Response({"error": "No such AI member"}, status=status.HTTP_404_NOT_FOUND)
+        retire(member)
+        # **queryset delete，不是 ``member.delete()``。** 两者都软删，但实例方法还会
+        # `soft_delete_related_objects.delay(...)`（`db/mixins.py:56-90`），而那个任务
+        # 沿**反向关系**把该成员名下所有 ``AgentRun`` 一起软删
+        # （`bgtasks/deletion_task.py` 遍历 ``_meta.get_fields()`` 的 one_to_many）。
+        # 跑过的记录是审计，移除一个成员不该把历史抹掉 —— 与设计 §6「本期不做级联」同向，
+        # 也与 buzz 把运行痕迹留在 relay 上的做法同向（buzz 的 relay 事件永不删）。
+        AgentMember.objects.filter(pk=member.pk).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class AgentRunViewSet(BaseViewSet):

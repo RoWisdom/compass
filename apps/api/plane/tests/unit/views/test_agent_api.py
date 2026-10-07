@@ -275,3 +275,203 @@ def test_a_lost_race_returns_400_not_500(
     assert response.json()["error"] == (
         "This work item already has a running AI member; wait for it or approve its plan."
     )
+
+
+@pytest.mark.django_db
+def test_add_a_post_to_a_project(session_client, workspace, project, create_user):
+    """设计 §4.2：从岗位库挑一个加进项目，得到一行成员 + 一个 bot + 一个 token。"""
+    from plane.db.models import AgentDefinition, APIToken, ProjectMember
+
+    definition = AgentDefinition.objects.create(
+        workspace_id=workspace.id, name="需求分析", created_by_id=create_user.id
+    )
+    response = session_client.post(
+        f"/api/workspaces/{workspace.slug}/projects/{project.id}/agent-members/",
+        {"definition_id": str(definition.id)},
+        format="json",
+    )
+    assert response.status_code == 201
+    assert response.data["definition"]["name"] == "需求分析"
+
+    member = AgentMember.objects.get(pk=response.data["id"])
+    assert member.is_active is True
+    assert member.service_token_id is not None
+    assert ProjectMember.objects.filter(project=project, member_id=member.bot_user_id).exists()
+    # token 值本身永远不出现在响应里
+    assert "token" not in response.data
+    assert APIToken.objects.filter(pk=member.service_token_id, is_service=True).exists()
+
+
+@pytest.mark.django_db
+def test_adding_the_same_post_twice_is_refused(session_client, workspace, project, create_user):
+    from plane.db.models import AgentDefinition
+
+    definition = AgentDefinition.objects.create(
+        workspace_id=workspace.id, name="需求分析", created_by_id=create_user.id
+    )
+    url = f"/api/workspaces/{workspace.slug}/projects/{project.id}/agent-members/"
+    assert session_client.post(url, {"definition_id": str(definition.id)}, format="json").status_code == 201
+    second = session_client.post(url, {"definition_id": str(definition.id)}, format="json")
+    assert second.status_code == 409
+    assert AgentMember.objects.filter(definition=definition, deleted_at__isnull=True).count() == 1
+
+
+@pytest.mark.django_db
+def test_removing_a_member_retires_its_project_identity(
+    session_client, workspace, project, create_user, create_bot_user, db
+):
+    """设计 §6②：移除**不止**是软删一行 —— 项目身份要摘、token 要废。
+
+    留下一个还能动的 token，就是按完「移除」还留着一扇后门。
+    """
+    from plane.db.models import AgentDefinition, APIToken, ProjectMember
+
+    definition = AgentDefinition.objects.create(
+        workspace_id=workspace.id, name="需求分析", created_by_id=create_user.id
+    )
+    created = session_client.post(
+        f"/api/workspaces/{workspace.slug}/projects/{project.id}/agent-members/",
+        {"definition_id": str(definition.id)},
+        format="json",
+    )
+    member = AgentMember.objects.get(pk=created.data["id"])
+    token_id = member.service_token_id
+
+    response = session_client.delete(
+        f"/api/workspaces/{workspace.slug}/projects/{project.id}/agent-members/{member.id}/"
+    )
+    assert response.status_code == 204
+
+    assert not AgentMember.objects.filter(pk=member.id, deleted_at__isnull=True).exists()
+    assert not ProjectMember.objects.filter(project=project, member_id=member.bot_user_id).exists()
+    token = APIToken.objects.get(pk=token_id)
+    assert token.is_active is False
+    # 岗位本身还在 —— 移除的是这一行，不是那个岗位
+    assert AgentDefinition.objects.filter(pk=definition.id).exists()
+
+
+@pytest.mark.django_db
+def test_a_post_still_in_use_cannot_be_deleted(session_client, workspace, project, create_user):
+    """设计 §6③：被引用就拒绝，并报出项目名。"""
+    from plane.db.models import AgentDefinition
+
+    definition = AgentDefinition.objects.create(
+        workspace_id=workspace.id, name="需求分析", created_by_id=create_user.id
+    )
+    session_client.post(
+        f"/api/workspaces/{workspace.slug}/projects/{project.id}/agent-members/",
+        {"definition_id": str(definition.id)}, format="json",
+    )
+
+    response = session_client.delete(f"/api/workspaces/{workspace.slug}/agent-definitions/{definition.id}/")
+    assert response.status_code == 409
+    assert project.name in response.json()["error"]
+    assert AgentDefinition.objects.filter(pk=definition.id).exists()
+
+
+@pytest.mark.django_db
+def test_a_post_with_no_membership_can_be_deleted(session_client, workspace, create_user):
+    from plane.db.models import AgentDefinition
+
+    definition = AgentDefinition.objects.create(
+        workspace_id=workspace.id, name="没人用的", created_by_id=create_user.id
+    )
+    response = session_client.delete(f"/api/workspaces/{workspace.slug}/agent-definitions/{definition.id}/")
+    assert response.status_code == 204
+    assert not AgentDefinition.objects.filter(pk=definition.id, deleted_at__isnull=True).exists()
+
+
+@pytest.mark.django_db
+def test_editing_a_post_is_visible_from_every_project_that_uses_it(
+    session_client, workspace, project, create_user
+):
+    """本期的核心判据（设计 §1 推论）：一份说明书，N 个项目一起变。"""
+    from plane.db.models import AgentDefinition
+
+    definition = AgentDefinition.objects.create(
+        workspace_id=workspace.id, name="需求分析", instructions="旧", created_by_id=create_user.id
+    )
+    session_client.post(
+        f"/api/workspaces/{workspace.slug}/projects/{project.id}/agent-members/",
+        {"definition_id": str(definition.id)}, format="json",
+    )
+
+    patched = session_client.patch(
+        f"/api/workspaces/{workspace.slug}/agent-definitions/{definition.id}/",
+        {"instructions": "新"}, format="json",
+    )
+    assert patched.status_code == 200
+
+    listed = session_client.get(f"/api/workspaces/{workspace.slug}/projects/{project.id}/agent-members/")
+    row = listed.data[0]
+    # 成员行里没有 instructions 字段（它属于岗位），所以判据走岗位端点
+    detail = session_client.get(f"/api/workspaces/{workspace.slug}/agent-definitions/{definition.id}/")
+    assert detail.data["instructions"] == "新"
+    assert row["definition"]["name"] == "需求分析"
+
+
+@pytest.mark.django_db
+def test_a_member_cannot_be_repointed_to_another_post(
+    session_client, workspace, project, create_user
+):
+    """设计 §2：成员行的岗位**不可改**，要换只能移除后重加。
+
+    不拦的话（序列化器里 ``definition_id`` 是可写字段，而 DRF 的 ``update()``
+    会对每个 ``validated_data`` 键 ``setattr``）一次 PATCH 就能把它悄悄改挂到
+    别的岗位，却留着旧的 bot 用户与 token ⇒ 从此按新岗位的说明书、用旧岗位的凭证跑。
+    """
+    from plane.db.models import AgentDefinition
+
+    first = AgentDefinition.objects.create(
+        workspace_id=workspace.id, name="需求分析", created_by_id=create_user.id
+    )
+    second = AgentDefinition.objects.create(
+        workspace_id=workspace.id, name="架构设计", created_by_id=create_user.id
+    )
+    created = session_client.post(
+        f"/api/workspaces/{workspace.slug}/projects/{project.id}/agent-members/",
+        {"definition_id": str(first.id)},
+        format="json",
+    )
+    member_id = created.data["id"]
+    bot_user_id = AgentMember.objects.get(pk=member_id).bot_user_id
+
+    response = session_client.patch(
+        f"/api/workspaces/{workspace.slug}/projects/{project.id}/agent-members/{member_id}/",
+        {"definition_id": str(second.id)},
+        format="json",
+    )
+    assert response.status_code == 400
+    member = AgentMember.objects.get(pk=member_id)
+    assert member.definition_id == first.id
+    assert member.bot_user_id == bot_user_id
+
+
+@pytest.mark.django_db
+def test_two_posts_cannot_share_a_name_in_one_workspace(session_client, workspace, create_user):
+    """0129 的唯一约束：同一工作区里岗位名唯一。
+
+    这条断言的是 **409 而不是 500** —— 序列化器的 `UniqueTogetherValidator` 因
+    `workspace_id` 只读、无默认值而被 DRF 跳过，重名会一路撞到 INSERT。
+    """
+    url = f"/api/workspaces/{workspace.slug}/agent-definitions/"
+    assert session_client.post(url, {"name": "需求分析"}, format="json").status_code == 201
+    second = session_client.post(url, {"name": "需求分析"}, format="json")
+    assert second.status_code == 409
+    assert "需求分析" in second.json()["error"]
+
+
+@pytest.mark.django_db
+def test_renaming_a_post_onto_an_existing_name_is_refused(
+    session_client, workspace, create_user
+):
+    """改名走的是 `partial_update`，同一条唯一约束，同样不许 500。"""
+    from plane.db.models import AgentDefinition
+
+    url = f"/api/workspaces/{workspace.slug}/agent-definitions/"
+    session_client.post(url, {"name": "需求分析"}, format="json")
+    other = session_client.post(url, {"name": "架构设计"}, format="json")
+    response = session_client.patch(f"{url}{other.data['id']}/", {"name": "需求分析"}, format="json")
+    assert response.status_code == 409
+    # 改名失败后原名不动
+    assert AgentDefinition.objects.get(pk=other.data["id"]).name == "架构设计"

@@ -4,13 +4,30 @@
 
 from django.urls import path
 
-from plane.app.views import AgentMemberViewSet, AgentRunViewSet
+from plane.app.views import AgentDefinitionViewSet, AgentMemberViewSet, AgentRunViewSet
 
 urlpatterns = [
     path(
+        "workspaces/<str:slug>/agent-definitions/",
+        AgentDefinitionViewSet.as_view({"get": "list", "post": "create"}),
+        name="agent-definition",
+    ),
+    path(
+        "workspaces/<str:slug>/agent-definitions/<uuid:pk>/",
+        AgentDefinitionViewSet.as_view(
+            {"get": "retrieve", "patch": "partial_update", "delete": "destroy"}
+        ),
+        name="agent-definition-detail",
+    ),
+    path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/agent-members/",
-        AgentMemberViewSet.as_view({"get": "list"}),
+        AgentMemberViewSet.as_view({"get": "list", "post": "create"}),
         name="agent-member",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/agent-members/<uuid:pk>/",
+        AgentMemberViewSet.as_view({"patch": "partial_update", "delete": "destroy"}),
+        name="agent-member-detail",
     ),
     path(
         "workspaces/<str:slug>/projects/<uuid:project_id>/agent-runs/",
