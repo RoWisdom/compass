@@ -169,7 +169,7 @@ class TestWikiMirrorCollectionMove:
         collection = _collection(workspace, create_user, "目标集合")
 
         _write_mirror(page)
-        project_file = isolate_markdown_mirror / "镜像项目" / "跨根页.md"
+        project_file = isolate_markdown_mirror / str(project.id) / "跨根页.md"
         assert project_file.is_file(), "前置：无集合时镜像落在项目树里"
 
         response = session_client.patch(
@@ -212,7 +212,7 @@ class TestWikiMirrorCollectionMove:
         page.refresh_from_db()
         assert page.collection_id is None
 
-        project_file = isolate_markdown_mirror / "镜像项目" / "回家的页.md"
+        project_file = isolate_markdown_mirror / str(project.id) / "回家的页.md"
         assert project_file.is_file(), "移出集合后镜像必须落回项目树"
         assert not wiki_file.exists(), "wiki 树里不得留残骸"
 
@@ -511,7 +511,7 @@ class TestWikiMirrorCollectionMove:
         assert page.collection_id is None
         assert page.external_id == "3-Wiki/集合A/跨根剪藏.md", "跨根搬移不归 wiki 指针管，一字不得改"
 
-        project_file = isolate_markdown_mirror / "镜像项目" / "跨根剪藏.md"
+        project_file = isolate_markdown_mirror / str(project.id) / "跨根剪藏.md"
         assert project_file.is_file(), "文件本身仍要照搬"
         assert not old_file.exists(), "wiki 树里不得留残骸"
 
