@@ -13,7 +13,7 @@ import { PlusIcon, TrashIcon } from "@plane/propel/icons";
 import { EPillSize, EPillVariant, Pill } from "@plane/propel/pill";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { AlertModalCore, ToggleSwitch } from "@plane/ui";
-import { cn } from "@plane/utils";
+import { calculateTimeAgoShort, cn } from "@plane/utils";
 // components
 import { SimpleEmptyState } from "@/components/empty-state/simple-empty-state-root";
 // types
@@ -42,7 +42,12 @@ const statusLabel = (status: NonNullable<TAgentMember["last_run_status"]>) => st
 
 const runLabel = (member: TAgentMember, t: ReturnType<typeof useTranslation>["t"]) => {
   if (!member.last_run_status) return t("ai_members.roster.never_run");
-  return `${t("ai_members.roster.last_run")} · ${statusLabel(member.last_run_status)}`;
+  const label = `${t("ai_members.roster.last_run")} · ${statusLabel(member.last_run_status)}`;
+  // 设计 §3/§9：名册显示的是「最近一次运行」的**状态 + 时间**。时间用语言中立的
+  // ``calculateTimeAgoShort``（``3m`` / ``2h`` / ``5d``）—— 绝不用 ``calculateTimeAgo``：
+  // 它调 date-fns 时不传 locale，中文界面里会印出英文。``last_run_at`` 为空就只留状态，
+  // ``never_run`` 分支不受影响。本轮 i18n 键集冻结，所以不新增任何键。
+  return member.last_run_at ? `${label} · ${calculateTimeAgoShort(member.last_run_at)}` : label;
 };
 
 export const MemberList = observer(function MemberList({ workspaceSlug, projectId }: Props) {
