@@ -5,6 +5,7 @@
  */
 
 import { action, makeObservable, observable, runInAction } from "mobx";
+import { computedFn } from "mobx-utils";
 // plane imports
 import type { TAgentDefinition, TAgentDefinitionWrite, TAgentMember, TAgentRun } from "@/services/agent.service";
 import { AgentService } from "@/services/agent.service";
@@ -49,8 +50,6 @@ export class AgentStore implements IAgentStore {
     makeObservable(this, {
       members: observable,
       definitions: observable,
-      getMembersByProject: action,
-      getDefinitionList: action,
       fetchDefinitions: action,
       createDefinition: action,
       updateDefinition: action,
@@ -64,10 +63,11 @@ export class AgentStore implements IAgentStore {
     this.agentService = new AgentService();
   }
 
-  getMembersByProject = (projectId: string) =>
-    Object.values(this.members).filter((member) => member.project_id === projectId);
+  getMembersByProject = computedFn((projectId: string) =>
+    Object.values(this.members).filter((member) => member.project_id === projectId)
+  );
 
-  getDefinitionList = () => Object.values(this.definitions);
+  getDefinitionList = computedFn(() => Object.values(this.definitions));
 
   fetchDefinitions = async (workspaceSlug: string) => {
     const response = await this.agentService.listDefinitions(workspaceSlug);
