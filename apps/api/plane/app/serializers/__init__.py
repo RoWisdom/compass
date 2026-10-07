@@ -145,4 +145,9 @@ from .page_collection import (
     WikiPageUpdateSerializer,
 )
 
-from .agent import AgentMemberSerializer, AgentRunSerializer
+from .agent import (
+    AgentDefinitionLiteSerializer,
+    AgentDefinitionSerializer,
+    AgentMemberSerializer,
+    AgentRunSerializer,
+)

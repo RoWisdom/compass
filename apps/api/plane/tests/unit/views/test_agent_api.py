@@ -44,18 +44,25 @@ def _member(project, workspace, bot_user, name="需求分析", tier=AgentTierEnu
 
 
 @pytest.mark.django_db
-def test_list_members_only_returns_this_projects_active_ones(
+def test_list_members_includes_inactive_ones(
     session_client, create_user, create_bot_user, workspace, project, no_worker
 ):
+    """设计 §3：名册**列出停用的**成员（buzz「永不隐藏」）。
+
+    第一期这里过滤掉 `is_active=True`，结果是停用之后界面上看不见它、
+    也没有任何通路改回来。停用只关唤醒的门，不关显示的门。
+    """
     _member(project, workspace, create_bot_user, name="需求分析")
-    _member(project, workspace, create_bot_user, name="停用的", active=False)
+    _member(project, workspace, create_bot_user, name="架构设计", active=False)
 
     response = session_client.get(
         f"/api/workspaces/{workspace.slug}/projects/{project.id}/agent-members/"
     )
     assert response.status_code == 200
-    names = [row["name"] for row in response.data]
-    assert names == ["需求分析"]
+    names = sorted(row["definition"]["name"] for row in response.data)
+    assert names == ["架构设计", "需求分析"]
+    by_name = {row["definition"]["name"]: row["is_active"] for row in response.data}
+    assert by_name["架构设计"] is False
 
 
 @pytest.mark.django_db
