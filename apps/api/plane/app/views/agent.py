@@ -183,8 +183,12 @@ class AgentMemberViewSet(BaseViewSet):
         但绝不把它当成「在线」。设计 §3。
         """
         latest = (
+            # `-created_at` 之后还要有 `-id` 兜底：``last_run_status`` 与 ``last_run_at``
+            # 是**两条独立的标量子查询**，只按 created_at 排序时，两个同一时刻的 run
+            # 可能分别被两条子查询选中 ⇒ 状态来自 A、时间来自 B。加个确定性次序键，
+            # 「两列必来自同一行」这条不变量才真成立。
             AgentRun.objects.filter(member=OuterRef("pk"))
-            .order_by("-created_at")
+            .order_by("-created_at", "-id")
         )
         return (
             AgentMember.objects.filter(

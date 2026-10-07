@@ -16,6 +16,7 @@ from uuid import uuid4
 
 # Django imports
 from django.contrib.auth.hashers import make_password
+from django.db import transaction
 from django.utils import timezone
 
 # Module imports
@@ -31,10 +32,22 @@ from plane.db.models import (
 
 
 def deploy(*, definition, project, created_by_id):
-    """把 ``definition`` 部署进 ``project``，返回成员行。幂等。
+    """把 ``definition`` 部署进 ``project``，返回成员行。
 
-    幂等键是 ``(project, definition)`` —— 与成员行上的唯一约束同一把锁。
+    **不是幂等函数。** 第二次调用会在最后那次 ``AgentMember`` INSERT 上撞
+    ``(project, definition)`` 的唯一约束并抛 ``IntegrityError`` —— 调用方负责预检、
+    返回 409（``AgentMemberViewSet.create``）。唯一约束是仲裁者，不是护栏。
+
+    整段必须在一个事务里：那次 INSERT **之前**已经写好了 bot 用户、工作区成员、
+    项目成员三样东西。生产是 autocommit，不套 atomic 就没人替它们回滚 ⇒ 撞约束时
+    留下一个**没有成员行的孤儿 bot 用户**（连带两条成员关系）。
     """
+    with transaction.atomic():
+        return _deploy(definition=definition, project=project, created_by_id=created_by_id)
+
+
+def _deploy(*, definition, project, created_by_id):
+    """``deploy`` 的事务体。别直接调 —— 它是半成品状态，往外可见要靠外面那层 atomic。"""
     workspace = project.workspace
 
     # 预生成成员 id，好让 bot 用户名由它派生：确定性、唯一、无长度风险
