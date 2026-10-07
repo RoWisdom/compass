@@ -370,6 +370,56 @@ def test_a_post_still_in_use_cannot_be_deleted(session_client, workspace, projec
 
 
 @pytest.mark.django_db
+def test_a_post_used_by_two_same_named_projects_reports_two(
+    session_client, workspace, create_user, create_bot_user
+):
+    """终审 M-2：报出的数字必须等于**不同项目的个数** —— 同名项目不能把 2 报成 1。
+
+    项目名在一个工作区里只对**未删除**的项目唯一
+    （``project_unique_name_workspace_when_deleted_at_null``），所以两个「并存同名」的项目
+    只能是一个软删了、另一个沿用了它的名字 —— 而软删项目底下的成员行**不会**随之消失
+    （``blockers`` 只按成员行自己的 ``deleted_at`` 过滤，这正是那个数字会算错的地方）：
+    按项目名去重会把 2 报成 1。
+    """
+    from django.utils import timezone
+
+    from plane.db.models import AgentDefinition, Project
+
+    definition = AgentDefinition.objects.create(
+        workspace_id=workspace.id, name="需求分析", created_by_id=create_user.id
+    )
+
+    def _project(identifier):
+        return Project.objects.create(
+            name="同名项目", identifier=identifier, workspace=workspace, created_by=create_user
+        )
+
+    def _use(project):
+        AgentMember.objects.create(
+            definition=definition,
+            project_id=project.id,
+            workspace_id=workspace.id,
+            bot_user_id=create_bot_user.id,
+        )
+
+    first = _project("SAME1")
+    _use(first)
+    # 用 **queryset 形式**软删（本仓多处记录过：它不发级联任务 ⇒ 成员行留下）：
+    # 项目没了，那一行成员还在。
+    Project.objects.filter(pk=first.pk).update(deleted_at=timezone.now())
+
+    second = _project("SAME2")
+    _use(second)
+
+    response = session_client.delete(
+        f"/api/workspaces/{workspace.slug}/agent-definitions/{definition.id}/"
+    )
+    assert response.status_code == 409
+    # 数字是 2（两个不同项目）；名字列表也给两条（同名 ⇒ 重复出现，这是允许的）
+    assert "2 个项目使用" in response.json()["error"]
+
+
+@pytest.mark.django_db
 def test_a_post_with_no_membership_can_be_deleted(session_client, workspace, create_user):
     from plane.db.models import AgentDefinition
 
@@ -408,6 +458,70 @@ def test_editing_a_post_is_visible_from_every_project_that_uses_it(
     detail = session_client.get(f"/api/workspaces/{workspace.slug}/agent-definitions/{definition.id}/")
     assert detail.data["instructions"] == "新"
     assert row["definition"]["name"] == "需求分析"
+
+
+@pytest.mark.django_db
+def test_changing_a_post_tier_resyncs_the_bots_project_role(
+    session_client, workspace, project, create_user
+):
+    """终审 I-1：改档位必须一并重算已部署 bot 的 ``ProjectMember.role``。
+
+    沙箱模式（``AgentMember.permission_mode``）是**现场**从 ``definition.tier`` 推的，
+    但 bot 的公开 API 项目权限是部署时**快照**下来的 ``ProjectMember.role``
+    （``agent_identity.py``）。只改档位不重算，两者就静默分叉 ——
+    ``ledger → readonly`` 还留着 MEMBER 级的触达，``readonly → ledger`` 则被
+    ``ProjectEntityPermission`` 挡掉、档位静默不生效。
+    """
+    from plane.db.models import ProjectMember
+
+    definition = _definition(workspace, name="任务拆解", tier=AgentTierEnum.LEDGER.value)
+    created = session_client.post(
+        f"/api/workspaces/{workspace.slug}/projects/{project.id}/agent-members/",
+        {"definition_id": str(definition.id)},
+        format="json",
+    )
+    member = AgentMember.objects.get(pk=created.data["id"])
+
+    def role():
+        return ProjectMember.objects.get(project=project, member_id=member.bot_user_id).role
+
+    assert role() == 15  # ledger ⇒ MEMBER
+
+    url = f"/api/workspaces/{workspace.slug}/agent-definitions/{definition.id}/"
+    assert session_client.patch(url, {"tier": AgentTierEnum.READONLY.value}, format="json").status_code == 200
+    assert role() == 5
+
+    assert session_client.patch(url, {"tier": AgentTierEnum.LEDGER.value}, format="json").status_code == 200
+    assert role() == 15
+
+
+@pytest.mark.django_db
+def test_editing_a_post_without_a_tier_change_leaves_the_role_alone(
+    session_client, workspace, project, create_user
+):
+    """反向对照：PATCH 不含 ``tier`` ⇒ 角色**纹丝不动**。
+
+    用 5（GUEST）当哨兵、把岗位设成 ledger（重算会给 15）：若重算被错写成「无条件跑」
+    （漏掉 ``"tier" in validated_data`` 那道闸），这次只改名字的 PATCH 会把它翻成 15 而红。
+    """
+    from plane.db.models import ProjectMember
+
+    definition = _definition(workspace, name="任务拆解", tier=AgentTierEnum.LEDGER.value)
+    created = session_client.post(
+        f"/api/workspaces/{workspace.slug}/projects/{project.id}/agent-members/",
+        {"definition_id": str(definition.id)},
+        format="json",
+    )
+    member = AgentMember.objects.get(pk=created.data["id"])
+    ProjectMember.objects.filter(project=project, member_id=member.bot_user_id).update(role=5)
+
+    response = session_client.patch(
+        f"/api/workspaces/{workspace.slug}/agent-definitions/{definition.id}/",
+        {"name": "改了名"},
+        format="json",
+    )
+    assert response.status_code == 200
+    assert ProjectMember.objects.get(project=project, member_id=member.bot_user_id).role == 5
 
 
 @pytest.mark.django_db

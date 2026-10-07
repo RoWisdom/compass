@@ -62,20 +62,37 @@ def test_seed_is_idempotent(workspace, project):
 
 @pytest.mark.django_db
 def test_re_running_updates_the_post_but_not_the_membership(workspace, project):
-    """第一期那条坑的回归测试：seed 重跑**不该**动成员行。
+    """第一期那条坑的回归测试：seed 重跑**只**重写岗位的说明书，**不动**成员行。
 
     岗位是工作区级的、成员行是项目级的，所以重跑只在**岗位**那行上重写说明书；
     成员行（连同它的 bot 用户与 token）必须原样不动。
     """
+    from plane.db.management.commands.seed_agent_members import MEMBERS
+
+    roster_instructions = next(
+        spec["instructions"] for spec in MEMBERS if spec["name"] == "需求分析"
+    )
+
     call_command("seed_agent_members", workspace=workspace.slug, project=str(project.id))
     member = AgentMember.objects.get(project=project, definition__name="需求分析")
-    member_id, definition_id = member.id, member.definition_id
+    definition_id = member.definition_id
+    bot_user_id, token_id = member.bot_user_id, member.service_token_id
+
+    # 把岗位的说明书**改脏** —— 重跑必须用名册正文盖回来。这才是本期真正替换掉第一期
+    # 那个坑的不变式：说明书属于**岗位**，改一次所有项目一起变。不改脏的话「updates the
+    # post」这半句断言恒真、名不副实。
+    AgentDefinition.objects.filter(pk=definition_id).update(instructions="脏")
 
     call_command("seed_agent_members", workspace=workspace.slug, project=str(project.id))
 
     after = AgentMember.objects.get(project=project, definition__name="需求分析")
-    assert after.id == member_id
+    # 说明书确实被名册正文写回了岗位行
+    assert after.definition.instructions == roster_instructions
     assert after.definition_id == definition_id
+    # 身份不变 —— 用真正 pin 住身份的两个外键（``after.id == member_id`` 近乎恒真，
+    # 只有「删了重建」才会红；这条 docstring 声称的是 bot 用户与 token 原样不动）。
+    assert after.bot_user_id == bot_user_id
+    assert after.service_token_id == token_id
     assert AgentMember.objects.filter(project=project).count() == 3
     # 岗位也没被复制出第二行 —— 重跑命中同一行
     assert AgentDefinition.objects.filter(workspace_id=workspace.id).count() == 3

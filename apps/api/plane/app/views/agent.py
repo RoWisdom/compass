@@ -27,6 +27,7 @@ from plane.db.models import (
     AgentRunStatusEnum,
     Issue,
     Project,
+    ProjectMember,
     Workspace,
 )
 from plane.utils.agent_identity import deploy, retire
@@ -110,6 +111,10 @@ class AgentDefinitionViewSet(BaseViewSet):
         serializer = self.get_serializer(definition, data=request.data, partial=True)
         if not serializer.is_valid():
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        # 改档位前先记下旧值。沙箱模式（``AgentMember.permission_mode``）是**现场**从
+        # ``definition.tier`` 推的，但 bot 的公开 API 权限是部署时**快照**下来的
+        # ``ProjectMember.role``（``agent_identity.py``）—— 只改前者会让两者静默分叉。
+        old_tier = definition.tier
         try:
             # 套一层 atomic ⇒ 失败的 UPDATE 退回**保存点**，外层事务仍可用。
             # 不套的话 `Model.save()` 走的是 `mark_for_rollback_on_error`，在已有事务里它只把
@@ -117,6 +122,20 @@ class AgentDefinitionViewSet(BaseViewSet):
             # `TransactionManagementError`（实测：改名失败后读原名的那句断言就是这样炸的）。
             with transaction.atomic():
                 serializer.save()
+                # 档位**真的变了**才重算 bot 的项目角色，且必须与这次保存同在一个 atomic 里 ——
+                # 档位改了、角色没跟上，就是半成品状态。不重算的话（终审 I-1）：
+                # ``ledger → readonly`` 沙箱变只读、不再挪卡，但 bot 仍留着 MEMBER 级的触达
+                # （「可见的按钮不是唯一的栅栏」）；``readonly → ledger`` 则被
+                # ``ProjectEntityPermission`` 挡掉 ⇒ 档位静默不生效。
+                if "tier" in serializer.validated_data and definition.tier != old_tier:
+                    # 重算规则**走那条委托链**（``AgentMember.project_role`` 读
+                    # ``definition.tier``），不在这手写一遍 ``15 if ... else 5`` —— 同一条规则
+                    # 存两份就是多一份。只动**活着的**成员行；更新形状照抄 ``retire()``。
+                    for member in definition.members.filter(deleted_at__isnull=True).select_related("definition"):
+                        ProjectMember.objects.filter(
+                            project_id=member.project_id,
+                            member_id=member.bot_user_id,
+                        ).update(role=member.project_role)
         except IntegrityError:
             # 改名撞上另一个岗位（同 create 的理由：DRF 跳过了那条 UniqueTogetherValidator）。
             name = serializer.validated_data.get("name") or definition.name
@@ -153,13 +172,21 @@ class AgentDefinitionViewSet(BaseViewSet):
             AgentMember.objects.filter(definition=definition, deleted_at__isnull=True)
             .select_related("project")
         )
-        names = sorted({m.project.name for m in blockers})
-        if names:
+        # 计数按 **``project_id`` 去重**，不按项目名（终审 M-2）。项目名只对**未删除**的项目
+        # 唯一（``project_unique_name_workspace_when_deleted_at_null``）—— 软删过的项目可以
+        # 和一个活跃项目同名，而它底下的成员行不会随之消失（本查询只按成员行自己的
+        # ``deleted_at`` 过滤）。两个这样的项目都用同一个岗位时，按名字去重会把「2」报成「1」。
+        # 这个数字是给用户看的**事实陈述**，必须等于**不同项目的个数**；展示用的名字列表另列，
+        # 项目真同名就重复出现，不许为了好看让列表和数字打架。``(project, definition)`` 的唯一
+        # 约束保证成员行与不同项目一一对应，所以 ``names`` 与 ``project_count`` 长度相等。
+        names = sorted(m.project.name for m in blockers)
+        project_count = len({m.project_id for m in blockers})
+        if project_count:
             listed = "、".join(names)
             return Response(
                 {
                     "error": (
-                        f"「{definition.name}」仍被 {len(names)} 个项目使用：{listed}。"
+                        f"「{definition.name}」仍被 {project_count} 个项目使用：{listed}。"
                         "先从那些项目移除。"
                     )
                 },
