@@ -2,6 +2,9 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
+# Django imports
+from django.utils import timezone
+
 # Third-party imports
 from rest_framework import status
 from rest_framework.response import Response
@@ -10,7 +13,7 @@ from rest_framework.response import Response
 from plane.app.permissions import ROLE, allow_permission
 from plane.app.serializers import AgentMemberSerializer, AgentRunSerializer
 from plane.bgtasks.agent_run_task import run_agent_member
-from plane.db.models import AGENT_UNFINISHED_STATUSES, AgentMember, AgentRun, Issue
+from plane.db.models import AGENT_UNFINISHED_STATUSES, AgentMember, AgentRun, AgentRunStatusEnum, Issue
 from plane.utils.exception_logger import log_exception
 
 from .base import BaseViewSet
@@ -90,7 +93,22 @@ class AgentRunViewSet(BaseViewSet):
                 triggered_by_id=request.user.id,
                 created_by_id=request.user.id,
             )
-            run_agent_member.delay(str(run.id))
+            try:
+                run_agent_member.delay(str(run.id))
+            except Exception as e:
+                # Broker 不可达（226 上的 RabbitMQ）。绝不能把这一行留在 `pending`：
+                # 它属于 AGENT_UNFINISHED_STATUSES ⇒ 会永久占住设计 §5 的锁 —— 同一成员
+                # 会一直拿回这个死掉的 run，别的成员一律被拒，且没有任何东西会把它重新入队。
+                log_exception(e)
+                run.status = AgentRunStatusEnum.FAILED.value
+                run.error = "Could not reach the queue; the run was never started."
+                run.finished_at = timezone.now()
+                run.save(update_fields=["status", "error", "finished_at"])
+                return Response(
+                    {"error": "Could not reach the queue; the run was not started."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
             return Response(AgentRunSerializer(run).data, status=status.HTTP_201_CREATED)
         except Exception as e:
             log_exception(e)

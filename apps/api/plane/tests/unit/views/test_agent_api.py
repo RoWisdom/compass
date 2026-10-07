@@ -4,7 +4,13 @@
 
 import pytest
 
-from plane.db.models import AgentMember, AgentRun, AgentRunStatusEnum, AgentTierEnum
+from plane.db.models import (
+    AGENT_UNFINISHED_STATUSES,
+    AgentMember,
+    AgentRun,
+    AgentRunStatusEnum,
+    AgentTierEnum,
+)
 
 
 @pytest.fixture
@@ -155,3 +161,37 @@ def test_list_runs_does_not_leak_another_projects_runs(
     ids = [str(row["id"]) for row in response.data]
     assert str(my_run.id) in ids
     assert str(foreign_run.id) not in ids
+
+
+@pytest.mark.django_db
+def test_a_failed_enqueue_does_not_lock_the_card(
+    session_client, create_bot_user, workspace, project, create_issue, monkeypatch
+):
+    """入队失败的那一行不能占住设计 §5 的锁。
+
+    它若留在 `pending`（属于 AGENT_UNFINISHED_STATUSES），这张卡就再也醒不过来了：
+    同一成员会拿回这个死 run，别的成员一律被拒。
+    """
+
+    def broker_is_down(run_id):
+        raise RuntimeError("broker down")
+
+    monkeypatch.setattr("plane.app.views.agent.run_agent_member.delay", broker_is_down)
+    member = _member(project, workspace, create_bot_user)
+
+    response = session_client.post(
+        f"/api/workspaces/{workspace.slug}/projects/{project.id}/agent-runs/",
+        {"member_id": str(member.id), "issue_id": str(create_issue.id)},
+        format="json",
+    )
+    assert response.status_code == 400
+
+    run = AgentRun.objects.get(issue_id=create_issue.id)
+    assert run.status == AgentRunStatusEnum.FAILED.value
+
+    # 锁真的释放了 —— 没有任何未结束的运行还占着这张卡
+    assert not AgentRun.objects.filter(
+        project_id=project.id,
+        issue_id=create_issue.id,
+        status__in=AGENT_UNFINISHED_STATUSES,
+    ).exists()
