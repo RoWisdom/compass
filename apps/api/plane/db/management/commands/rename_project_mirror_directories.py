@@ -45,8 +45,9 @@ class Command(BaseCommand):
         # interleaved inside that single directory. Moving it into either project's
         # id would put the *other* project's pages inside an AI member's sandbox
         # island — the very thing this rename exists to prevent. So a shared old name
-        # is refused, never arbitrated. (Keyed by resolved root: two workspaces have
-        # two roots and do not share anything.)
+        # is refused, never arbitrated. (Keyed by resolved root, so two workspaces
+        # that resolve to different roots never share a key — and two that fall back
+        # to the same env root correctly do.)
         #
         # ⚠️ That rule belongs to history and to history only. It is here to *find*
         # the existing directories; it is **not** the source of truth any more — the
@@ -60,7 +61,8 @@ class Command(BaseCommand):
             new_name = str(project.id)
             if old_name == new_name:
                 # The name sanitized to empty, so the old rule already fell back to
-                # the id — this project claims nothing.
+                # the id — nothing to move.
+                self.stdout.write(f"[skip] {project.name}: already named by id ({new_name})")
                 continue
             live.append((project, root, old_name, new_name))
             shared[(str(root), old_name)] = shared.get((str(root), old_name), 0) + 1

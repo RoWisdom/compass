@@ -159,3 +159,30 @@ class TestRenameProjectMirrorDirectoriesCommand:
         assert (old / "x.md").is_file(), "共用的旧目录不得被搬动"
         assert not (root / str(slash.id)).exists()
         assert not (root / str(dash.id)).exists()
+
+    def test_a_conflicting_target_directory_refuses_to_merge(
+        self, workspace, create_user, tmp_path, monkeypatch
+    ):
+        """目标 id 目录**已存在**时拒绝搬，绝不合并两棵树。
+
+        ``new.exists()`` 这道闸是这条命令唯一阻止「把两个项目的镜像合成一个目录」的
+        地方，而它会真动用户的 vault —— 闸不该裸着。盘上同时有 ``<旧名>/x.md`` 与
+        ``<id>/y.md``（目标已存在 ⇒ 冲突）。
+        """
+        root, project, old = self._seed(workspace, create_user, tmp_path, monkeypatch, "面料交易", "CFL1")
+        new = root / str(project.id)
+        new.mkdir(parents=True)
+        (new / "y.md").write_text("另一棵树", encoding="utf-8")
+
+        # dry-run：走 [conflict] 分支，两棵树都原样。
+        out = StringIO()
+        call_command("rename_project_mirror_directories", stdout=out)
+        assert "[conflict]" in out.getvalue()
+        assert (old / "sub" / "x.md").is_file(), "旧名目录不得被搬走"
+        assert (new / "y.md").is_file(), "已存在的 id 目录不得被动"
+
+        # --apply：仍然什么都不动 —— 不搬、不合并。
+        call_command("rename_project_mirror_directories", "--apply", stdout=StringIO())
+        assert (old / "sub" / "x.md").is_file(), "旧名目录不得被搬走"
+        assert (new / "y.md").is_file(), "已存在的 id 目录不得被动"
+        assert not (new / "sub").exists(), "两棵树不得合并"
