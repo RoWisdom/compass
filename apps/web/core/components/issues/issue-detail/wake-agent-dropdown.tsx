@@ -70,7 +70,7 @@ export const WakeAgentDropdown = observer(function WakeAgentDropdown(props: Prop
       ) : (
         members.map((member) => (
           <CustomMenu.MenuItem key={member.id} onClick={() => void handleWake(member.id)}>
-            {member.name}
+            {member.definition.name}
           </CustomMenu.MenuItem>
         ))
       )}
