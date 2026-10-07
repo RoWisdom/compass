@@ -360,3 +360,37 @@ def test_html_in_the_output_is_escaped(
     assert "<script>" not in comment.comment_html
     assert "&lt;script&gt;" in comment.comment_html
     assert "a &lt; b &amp; c" in comment.comment_html
+
+
+@pytest.mark.django_db
+def test_a_second_delivery_of_the_same_run_starts_no_second_subprocess(
+    create_bot_user, workspace, project, create_issue, monkeypatch
+):
+    """M-41：同一行的第二次投递必须被挡住 —— 认领是条件式的。
+
+    这条测试**故意**把 ``_execute`` 打桩成什么都不做：那样 run 的状态就停在 ``running``，
+    于是第二次调用恰好模拟了「第一次还在跑、第二次投递到了」那个窗口。
+    旧写法（读-改-写）下两次都会通过 `status != pending` 判断 ⇒ 这条会红。
+    """
+    member = AgentMember.objects.create(
+        name="任务拆解",
+        tier=AgentTierEnum.LEDGER.value,
+        project_id=project.id,
+        workspace_id=workspace.id,
+        bot_user_id=create_bot_user.id,
+    )
+    run = AgentRun.objects.create(
+        member=member, issue_id=create_issue.id, project_id=project.id, workspace_id=workspace.id,
+    )
+
+    starts = []
+    monkeypatch.setattr(
+        "plane.bgtasks.agent_run_task._execute", lambda run: starts.append(run.pk)
+    )
+
+    run_agent_member(str(run.id))
+    run_agent_member(str(run.id))
+
+    assert starts == [run.pk]
+    run.refresh_from_db()
+    assert run.status == AgentRunStatusEnum.RUNNING.value

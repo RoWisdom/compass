@@ -122,3 +122,36 @@ def test_only_one_of_two_overlapping_approvals_claims_the_run(
     assert _claim_for_rerun(run) is False
     run.refresh_from_db()
     assert run.status == AgentRunStatusEnum.PENDING.value
+
+
+@pytest.mark.django_db
+def test_a_lost_claim_enqueues_nothing(
+    create_user, workspace, project, create_issue, create_bot_user,
+    monkeypatch, django_capture_on_commit_callbacks,
+):
+    """接线：``_maybe_requeue`` **必须**经过 ``_claim_for_rerun`` 才入队。
+
+    上一个测试钉的是原语本身；这条钉的是「它有没有被用上」—— 有人把尾巴改回读-改-写
+    而把 ``_claim_for_rerun`` 留在原地，只有这条会红。
+    """
+    enqueued = []
+    monkeypatch.setattr(
+        "plane.db.signals.agent_approval.run_agent_member.delay",
+        lambda run_id: enqueued.append(run_id),
+    )
+    monkeypatch.setattr(
+        "plane.db.signals.agent_approval._claim_for_rerun", lambda run: False
+    )
+    member = _member(project, workspace, create_bot_user)
+    run = _awaiting(member, create_issue, project, workspace)
+
+    comment = IssueComment(
+        project_id=project.id, workspace_id=workspace.id, issue_id=create_issue.id,
+        actor_id=create_user.id, comment_html=f"<p>{APPROVAL_PREFIX}，动手吧。</p>",
+    )
+    with django_capture_on_commit_callbacks(execute=True):
+        comment.save(created_by_id=create_user.id)
+
+    assert enqueued == []
+    run.refresh_from_db()
+    assert run.status == AgentRunStatusEnum.AWAITING_APPROVAL.value

@@ -113,7 +113,14 @@ def _run_headless(*, prompt, island, member, env_extra):
 
 @shared_task
 def run_agent_member(run_id):
-    """Execute one `AgentRun`. Idempotent: a run that is not `pending` is skipped."""
+    """Execute one ``AgentRun``. Idempotent: the claim below is what makes it so.
+
+    A read-then-check would not: the status does not move to ``running`` until
+    ``_execute`` has built the prompt, so a second delivery of the *same* ``run_id``
+    arriving in that window would see ``pending`` too and start a second subprocess
+    on the same row (and the same island). The conditional UPDATE is the claim — the
+    row is the arbiter, exactly like ``agent_approval._claim_for_rerun``.
+    """
     try:
         run = (
             AgentRun.objects.select_related("member", "member__bot_user", "member__service_token")
@@ -123,8 +130,16 @@ def run_agent_member(run_id):
     except Exception as e:
         log_exception(e)
         return
-    if run is None or run.status != AgentRunStatusEnum.PENDING.value:
+    if run is None:
         return
+
+    claimed = AgentRun.objects.filter(
+        pk=run.pk, status=AgentRunStatusEnum.PENDING.value
+    ).update(status=AgentRunStatusEnum.RUNNING.value, started_at=timezone.now())
+    if claimed != 1:
+        return
+
+    run.status = AgentRunStatusEnum.RUNNING.value
 
     try:
         _execute(run)
