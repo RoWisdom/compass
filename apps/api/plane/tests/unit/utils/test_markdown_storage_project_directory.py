@@ -48,20 +48,24 @@ def _project(workspace, create_user, name, identifier):
 
 @pytest.mark.unit
 class TestProjectDirectoryIsKeyedById:
-    def test_the_directory_is_the_project_id_not_its_name(self, workspace, create_user):
+    def test_the_directory_is_the_project_id_not_its_name(self, workspace, create_user, tmp_path, monkeypatch):
         """目录 = 项目 id。名字再怎么净化都不参与。"""
+        monkeypatch.setenv(MARKDOWN_STORAGE_PATH_ENV, str(tmp_path / "mirror-root"))
         project = _project(workspace, create_user, "面料交易", "MIR1")
 
         assert project_directory(workspace, project).name == str(project.id)
         assert project_directory(workspace, project).name != "面料交易"
 
-    def test_two_projects_whose_names_sanitize_alike_get_different_directories(self, workspace, create_user):
+    def test_two_projects_whose_names_sanitize_alike_get_different_directories(
+        self, workspace, create_user, tmp_path, monkeypatch
+    ):
         """缺陷本身：``官网/新版`` 与 ``官网-新版`` 曾是同一个目录 —— 现在不可能。
 
         这两个名字在 ``(name, workspace)`` 唯一约束下**都是合法的**（它们不相等），
         但净化后撞在一起（``/`` 被换成 ``-``）。旧规则下两次 ``project_directory``
         返回同一个目录 —— 这条测试在旧规则下必须是**红的**。
         """
+        monkeypatch.setenv(MARKDOWN_STORAGE_PATH_ENV, str(tmp_path / "mirror-root"))
         slash = _project(workspace, create_user, "官网/新版", "MIR2")
         dash = _project(workspace, create_user, "官网-新版", "MIR3")
 
@@ -83,7 +87,10 @@ class TestRenameProjectMirrorDirectoriesCommand:
         monkeypatch.setenv(MARKDOWN_STORAGE_PATH_ENV, str(root))
 
         project = _project(workspace, create_user, name, identifier)
-        old = root / (_sanitize_name(project.name or "") or str(project.id))
+        # Hard-coded on purpose: this is the *historical* rule (sanitize the name,
+        # fall back to the id). Recomputing it with the command's own expression
+        # would let a wrong reconstruction inside the command stay green.
+        old = root / "面料交易"
         (old / "sub").mkdir(parents=True)
         (old / "sub" / "x.md").write_text("正文", encoding="utf-8")
         return root, project, old
@@ -112,3 +119,43 @@ class TestRenameProjectMirrorDirectoriesCommand:
         call_command("rename_project_mirror_directories", "--apply", stdout=StringIO())
         after = sorted(p.relative_to(root) for p in root.rglob("*"))
         assert before == after
+
+    def test_a_shared_old_directory_is_refused_never_arbitrated(
+        self, workspace, create_user, tmp_path, monkeypatch
+    ):
+        """两个项目共用一个旧目录时**拒绝搬**，绝不按 ``created_at`` 仲裁。
+
+        净化发生在 ``(name, workspace)`` 唯一约束**之后**，所以 ``官网/新版`` 与
+        ``官网-新版`` 这两个合法项目折叠进同一个旧目录，两边的镜像交织在一起。
+        搬进任一个项目的 id 目录 = 另一个项目的页面进了它的沙箱岛 —— 正是改名要
+        消灭的越界。旧代码会把整个目录搬进先建的那个项目的 id 目录，这条测试在那时
+        是**红的**。
+        """
+        root = tmp_path / "mirror-root"
+        monkeypatch.setenv(MARKDOWN_STORAGE_PATH_ENV, str(root))
+
+        slash = _project(workspace, create_user, "官网/新版", "SHR1")
+        dash = _project(workspace, create_user, "官网-新版", "SHR2")
+        # 前置：两个项目真的并存，且净化后确实同名 —— 这正是「共用一个旧目录」的形状。
+        assert slash.name != dash.name
+        assert _sanitize_name(slash.name) == _sanitize_name(dash.name) == "官网-新版"
+
+        # 盘上只有一个共用的旧目录，里面放一个文件。
+        old = root / "官网-新版"
+        old.mkdir(parents=True)
+        (old / "x.md").write_text("正文", encoding="utf-8")
+
+        # dry-run：两个项目**都**走 [shared] 分支，盘上一字未动。
+        out = StringIO()
+        call_command("rename_project_mirror_directories", stdout=out)
+        assert out.getvalue().count("[shared]") == 2
+        assert (old / "x.md").is_file(), "共用的旧目录不得被搬动"
+        assert not (root / str(slash.id)).exists()
+        assert not (root / str(dash.id)).exists()
+
+        # --apply：仍然什么都不动 —— 这一条是本次修复的理由。旧代码会把目录搬进
+        # 先建的那个项目的 id 目录（后者的页面就此进了前者的沙箱岛）。
+        call_command("rename_project_mirror_directories", "--apply", stdout=StringIO())
+        assert (old / "x.md").is_file(), "共用的旧目录不得被搬动"
+        assert not (root / str(slash.id)).exists()
+        assert not (root / str(dash.id)).exists()
