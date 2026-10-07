@@ -16,7 +16,7 @@
 from django.core.management.base import BaseCommand
 
 # Module imports
-from plane.db.models import Project
+from plane.db.models import AgentRun, AgentRunStatusEnum, Project
 from plane.utils.markdown_storage import _sanitize_name, get_markdown_root
 
 
@@ -32,6 +32,21 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         apply = options["apply"]
+
+        in_flight = AgentRun.objects.filter(
+            status=AgentRunStatusEnum.RUNNING.value, deleted_at__isnull=True
+        ).count()
+        if in_flight and apply:
+            # Renaming an island out from under a live run makes that run's artifact diff
+            # come back empty while the run is still recorded as succeeded — a silent
+            # wrong result on someone's card. Refuse the whole apply; the operator waits.
+            self.stdout.write(
+                self.style.ERROR(
+                    f"[refused] {in_flight} AI run(s) are still running — their islands are live "
+                    f"working directories. Wait for them to finish, then re-run."
+                )
+            )
+            return
 
         projects = list(
             Project.objects.filter(deleted_at__isnull=True)
@@ -107,6 +122,13 @@ class Command(BaseCommand):
                 else:
                     self.stdout.write(f"[dry-run] {old_name} -> {new_name}")
                 moved += 1
+
+        if in_flight:
+            self.stdout.write(
+                self.style.WARNING(
+                    f"[warn] {in_flight} AI run(s) are running right now — --apply would refuse."
+                )
+            )
 
         verb = "Moved" if apply else "Would move"
         tally = f"{verb} {moved} project directory(ies)"

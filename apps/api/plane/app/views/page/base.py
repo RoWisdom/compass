@@ -162,8 +162,9 @@ def _write_page_mirror(project_id, page_id, name, ancestors, description_html):
 def _project_mirror_target_resolver(project_id):
     """返回**项目侧**的镜像寻址函数，交给 ``_cascade_delete_pages`` 当 ``resolve_mirror``。
 
-    与 ``_write_page_mirror`` / ``destroy`` 的既有落盘路径逐字同源：项目名 + 项目 id +
-    祖先链 + 页面名，根是该项目的镜像根。``ancestors`` 按 ``row.parent_id`` 现算 ——
+    与 ``_write_page_mirror`` / ``destroy`` 的既有落盘路径逐字同源：项目 id + 祖先链 +
+    页面名，根是该项目的镜像根 —— 项目名**不参与**路径（``project_name`` 仍在传，只因
+    公开签名没变，落盘按 id 分层）。``ancestors`` 按 ``row.parent_id`` 现算 ——
     与 ``destroy`` 里 ``_page_ancestors(page.parent_id)`` 同一口径。
 
     **项目名与镜像根只查一次**：它们不随行变化，而 ``_project_mirror_root`` 每次都打一条

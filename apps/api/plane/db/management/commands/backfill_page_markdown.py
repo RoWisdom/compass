@@ -12,7 +12,7 @@ from django.core.management.base import BaseCommand
 # Module imports
 from plane.db.models import FileAsset, Page, ProjectPage, User
 from plane.utils.html_to_markdown import html_to_markdown
-from plane.utils.markdown_storage import get_markdown_root, write_page_markdown
+from plane.utils.markdown_storage import _project_directory_name, get_markdown_root, write_page_markdown
 
 
 class Command(BaseCommand):
@@ -100,7 +100,7 @@ class Command(BaseCommand):
                 if dry_run:
                     prefix = "/".join(a[0] for a in ancestors)
                     self.stdout.write(
-                        f"[dry-run] {project_name}/{prefix + '/' if prefix else ''}"
+                        f"[dry-run] {_project_directory_name(project_id)}/{prefix + '/' if prefix else ''}"
                         f"{page.name or str(page.id)} -> {len(markdown)} chars"
                     )
                 else:

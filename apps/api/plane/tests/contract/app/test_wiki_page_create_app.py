@@ -281,8 +281,8 @@ class TestWikiPageCreateWithAProject:
         # 与无项目页那条 skip 正好互为对照。
         mirrored = list(isolate_markdown_mirror.rglob("*.md"))
         assert len(mirrored) == 1, f"有项目的页面应当写出恰好一份镜像：{mirrored!r}"
-        # 目录名是**项目名**，不是 id —— 这一行证明它落在了正确的那一层。
-        assert mirrored[0].parent.name == "镜像项目"
+        # 目录名是**项目 id**，不是项目名 —— 这一行证明它落在了正确的那一层。
+        assert mirrored[0].parent.name == str(project.id)
         assert mirrored[0].name == "有项目的页.md"
         # frontmatter 里的 id 是页面的身份，改名搬移与去重都靠它。
         assert f"id: {page.id}" in mirrored[0].read_text(encoding="utf-8")

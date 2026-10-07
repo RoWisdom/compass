@@ -183,8 +183,13 @@ class TestProjectTreeLeavesAHandwrittenNoteAlone:
 
         改动前这里的行为是**覆盖**。这条守的就是那次改动 —— 在此之前全仓没有一条
         项目树测试预置过无 `id:` 的同名文件，改回「覆盖」不会让任何测试变红。
+
+        「目标名」那一层是 **`<project_id>` 目录**（这里就是 `proj-1`），**不是项目名**
+        —— 镜像按项目 id 分层。手写笔记必须预置在 id 目录里才会成为碰撞候选；照项目名
+        预置会落在没有写入的目录，让原文件那条断言**空转通过**。
+        `project_name="面料交易"` 传了却不参与路径，这一点本身就是「名字不参与」的证据。
         """
-        target = get_markdown_root() / "面料交易" / "剪藏.md"
+        target = get_markdown_root() / "proj-1" / "剪藏.md"
         target.parent.mkdir(parents=True, exist_ok=True)
         original = "---\ntags:\n  - 罗盘\nsource: https://x\n---\n\n用户手写的正文\n"
         target.write_text(original, encoding="utf-8")

@@ -26,7 +26,7 @@ from io import StringIO
 import pytest
 from django.core.management import call_command
 
-from plane.db.models import Project
+from plane.db.models import AgentMember, AgentRun, AgentRunStatusEnum, AgentTierEnum, Project
 from plane.utils.markdown_storage import (
     MARKDOWN_STORAGE_PATH_ENV,
     _sanitize_name,
@@ -186,3 +186,46 @@ class TestRenameProjectMirrorDirectoriesCommand:
         assert (old / "sub" / "x.md").is_file(), "旧名目录不得被搬走"
         assert (new / "y.md").is_file(), "已存在的 id 目录不得被动"
         assert not (new / "sub").exists(), "两棵树不得合并"
+
+    def test_apply_refuses_while_an_agent_run_is_in_flight(
+        self, workspace, create_user, create_bot_user, project, create_issue, tmp_path, monkeypatch
+    ):
+        """AI 正在跑时 ``--apply`` **拒绝整次搬迁** —— 岛就是那个子进程的 ``cwd``。
+
+        ``old.rename(new)`` 会把一个 ``running`` 的 run 的**岛**从它脚下搬走，后果是
+        **静默的错结果**：``snapshot_tree`` 对已不存在的路径返回 ``{}`` ⇒ ``diff_snapshot``
+        返回 ``[]`` ⇒ 该 run 仍被记成 SUCCEEDED、评论里写着「这次没有新增或改动的文件。」。
+        这条锁两件事：在跑时**一个字节都不动**，跑完了（``succeeded``）才真的搬。
+        """
+        root, seeded, old = self._seed(workspace, create_user, tmp_path, monkeypatch, "面料交易", "RUN1")
+
+        member = AgentMember.objects.create(
+            name="需求分析",
+            tier=AgentTierEnum.READONLY.value,
+            project_id=project.id,
+            workspace_id=workspace.id,
+            bot_user_id=create_bot_user.id,
+        )
+        run = AgentRun.objects.create(
+            member=member,
+            issue_id=create_issue.id,
+            project_id=project.id,
+            workspace_id=workspace.id,
+            status=AgentRunStatusEnum.RUNNING.value,
+        )
+
+        # 在跑：拒绝整次 apply，盘上一字未动。
+        out = StringIO()
+        call_command("rename_project_mirror_directories", "--apply", stdout=out)
+        assert "[refused]" in out.getvalue()
+        assert (old / "sub" / "x.md").is_file(), "在跑的 run 会拒整次搬迁，旧目录不得被动"
+        assert not (root / str(seeded.id)).exists(), "拒绝时不得搬出任何 id 目录"
+
+        # 跑完：这次真的搬 —— 证明闸只挡在跑的那些。
+        run.status = AgentRunStatusEnum.SUCCEEDED.value
+        run.save(update_fields=["status"])
+        new = root / str(seeded.id)
+        call_command("rename_project_mirror_directories", "--apply", stdout=StringIO())
+        assert new.is_dir(), "没有在跑的 run 时，--apply 必须真的搬"
+        assert (new / "sub" / "x.md").is_file()
+        assert not old.exists()
