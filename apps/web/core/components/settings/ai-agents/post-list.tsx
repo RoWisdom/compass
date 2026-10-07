@@ -162,7 +162,7 @@ export const PostList = observer(function PostList() {
             </h3>
             <button
               type="button"
-              aria-label={t("common.close")}
+              aria-label={t("close")}
               className="grid size-7 place-items-center rounded text-tertiary hover:bg-layer-2 hover:text-primary"
               onClick={closeModals}
             >
