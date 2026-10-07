@@ -21,7 +21,8 @@ Two invariants are pinned here, both easy to lose:
    second sink.
 
 2. **The mirror is project-scoped, so pages without a project are skipped.**
-   ``_write_page_mirror`` resolves a directory name from ``Project.name`` and
+   ``_write_page_mirror`` resolves a directory name from the project's **id**
+   (``_project_directory_name``; the name does not participate) and
    ``MARKDOWN_STORAGE_PATH`` points at the projects folder itself — a page with
    no ProjectPage link has nowhere to be written. Skipping must leave the
    database write intact; a page whose markdown cannot be mirrored is still a

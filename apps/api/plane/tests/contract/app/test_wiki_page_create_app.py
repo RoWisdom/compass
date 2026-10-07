@@ -293,7 +293,7 @@ class TestWikiPageCreateWithAProject:
     ):
         """别的工作区的项目 id → 404，且**一页都不建**。
 
-        少了这个守卫，别家的项目 id 会被写进 ``ProjectPage``，而镜像路径是项目名派生的
+        少了这个守卫，别家的项目 id 会被写进 ``ProjectPage``，而镜像路径按项目 id 分层
         —— 等于把正文写到别的工作区的目录里。
         """
         response = session_client.post(
