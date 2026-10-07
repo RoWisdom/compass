@@ -139,6 +139,8 @@ class AgentMember(ProjectBaseModel):
         **委托，不重新推导**：Celery 任务注入 ``DSH_PERMISSION_MODE`` 用的是
         ``plane.utils.agent_run.permission_mode_for_tier``，同一条规则存两份就是多一份。
         """
+        # 在属性内部导入：``plane.utils.agent_run`` 没有反向依赖 ``plane.db``，这个方向本身是安全的；
+        # 保持惰性是为了让模型加载永远不依赖 utils 包。
         from plane.utils.agent_run import permission_mode_for_tier
 
         return permission_mode_for_tier(self.definition.tier)

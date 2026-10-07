@@ -35,7 +35,11 @@ def unbackfill_definitions(apps, schema_editor):
     """反向：把字段抄回成员行。
 
     同名岗位会被多个成员行共用 ⇒ 抄回去就是多份副本，这正是拆分前的样子。
-    **回滚是逃生舱，不是日常路径**。
+
+    **前置条件：``agent_members`` 表必须为空**，否则本迁移根本回滚不下去 —— 反向会把
+    ``RemoveField('name')`` 重新变成一次 ``AddField``，重建出的 ``name`` 是
+    ``CharField(null=False, blank=False)`` 且没有默认值；Django 只在 ``blank=True`` 时
+    才拿 ``""`` 去补，这里补不了，已存在的行会直接报错。所以回滚是逃生舱，不是日常路径。
     """
     AgentMember = apps.get_model("db", "AgentMember")
 
@@ -108,6 +112,10 @@ class Migration(migrations.Migration):
             name='definition',
             field=models.ForeignKey(on_delete=django.db.models.deletion.PROTECT, related_name='members', to='db.agentdefinition'),
         ),
+        migrations.RemoveConstraint(
+            model_name='agentmember',
+            name='unique_agent_member_name_per_project',
+        ),
         migrations.RemoveField(
             model_name='agentmember',
             name='color',
@@ -147,10 +155,6 @@ class Migration(migrations.Migration):
         migrations.RemoveField(
             model_name='agentmember',
             name='writable_paths',
-        ),
-        migrations.RemoveConstraint(
-            model_name='agentmember',
-            name='unique_agent_member_name_per_project',
         ),
         migrations.AddConstraint(
             model_name='agentmember',
