@@ -122,3 +122,30 @@ def retire(member):
         APIToken.objects.filter(pk=token.pk).update(
             is_active=False, expired_at=timezone.now()
         )
+
+
+def resync_project_roles(definition):
+    """把 ``definition`` 的**当前档位**重算到它在各项目里 bot 的 ``ProjectMember.role`` 上。
+
+    这个模块管三件事，分工如下：``deploy`` **建**身份（bot 用户 + 工作区/项目成员 +
+    service token），``retire`` **摘**身份（摘 ``ProjectMember`` + 废 token），
+    ``resync_project_roles`` 则是**档位 → 角色**这条链的**唯一出口**。
+
+    为什么必须有一个出口：沙箱模式是**现场**从 ``definition.tier`` 推的
+    （``AgentMember.permission_mode``），但 bot 的公开 API 项目权限是**快照**在这行
+    ``ProjectMember.role`` 上的。**任何**改写 ``definition.tier`` 的路径 —— 视图的
+    ``partial_update``、管理命令 ``seed_agent_members``、将来的表单 —— 都必须写完之后
+    调它一次；漏掉一处，那个 bot 的权限就停在部署时的旧档位上，与沙箱模式静默分叉
+    （「可见的按钮不是唯一的栅栏」，管理命令也是一扇门）。
+
+    **幂等**：不改档位时只是把每行重写成它本来就有的值，所以调用方不必先判「档位有没有真的变」。
+
+    role 一律走 ``AgentMember.project_role`` 那条委托链（它读 ``definition.tier``），
+    不在这重写 ``15 if … else 5`` —— 同一条规则存两份就是多一份。只动**活着的**成员行；
+    ``select_related("definition")`` 是为了让 ``member.project_role`` 不再各打一次库。
+    """
+    for member in definition.members.filter(deleted_at__isnull=True).select_related("definition"):
+        ProjectMember.objects.filter(
+            project_id=member.project_id,
+            member_id=member.bot_user_id,
+        ).update(role=member.project_role)

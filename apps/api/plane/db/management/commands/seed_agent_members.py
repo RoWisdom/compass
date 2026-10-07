@@ -23,7 +23,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 # Module imports
 from plane.db.models import AgentDefinition, AgentMember, AgentTierEnum, Project, Workspace
-from plane.utils.agent_identity import deploy
+from plane.utils.agent_identity import deploy, resync_project_roles
 
 READONLY = AgentTierEnum.READONLY.value
 WRITER = AgentTierEnum.WRITER.value
@@ -126,6 +126,12 @@ class Command(BaseCommand):
                 "skills": spec["skills"],
             },
         )
+        # 上面那次 ``update_or_create`` 把档位按**文件正文**写回 —— 于是 seed 是**改 tier 的
+        # 第二个写入方**（视图 ``partial_update`` 是第一个）。档位一改，bot 快照在
+        # ``ProjectMember.role`` 上的项目权限就与现场从 ``tier`` 推的沙箱模式分叉，
+        # 所以必须跟着走一遍这条链的**唯一出口**（``agent_identity.resync_project_roles``）。
+        # 不判「档位有没有真的变」：那个 helper 幂等，且只有 3 行数据，加守卫只是多一处能写错的地方。
+        resync_project_roles(definition)
         return definition
 
     def _seed_membership(self, *, project, definition):

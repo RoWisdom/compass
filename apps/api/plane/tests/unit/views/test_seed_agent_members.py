@@ -99,6 +99,38 @@ def test_re_running_updates_the_post_but_not_the_membership(workspace, project):
 
 
 @pytest.mark.django_db
+def test_re_seeding_resyncs_every_live_members_project_role(workspace, project):
+    """seed 是**改档位的第二个写入方**：重跑之后，每个活着的成员的角色必须回到 ``member.project_role``。
+
+    可达分叉（修复波 finding #1）：界面把档位 ``ledger → readonly``（``partial_update`` 已把
+    role 重算成 5）之后，有人重跑 seed，文件里的档位是 ``ledger`` ⇒ tier 被改回 ledger，
+    但 role 若不重算就停在 5 ⇒ 档位静默不生效；反方向（文件 ``readonly``、线上被改成
+    ``ledger``）则留下多余的 MEMBER 级触达 —— 「可见的按钮不是唯一的栅栏」，管理命令也是一扇门。
+
+    断言写成**不变式**、不依赖「档位恰好变了」：**任何一次 seed 之后，每个活着的成员的
+    ``ProjectMember.role`` 都等于 ``member.project_role``**。做法是先把角色**人为改错**
+    （与 ``member.project_role`` 不符），重跑 seed ⇒ 断言被纠正回来。
+    """
+    call_command("seed_agent_members", workspace=workspace.slug, project=str(project.id))
+
+    # 把每个已部署成员的角色改成与 ``member.project_role`` 相反的值 —— 甲乙（GUEST=5）改成
+    # 15、丙（MEMBER=15）改成 5，两个方向都覆盖，免得只测了「升」或只测了「降」。
+    for member in AgentMember.objects.filter(project=project, deleted_at__isnull=True):
+        drifted = 15 if member.project_role == 5 else 5
+        ProjectMember.objects.filter(project=project, member_id=member.bot_user_id).update(role=drifted)
+
+    call_command("seed_agent_members", workspace=workspace.slug, project=str(project.id))
+
+    live = AgentMember.objects.filter(project=project, deleted_at__isnull=True).select_related("definition")
+    assert live.count() == 3
+    for member in live:
+        assert (
+            ProjectMember.objects.get(project=project, member_id=member.bot_user_id).role
+            == member.project_role
+        )
+
+
+@pytest.mark.django_db
 def test_show_tokens_prints_the_current_token_on_a_rerun(workspace, project, capsys):
     """``--show-tokens`` 必须给出**当前** token，而不是只在首次 seed 那次才有值。
 

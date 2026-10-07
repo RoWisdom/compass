@@ -27,10 +27,9 @@ from plane.db.models import (
     AgentRunStatusEnum,
     Issue,
     Project,
-    ProjectMember,
     Workspace,
 )
-from plane.utils.agent_identity import deploy, retire
+from plane.utils.agent_identity import deploy, resync_project_roles, retire
 from plane.utils.exception_logger import log_exception
 
 from .base import BaseViewSet
@@ -128,14 +127,11 @@ class AgentDefinitionViewSet(BaseViewSet):
                 # （「可见的按钮不是唯一的栅栏」）；``readonly → ledger`` 则被
                 # ``ProjectEntityPermission`` 挡掉 ⇒ 档位静默不生效。
                 if "tier" in serializer.validated_data and definition.tier != old_tier:
-                    # 重算规则**走那条委托链**（``AgentMember.project_role`` 读
-                    # ``definition.tier``），不在这手写一遍 ``15 if ... else 5`` —— 同一条规则
-                    # 存两份就是多一份。只动**活着的**成员行；更新形状照抄 ``retire()``。
-                    for member in definition.members.filter(deleted_at__isnull=True).select_related("definition"):
-                        ProjectMember.objects.filter(
-                            project_id=member.project_id,
-                            member_id=member.bot_user_id,
-                        ).update(role=member.project_role)
+                    # 重算规则**走那条委托链**，且只在**一个**地方实现：
+                    # ``agent_identity.resync_project_roles`` 是「档位 → 角色」这条链的
+                    # **唯一出口**（``retire()`` 是它更新形状的先例）。视图、管理命令
+                    # ``seed_agent_members`` 都调它 —— 同一条规则存两份就是多一份。
+                    resync_project_roles(definition)
         except IntegrityError:
             # 改名撞上另一个岗位（同 create 的理由：DRF 跳过了那条 UniqueTogetherValidator）。
             name = serializer.validated_data.get("name") or definition.name
