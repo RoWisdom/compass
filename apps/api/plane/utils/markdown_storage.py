@@ -86,9 +86,18 @@ def _frontmatter_id(path: Path) -> Optional[str]:
     return None
 
 
-def _project_directory_name(project_name: Optional[str], project_id: str) -> str:
-    """Return the folder name for a project, preferring its human name."""
-    return _sanitize_name(project_name or "") or str(project_id)
+def _project_directory_name(project_id: str) -> str:
+    """Return a project's mirror-directory name — its id, and never its name.
+
+    The directory is also the AI member's sandbox island (设计 §2), so it must be
+    unique per project. A sanitized *name* is not: ``_sanitize_name`` runs **after**
+    the ``(name, workspace)`` uniqueness the database enforces, so ``官网/新版`` and
+    ``官网-新版`` are two legal projects that fold to one directory — and then one
+    project's agent reads and overwrites the other's mirror. An id cannot collide with
+    anything, including a hand-named folder in the vault that the mirror would
+    otherwise write into.
+    """
+    return str(project_id)
 
 
 def project_directory(workspace, project) -> Path:
@@ -99,7 +108,7 @@ def project_directory(workspace, project) -> Path:
     to compute the run's artifacts. Public so ``plane.utils.agent_run`` does not
     have to reach for the private ``_project_directory_name``.
     """
-    return get_markdown_root(workspace) / _project_directory_name(project.name, project.id)
+    return get_markdown_root(workspace) / _project_directory_name(project.id)
 
 
 def _yaml_str(value: str) -> str:
@@ -446,7 +455,10 @@ def page_markdown_path(
     root: Path,
 ) -> Path:
     """Resolve the absolute path of a project page's Markdown file."""
-    directory = root / _project_directory_name(project_name, project_id)
+    # ``project_name`` is deliberately not part of the path any more (see
+    # ``_project_directory_name``); the parameter stays so the public signature and
+    # its callers do not churn.
+    directory = root / _project_directory_name(project_id)
     return _resolve_page_path(directory, ancestors, name, page_id)
 
 

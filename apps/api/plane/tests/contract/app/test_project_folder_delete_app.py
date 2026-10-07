@@ -375,7 +375,7 @@ class TestDeletingAFolderDeletesTheMirrors:
             )
 
         mirror_root = _project_mirror_root(project.id)
-        root = mirror_root / _project_directory_name(project.name, str(project.id))
+        root = mirror_root / _project_directory_name(str(project.id))
         assert (root / "A" / "B" / "t1.md").is_file(), "前置：t1 的镜像在 A/B/ 下"
         assert (root / "A" / "B" / "C2" / "t2.md").is_file(), "前置：t2 的镜像在 A/B/C2/ 下"
         return {"a": a, "b": b, "c2": c2, "t1": t1, "t2": t2, "root": root, "mirror_root": mirror_root}
