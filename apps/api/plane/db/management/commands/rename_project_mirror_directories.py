@@ -47,6 +47,11 @@ class Command(BaseCommand):
         # island — the very thing this rename exists to prevent. So a shared old name
         # is refused, never arbitrated. (Keyed by resolved root: two workspaces have
         # two roots and do not share anything.)
+        #
+        # ⚠️ That rule belongs to history and to history only. It is here to *find*
+        # the existing directories; it is **not** the source of truth any more — the
+        # live rule is ``_project_directory_name`` (the id). Do not copy the line
+        # below into anything new.
         shared = {}
         live = []
         for project in projects:
