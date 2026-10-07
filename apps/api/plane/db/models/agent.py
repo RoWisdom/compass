@@ -7,6 +7,7 @@ from django.conf import settings
 from django.db import models
 
 # Module imports
+from .base import BaseModel
 from .project import ProjectBaseModel
 
 
@@ -48,16 +49,18 @@ AGENT_UNFINISHED_STATUSES = (
 )
 
 
-class AgentMember(ProjectBaseModel):
-    """一个 AI 成员 = 一个业务功能 = 一行项目级配置 + 一行 bot 用户。
+class AgentDefinition(BaseModel):
+    """一个**岗位** = 一个业务功能 = 一行可复用配置（设计 §2）。
 
-    说明书（``instructions``）是 **Plane 侧的真源**；DSH 只收到渲染好的正文。
-    技能只存**名字**，本体在 DSH 文件系统 ``~/.dsh/skills/<name>/SKILL.md``（设计 §2 的
-    第一处 YAGNI：不建技能表）。
+    工作区级资产：同一个「需求分析」可以被任意多个项目加进去，说明书只有这一份。
+    **注意继承的是 ``BaseModel`` 而不是 ``WorkspaceBaseModel``** —— 后者自带一个可空的
+    ``project`` FK，而岗位按定义就不是项目级的（先例：``WorkspaceMember``）。
     """
 
+    workspace = models.ForeignKey("db.Workspace", on_delete=models.CASCADE, related_name="agent_definitions")
     name = models.CharField(max_length=255)
-    color = models.CharField(max_length=255, blank=True)
+    #: 只用于展示（名册副标题 / 岗位库卡片）。280 是 buzz 的上限，照抄。
+    description = models.CharField(max_length=280, blank=True)
     instructions = models.TextField(blank=True)
     skills = models.JSONField(default=list, blank=True)
     tier = models.CharField(max_length=20, choices=AgentTierEnum.choices, default=AgentTierEnum.READONLY)
@@ -65,8 +68,40 @@ class AgentMember(ProjectBaseModel):
     profile = models.CharField(max_length=255, default="compass-ai")
     web_access = models.BooleanField(default=False)
     trusted_urls = models.JSONField(default=list, blank=True)
-    # 第一期由 tier 推导（= 岛）。显式字段留给以后。
     writable_paths = models.JSONField(default=list, blank=True)
+    color = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        verbose_name = "Agent Definition"
+        verbose_name_plural = "Agent Definitions"
+        db_table = "agent_definitions"
+        ordering = ("-created_at",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=["workspace", "name"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="unique_agent_definition_name_per_workspace",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.tier})"
+
+
+class AgentMember(ProjectBaseModel):
+    """一个 AI 成员 = 把一个**岗位**加进一个项目（设计 §2）。
+
+    **这一行是「部署回执」**：bot 用户与 service token 挂在这儿，因为它们属于
+    「这个岗位在这个项目里」这一次部署，不属于岗位本身（buzz 同形：定义无 key、
+    实例有 key）。说明书/技能/档位**不在这一行** —— 它们属于 ``definition``，
+    运行时现场解析，所以改一次岗位所有项目一起变。
+    """
+
+    definition = models.ForeignKey(
+        "db.AgentDefinition",
+        on_delete=models.PROTECT,
+        related_name="members",
+    )
     is_active = models.BooleanField(default=True)
     bot_user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -88,14 +123,14 @@ class AgentMember(ProjectBaseModel):
         ordering = ("-created_at",)
         constraints = [
             models.UniqueConstraint(
-                fields=["project", "name"],
+                fields=["project", "definition"],
                 condition=models.Q(deleted_at__isnull=True),
-                name="unique_agent_member_name_per_project",
+                name="unique_agent_member_definition_per_project",
             )
         ]
 
     def __str__(self):
-        return f"{self.name} ({self.tier})"
+        return f"{self.definition_id}@{self.project_id}"
 
     @property
     def permission_mode(self):
@@ -104,17 +139,14 @@ class AgentMember(ProjectBaseModel):
         **委托，不重新推导**：Celery 任务注入 ``DSH_PERMISSION_MODE`` 用的是
         ``plane.utils.agent_run.permission_mode_for_tier``，同一条规则存两份就是多一份。
         """
-        # Imported inside the property: ``plane.utils.agent_run`` imports nothing from
-        # ``plane.db``, so this direction is safe, but keeping it lazy means model loading
-        # never depends on the utils package.
         from plane.utils.agent_run import permission_mode_for_tier
 
-        return permission_mode_for_tier(self.tier)
+        return permission_mode_for_tier(self.definition.tier)
 
     @property
     def project_role(self):
-        """档位 → 该 bot 用户入项目时的角色数值。见「偏离 2」。"""
-        return 15 if self.tier == AgentTierEnum.LEDGER.value else 5
+        """档位 → 该 bot 用户入项目时的角色数值。"""
+        return 15 if self.definition.tier == AgentTierEnum.LEDGER.value else 5
 
 
 class AgentRun(ProjectBaseModel):

@@ -30,6 +30,7 @@ from .integration import (
 )
 from .agent import (
     AGENT_UNFINISHED_STATUSES,
+    AgentDefinition,
     AgentMember,
     AgentRun,
     AgentRunStatusEnum,

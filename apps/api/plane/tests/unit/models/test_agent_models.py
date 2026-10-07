@@ -5,6 +5,7 @@
 import pytest
 
 from plane.db.models import (
+    AgentDefinition,
     AgentMember,
     AgentRun,
     AgentRunStatusEnum,
@@ -15,25 +16,33 @@ from plane.db.models import (
 
 @pytest.mark.django_db
 def test_agent_member_defaults_and_project_scope(create_user, workspace, project):
-    member = AgentMember.objects.create(
+    definition = AgentDefinition.objects.create(
+        workspace_id=workspace.id,
         name="需求分析师",
         instructions="你负责把模糊需求问清楚。",
         tier=AgentTierEnum.READONLY.value,
+    )
+    member = AgentMember.objects.create(
+        definition=definition,
         project_id=project.id,
         workspace_id=workspace.id,
         bot_user=create_user,
     )
-    assert member.profile == "compass-ai"
-    assert member.skills == []
+    assert definition.profile == "compass-ai"
+    assert definition.skills == []
     assert member.is_active is True
     assert AgentMember.objects.filter(project_id=project.id).count() == 1
 
 
 @pytest.mark.django_db
 def test_agent_run_defaults_to_pending_manual(create_user, workspace, project, create_issue):
-    member = AgentMember.objects.create(
+    definition = AgentDefinition.objects.create(
+        workspace_id=workspace.id,
         name="任务拆解",
         tier=AgentTierEnum.LEDGER.value,
+    )
+    member = AgentMember.objects.create(
+        definition=definition,
         project_id=project.id,
         workspace_id=workspace.id,
         bot_user=create_user,
