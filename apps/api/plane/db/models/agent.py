@@ -152,6 +152,18 @@ class AgentRun(ProjectBaseModel):
         verbose_name_plural = "Agent Runs"
         db_table = "agent_runs"
         ordering = ("-created_at",)
+        constraints = [
+            # 「一张卡同时只有一个未完成的运行」（设计 §5）。这条**不是**优化，是正确性：
+            # ``create`` 的 check-then-create 中间有个窗口，两个并发 POST 都能看到「没有未完成的
+            # run」然后各建一行。索引把这个窗口关死在 DB 上 —— 输家拿到 IntegrityError。
+            # 条件里的 ``deleted_at__isnull=True`` 与 ``AgentMember`` 那条同名约束保持一致：软删的行
+            # 不该继续占着锁。
+            models.UniqueConstraint(
+                fields=["issue"],
+                condition=models.Q(status__in=AGENT_UNFINISHED_STATUSES, deleted_at__isnull=True),
+                name="unique_unfinished_agent_run_per_issue",
+            )
+        ]
 
     def __str__(self):
         return f"{self.member_id}@{self.issue_id} [{self.status}]"

@@ -5,7 +5,7 @@
 import pytest
 
 from plane.db.models import AgentMember, AgentRun, AgentRunStatusEnum, AgentTierEnum, IssueComment
-from plane.db.signals.agent_approval import APPROVAL_PREFIX
+from plane.db.signals.agent_approval import APPROVAL_PREFIX, _claim_for_rerun
 
 # Every save below is wrapped in ``django_capture_on_commit_callbacks(execute=True)``.
 # The signal enqueues through ``transaction.on_commit``, which does not fire inside the
@@ -104,3 +104,21 @@ def test_an_ordinary_human_comment_changes_nothing(
     run.refresh_from_db()
     assert run.status == AgentRunStatusEnum.AWAITING_APPROVAL.value
     assert enqueued == []
+
+
+@pytest.mark.django_db
+def test_only_one_of_two_overlapping_approvals_claims_the_run(
+    create_bot_user, workspace, project, create_issue,
+):
+    """M-26：两次重叠的「批准」只有一个能把状态翻走 —— 认领是条件式的。
+
+    第二个批准者手里那份 run 是**旧快照**（它读到的是 awaiting_approval），但它的写入是
+    条件式的，所以只拿到 0 行、不入队。这条测试会红，如果谁把它改回读-改-写。
+    """
+    member = _member(project, workspace, create_bot_user)
+    run = _awaiting(member, create_issue, project, workspace)
+
+    assert _claim_for_rerun(run) is True
+    assert _claim_for_rerun(run) is False
+    run.refresh_from_db()
+    assert run.status == AgentRunStatusEnum.PENDING.value

@@ -4,6 +4,8 @@
 
 import pytest
 
+from django.db import IntegrityError, transaction
+
 from plane.db.models import (
     AGENT_UNFINISHED_STATUSES,
     AgentMember,
@@ -195,3 +197,76 @@ def test_a_failed_enqueue_does_not_lock_the_card(
         issue_id=create_issue.id,
         status__in=AGENT_UNFINISHED_STATUSES,
     ).exists()
+
+
+@pytest.mark.django_db
+def test_the_database_refuses_a_second_unfinished_run_on_one_issue(
+    create_bot_user, workspace, project, create_issue,
+):
+    """M-35：§5 的锁现在有 DB 兜底 —— check-then-create 的窗口关死在索引上。"""
+    member = AgentMember.objects.create(
+        name="任务拆解",
+        tier=AgentTierEnum.LEDGER.value,
+        project_id=project.id,
+        workspace_id=workspace.id,
+        bot_user_id=create_bot_user.id,
+    )
+    AgentRun.objects.create(
+        member=member, issue_id=create_issue.id, project_id=project.id, workspace_id=workspace.id,
+    )
+    with pytest.raises(IntegrityError):
+        with transaction.atomic():
+            AgentRun.objects.create(
+                member=member, issue_id=create_issue.id, project_id=project.id, workspace_id=workspace.id,
+            )
+
+
+@pytest.mark.django_db
+def test_a_finished_run_does_not_block_the_next_one(
+    create_bot_user, workspace, project, create_issue,
+):
+    """约束**必须**是带条件的：无条件唯一索引会把整张卡锁死，第二次运行永远建不出来。"""
+    member = AgentMember.objects.create(
+        name="任务拆解",
+        tier=AgentTierEnum.LEDGER.value,
+        project_id=project.id,
+        workspace_id=workspace.id,
+        bot_user_id=create_bot_user.id,
+    )
+    first = AgentRun.objects.create(
+        member=member, issue_id=create_issue.id, project_id=project.id, workspace_id=workspace.id,
+        status=AgentRunStatusEnum.SUCCEEDED.value,
+    )
+    second = AgentRun.objects.create(
+        member=member, issue_id=create_issue.id, project_id=project.id, workspace_id=workspace.id,
+    )
+    assert second.pk != first.pk
+
+
+@pytest.mark.django_db
+def test_a_lost_race_returns_400_not_500(
+    session_client, workspace, project, create_bot_user, create_issue, monkeypatch,
+):
+    """竞速的输家拿到与「已有成员在跑」**同一句**台词，而不是一句含糊的 500/兜底 400。"""
+    member = AgentMember.objects.create(
+        name="任务拆解",
+        tier=AgentTierEnum.LEDGER.value,
+        project_id=project.id,
+        workspace_id=workspace.id,
+        bot_user_id=create_bot_user.id,
+    )
+
+    def racing_create(**kwargs):
+        raise IntegrityError("duplicate key value violates unique constraint")
+
+    monkeypatch.setattr(AgentRun.objects, "create", racing_create)
+
+    response = session_client.post(
+        f"/api/workspaces/{workspace.slug}/projects/{project.id}/agent-runs/",
+        {"member_id": str(member.id), "issue_id": str(create_issue.id)},
+        format="json",
+    )
+    assert response.status_code == 400
+    assert response.json()["error"] == (
+        "This work item already has a running AI member; wait for it or approve its plan."
+    )

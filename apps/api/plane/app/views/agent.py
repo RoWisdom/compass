@@ -3,6 +3,7 @@
 # See the LICENSE file for details.
 
 # Django imports
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 # Third-party imports
@@ -85,14 +86,25 @@ class AgentRunViewSet(BaseViewSet):
                     status=status.HTTP_400_BAD_REQUEST,
                 )
 
-            run = AgentRun.objects.create(
-                workspace_id=member.workspace_id,
-                project_id=project_id,
-                member=member,
-                issue=issue,
-                triggered_by_id=request.user.id,
-                created_by_id=request.user.id,
-            )
+            try:
+                with transaction.atomic():
+                    run = AgentRun.objects.create(
+                        workspace_id=member.workspace_id,
+                        project_id=project_id,
+                        member=member,
+                        issue=issue,
+                        triggered_by_id=request.user.id,
+                        created_by_id=request.user.id,
+                    )
+            except IntegrityError:
+                # 上面那两次查询与本行 INSERT 之间，另一个请求可能已经建好了它的 run ——
+                # 这就是 index 存在的理由。这里是**输掉竞速**的那一支：要件在，就该说清楚，
+                # 而不是让 IntegrityError 冒到外层 except 变成一句「Could not wake the AI member」。
+                # 台词与上面 `unfinished.exists()` 那支**逐字相同** —— 对调用方来说这本来就是同一件事。
+                return Response(
+                    {"error": "This work item already has a running AI member; wait for it or approve its plan."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
             try:
                 run_agent_member.delay(str(run.id))
             except Exception as e:

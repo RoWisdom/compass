@@ -37,6 +37,22 @@ def agent_approval_on_comment(sender, instance, created, **kwargs):
         log_exception(e)
 
 
+def _claim_for_rerun(run) -> bool:
+    """把一个等待批准的 run 认领成待跑 —— 条件式，赢家只有一个。
+
+    两次重叠的「批准」可以在任一方写入之前都读到 ``awaiting_approval``（M-26）；
+    单纯的读-改-写会让两边都入队。``UPDATE ... WHERE status = awaiting_approval``
+    让第二个写入者拿到 0 行，于是**只有一个人**入队。仲裁者是那一行数据，不是那次读。
+    返回 True 表示这次调用赢了。
+    """
+    return (
+        AgentRun.objects.filter(
+            pk=run.pk, status=AgentRunStatusEnum.AWAITING_APPROVAL.value
+        ).update(status=AgentRunStatusEnum.PENDING.value)
+        == 1
+    )
+
+
 def _maybe_requeue(comment):
     actor = comment.actor
     # 防环。One line, and it is the whole rule (design §5).
@@ -55,8 +71,9 @@ def _maybe_requeue(comment):
     if run is None:
         return
 
-    run.status = AgentRunStatusEnum.PENDING.value
-    run.save(update_fields=["status"])
+    if not _claim_for_rerun(run):
+        # 另一个批准者抢先把它领走了 —— 它已经在入队路上，这里什么都不做。
+        return
 
     # The comment is saved inside the request's transaction, so enqueue only after
     # it commits — otherwise the worker can look for a run row that is not visible
