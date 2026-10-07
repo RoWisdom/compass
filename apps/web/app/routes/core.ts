@@ -292,6 +292,10 @@ export const coreRoutes: RouteConfigEntry[] = [
             ":workspaceSlug/settings/paths",
             "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/paths/page.tsx"
           ),
+          route(
+            ":workspaceSlug/settings/ai-agents",
+            "./(all)/[workspaceSlug]/(settings)/settings/(workspace)/ai-agents/page.tsx"
+          ),
         ]),
 
         // --------------------------------------------------------------------
