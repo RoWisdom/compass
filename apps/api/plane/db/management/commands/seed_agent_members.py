@@ -2,37 +2,28 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-"""Seed a project's first AI members.
+"""Seed the first AI posts, then add each of them to a project.
 
 The handbook text lives **here**, in the command, because that is the thinnest
 thing that works: changing a handbook means editing this file and re-running
 (design §2 「成员怎么建」). A form can be drawn over the same fields later without
 undoing anything.
 
+The post is **workspace-level** and the membership is **project-level**, which is why
+a re-run rewrites the handbook on the post and leaves the membership row alone
+(design §2). The bot user + service token belong to the membership — that is the
+``deploy`` call, not this file.
+
 Tokens are **not** printed unless you ask (``--show-tokens``): they are credentials,
 and this repo's rule is that they never land in a log, a file, or a tool result.
 """
 
-# Python imports
-from uuid import uuid4
-
 # Django imports
 from django.core.management.base import BaseCommand, CommandError
-from django.contrib.auth.hashers import make_password
-from django.utils import timezone
 
 # Module imports
-from plane.db.models import (
-    AgentMember,
-    AgentTierEnum,
-    APIToken,
-    BotTypeEnum,
-    Project,
-    ProjectMember,
-    User,
-    Workspace,
-    WorkspaceMember,
-)
+from plane.db.models import AgentDefinition, AgentMember, AgentTierEnum, Project, Workspace
+from plane.utils.agent_identity import deploy
 
 READONLY = AgentTierEnum.READONLY.value
 WRITER = AgentTierEnum.WRITER.value
@@ -83,7 +74,10 @@ MEMBERS = [
 
 
 class Command(BaseCommand):
-    help = "Create the first-phase AI members of a project (bot user + service token + AgentMember)."
+    help = (
+        "Create the first-phase AI posts, then add each of them to the project "
+        "(post + member + bot user + service token)."
+    )
 
     def add_arguments(self, parser):
         parser.add_argument("--workspace", required=True, help="Workspace slug")
@@ -103,75 +97,41 @@ class Command(BaseCommand):
             raise CommandError(f"No project {options['project']!r} in workspace {workspace.slug}")
 
         for spec in MEMBERS:
-            member = self._seed_one(workspace=workspace, project=project, spec=spec)
-            tokens = getattr(member, "_seeded_token", None)
-            line = f"{member.name:8s} tier={member.tier:8s} bot={member.bot_user_id}"
+            definition = self._seed_definition(workspace=workspace, spec=spec)
+            member = self._seed_membership(project=project, definition=definition)
+            line = (
+                f"{definition.name:8s} tier={definition.tier:8s} "
+                f"bot={member.bot_user_id} post={definition.id}"
+            )
             if options["show_tokens"]:
-                line += f" token={tokens}"
+                # ``--show-tokens`` echoes the *current* token, not only a freshly minted one:
+                # the documented flow is seed once, then re-run with the flag to copy them out.
+                line += f" token={member.service_token.token}"
             self.stdout.write(line)
 
-    def _seed_one(self, *, workspace, project, spec):
-        slot = f"{workspace.slug}-{project.id}-{spec['tier']}"
-        username = f"agent_{slot}"
-        bot_user, _ = User.objects.get_or_create(
-            username=username,
-            defaults={
-                "display_name": spec["name"],
-                "first_name": spec["name"],
-                "last_name": "",
-                "is_bot": True,
-                "bot_type": BotTypeEnum.AGENT,
-                "email": f"{username}@agents.local",
-                "password": make_password(uuid4().hex),
-                "is_password_autoset": True,
-            },
-        )
+    def _seed_definition(self, *, workspace, spec):
+        """岗位是**工作区级**的，所以重跑只更新说明书，不动成员行（第二期设计 §2）。
 
-        # The bot has to be in the workspace for Plane's auth paths to have a
-        # workspace context, and in the project for the public API's
-        # ProjectEntityPermission / ProjectLitePermission to let it through at all.
-        WorkspaceMember.objects.get_or_create(
-            workspace=workspace, member=bot_user, defaults={"role": 15, "company_role": ""}
-        )
-        ProjectMember.objects.get_or_create(
-            project=project,
-            member=bot_user,
-            defaults={"workspace": workspace, "role": 15 if spec["tier"] == LEDGER else 5},
-        )
-
-        member, _ = AgentMember.objects.update_or_create(
-            project=project,
+        这就是第一期那个坑的修法：那时的 ``update_or_create`` 会把说明书按文件正文
+        重写，等于把线上改过的东西冲掉 —— 现在这是**岗位端**的显式行为，
+        而且成员行那边**不会**再被 ``seed`` 碰。
+        """
+        definition, _ = AgentDefinition.objects.update_or_create(
+            workspace=workspace,
             name=spec["name"],
+            deleted_at__isnull=True,
             defaults={
-                "workspace": workspace,
                 "tier": spec["tier"],
                 "instructions": spec["instructions"],
                 "skills": spec["skills"],
-                "bot_user": bot_user,
-                "is_active": True,
-                "created_by_id": bot_user.id,
             },
         )
+        return definition
 
-        if member.service_token_id is None:
-            token = APIToken.objects.create(
-                user=bot_user,
-                user_type=1,  # Bot
-                workspace=workspace,
-                is_service=True,
-                label=f"agent-{spec['name']}",
-                description=f"Service token for the AI member {spec['name']}",
-                # A service token with no expiry is the wrong default; the plan's
-                # Phase 1 runs on a local dev box, so give it a long but finite life.
-                expired_at=timezone.now() + timezone.timedelta(days=365),
-                created_by_id=bot_user.id,
-            )
-            member.service_token = token
-            member.save(update_fields=["service_token"])
-
-        # ``--show-tokens`` echoes the *current* token, not only a freshly minted one.
-        # The documented flow is: seed once, then re-run with the flag to copy the
-        # tokens out. Gating this on "the bot user was just created" left that second
-        # run printing "(existing)" — which is the flag's entire job, undone.
-        member._seeded_token = member.service_token.token
-        return member
+    def _seed_membership(self, *, project, definition):
+        member = AgentMember.objects.filter(
+            project=project, definition=definition, deleted_at__isnull=True
+        ).first()
+        if member is not None:
+            return member
+        return deploy(definition=definition, project=project, created_by_id=None)

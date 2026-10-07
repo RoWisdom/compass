@@ -5,8 +5,17 @@
 import pytest
 from django.core.management import call_command
 
-from plane.db.models import APIToken, AgentMember, AgentTierEnum, ProjectMember, User, WorkspaceMember
+from plane.db.models import (
+    APIToken,
+    AgentDefinition,
+    AgentMember,
+    AgentTierEnum,
+    ProjectMember,
+    User,
+    WorkspaceMember,
+)
 
+#: Keyed by the **post** name (``definition.name``) — 岗位是工作区级的资产，成员行只是把它加进项目。
 EXPECTED = {
     "需求分析": (AgentTierEnum.READONLY.value, 5),
     "架构设计": (AgentTierEnum.WRITER.value, 5),
@@ -18,12 +27,14 @@ EXPECTED = {
 def test_seed_creates_three_members_with_bot_users_and_tokens(workspace, project):
     call_command("seed_agent_members", workspace=workspace.slug, project=str(project.id))
 
-    members = AgentMember.objects.filter(project_id=project.id).order_by("name")
+    members = AgentMember.objects.filter(project_id=project.id).order_by("definition__name")
     assert members.count() == 3
+    # 岗位是**工作区级**的：三个成员背后正好三行岗位，且不挂在项目上
+    assert AgentDefinition.objects.filter(workspace_id=workspace.id).count() == 3
     for member in members:
-        tier, role = EXPECTED[member.name]
-        assert member.tier == tier
-        assert member.profile == "compass-ai"
+        tier, role = EXPECTED[member.definition.name]
+        assert member.definition.tier == tier
+        assert member.definition.profile == "compass-ai"
         assert member.bot_user.is_bot is True
         assert member.bot_user.bot_type == "AGENT"
         assert member.service_token is not None
@@ -47,6 +58,27 @@ def test_seed_is_idempotent(workspace, project):
     assert AgentMember.objects.filter(project_id=project.id).count() == 3
     assert User.objects.filter(is_bot=True, bot_type="AGENT").count() == 3
     assert APIToken.objects.filter(is_service=True).count() == 3
+
+
+@pytest.mark.django_db
+def test_re_running_updates_the_post_but_not_the_membership(workspace, project):
+    """第一期那条坑的回归测试：seed 重跑**不该**动成员行。
+
+    岗位是工作区级的、成员行是项目级的，所以重跑只在**岗位**那行上重写说明书；
+    成员行（连同它的 bot 用户与 token）必须原样不动。
+    """
+    call_command("seed_agent_members", workspace=workspace.slug, project=str(project.id))
+    member = AgentMember.objects.get(project=project, definition__name="需求分析")
+    member_id, definition_id = member.id, member.definition_id
+
+    call_command("seed_agent_members", workspace=workspace.slug, project=str(project.id))
+
+    after = AgentMember.objects.get(project=project, definition__name="需求分析")
+    assert after.id == member_id
+    assert after.definition_id == definition_id
+    assert AgentMember.objects.filter(project=project).count() == 3
+    # 岗位也没被复制出第二行 —— 重跑命中同一行
+    assert AgentDefinition.objects.filter(workspace_id=workspace.id).count() == 3
 
 
 @pytest.mark.django_db
