@@ -240,3 +240,5 @@ from .user.base import AccountEndpoint, ProfileEndpoint, UserSessionEndpoint
 from .timezone.base import TimezoneEndpoint
 
 from .page.collection import PageCollectionViewSet, WikiPageDescriptionViewSet, WikiPageViewSet
+
+from .agent import AgentMemberViewSet, AgentRunViewSet
