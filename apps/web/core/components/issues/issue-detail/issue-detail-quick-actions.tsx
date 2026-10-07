@@ -145,9 +145,11 @@ export const IssueDetailQuickActions = observer(function IssueDetailQuickActions
       <div className="flex flex-shrink-0 items-center justify-end">
         <div className="flex flex-wrap items-center gap-2">
           {currentUser && !issue?.archived_at && (
-            <IssueSubscription workspaceSlug={workspaceSlug} projectId={projectId} issueId={issueId} />
+            <>
+              <IssueSubscription workspaceSlug={workspaceSlug} projectId={projectId} issueId={issueId} />
+              <WakeAgentDropdown workspaceSlug={workspaceSlug} projectId={projectId} issueId={issueId} />
+            </>
           )}
-          <WakeAgentDropdown workspaceSlug={workspaceSlug} projectId={projectId} issueId={issueId} />
           <div className="flex flex-wrap items-center gap-2 text-tertiary">
             <Tooltip tooltipContent={t("common.actions.copy_link")} isMobile={isMobile}>
               <IconButton variant="secondary" size="lg" onClick={handleCopyText} icon={CopyLinkIcon} />

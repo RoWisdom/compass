@@ -6,8 +6,16 @@ from pathlib import Path
 
 import pytest
 
-from plane.db.models import AgentMember, AgentRun, AgentRunStatusEnum, AgentTierEnum, IssueComment
+from plane.db.models import (
+    APIToken,
+    AgentMember,
+    AgentRun,
+    AgentRunStatusEnum,
+    AgentTierEnum,
+    IssueComment,
+)
 from plane.bgtasks.agent_run_task import run_agent_member
+from plane.utils.markdown_storage import project_directory
 
 
 @pytest.mark.django_db
@@ -249,3 +257,106 @@ def test_a_crash_inside_execute_still_posts_a_comment(
     assert run.error == "boom"
     comment = IssueComment.objects.get(issue_id=create_issue.id)
     assert "boom" in comment.comment_html
+
+
+@pytest.mark.django_db
+def test_a_leaked_token_is_redacted_in_the_comment_and_the_log(
+    create_bot_user, workspace, project, create_issue, monkeypatch
+):
+    """设计 §2「token 不落盘」：子进程回显了 env，那两个落点都必须是干净的。"""
+    secret = "plane_svc_tok_THIS_IS_NOT_A_REAL_VALUE"
+    # ``AgentMember.service_token`` 是 FK（反向名 ``agent_members``），不是 property ——
+    # 所以按真实形状来：建一行真 token 挂上去，让 ``_execute`` 读到我们已知的那个值。
+    service_token = APIToken.objects.create(
+        label="agent service token", user=create_bot_user, user_type=1, token=secret
+    )
+    member = AgentMember.objects.create(
+        name="任务拆解",
+        tier=AgentTierEnum.LEDGER.value,
+        project_id=project.id,
+        workspace_id=workspace.id,
+        bot_user_id=create_bot_user.id,
+        service_token=service_token,
+    )
+    run = AgentRun.objects.create(
+        member=member, issue_id=create_issue.id, project_id=project.id,
+        workspace_id=workspace.id, plan="已经批过的计划",
+    )
+    # 子进程把 env 打了出来，然后失败 —— 这正是最现实的泄漏姿势
+    monkeypatch.setattr(
+        "plane.bgtasks.agent_run_task._run_headless",
+        lambda **kwargs: (1, f"PLANE_API_KEY={secret}\nboom", ""),
+    )
+
+    run_agent_member(str(run.id))
+    run.refresh_from_db()
+
+    assert run.status == AgentRunStatusEnum.FAILED.value
+    assert secret not in (run.error or "")
+    comment = IssueComment.objects.get(issue_id=create_issue.id)
+    assert secret not in comment.comment_html
+    # 日志那两个落点同样干净
+    logs = list(Path(str(project_directory(workspace, project))).rglob("*.log"))
+    assert logs, "这次运行本该在岛里留下一份日志"
+    for log in logs:
+        assert secret not in log.read_text(encoding="utf-8")
+
+
+@pytest.mark.django_db
+def test_a_raising_success_comment_does_not_turn_a_success_into_a_failure(
+    create_bot_user, workspace, project, create_issue, create_state, monkeypatch
+):
+    """M-24：说话失败不能把一次成功的落地改写成失败，也不能吞掉那次搬卡。"""
+    member = AgentMember.objects.create(
+        name="任务拆解",
+        tier=AgentTierEnum.LEDGER.value,
+        project_id=project.id,
+        workspace_id=workspace.id,
+        bot_user_id=create_bot_user.id,
+    )
+    run = AgentRun.objects.create(
+        member=member, issue_id=create_issue.id, project_id=project.id,
+        workspace_id=workspace.id, plan="已经批过的计划",
+    )
+    monkeypatch.setattr("plane.bgtasks.agent_run_task._run_headless", lambda **kwargs: (0, "做完了。", ""))
+
+    def exploding_comment(**kwargs):
+        raise RuntimeError("comment sink is down")
+
+    monkeypatch.setattr("plane.bgtasks.agent_run_task.post_bot_comment", exploding_comment)
+
+    run_agent_member(str(run.id))
+    run.refresh_from_db()
+
+    assert run.status == AgentRunStatusEnum.SUCCEEDED.value
+    create_issue.refresh_from_db()
+    assert create_issue.state_id == create_state.id  # 搬卡仍然发生了
+
+
+@pytest.mark.django_db
+def test_html_in_the_output_is_escaped(
+    create_bot_user, workspace, project, create_issue, monkeypatch
+):
+    """M-21：< 和 & 必须原样显示，而不是被 HTML 解析器吃掉。"""
+    member = AgentMember.objects.create(
+        name="需求分析",
+        tier=AgentTierEnum.READONLY.value,
+        project_id=project.id,
+        workspace_id=workspace.id,
+        bot_user_id=create_bot_user.id,
+    )
+    run = AgentRun.objects.create(
+        member=member, issue_id=create_issue.id, project_id=project.id,
+        workspace_id=workspace.id,
+    )
+    monkeypatch.setattr(
+        "plane.bgtasks.agent_run_task._run_headless",
+        lambda **kwargs: (0, "a < b & c <script>alert(1)</script>", ""),
+    )
+
+    run_agent_member(str(run.id))
+    comment = IssueComment.objects.get(issue_id=create_issue.id)
+
+    assert "<script>" not in comment.comment_html
+    assert "&lt;script&gt;" in comment.comment_html
+    assert "a &lt; b &amp; c" in comment.comment_html

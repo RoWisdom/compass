@@ -18,6 +18,7 @@ import subprocess
 # Django imports
 from django.conf import settings
 from django.utils import timezone
+from django.utils.html import escape
 
 # Third-party imports
 from celery import shared_task
@@ -39,12 +40,26 @@ from plane.utils.markdown_storage import project_directory
 logger = logging.getLogger(__name__)
 
 
+def _redact_secret(text: str, secret: str) -> str:
+    """Replace an injected secret with a placeholder if it leaked into the output.
+
+    The token only ever exists in the child's environment (设计 §2「token 不落盘」),
+    but a child that echoes its environment puts it in stdout — and stdout has two
+    persistent sinks on this path (the run log, and ``run.error`` → a comment every
+    project member can read). Best-effort by nature: it can only catch the exact
+    string we injected, which is the realistic case.
+    """
+    if not secret:
+        return text
+    return text.replace(secret, "[redacted]")
+
+
 def _failure_html(run) -> str:
     body = (run.error or "").strip() or "（没有错误输出）"
     return (
         "<p><strong>这次运行失败了，卡片没动。</strong></p>"
         f"<p>退出码：{run.exit_code if run.exit_code is not None else '—'}</p>"
-        f"<pre>{body}</pre>"
+        f"<pre>{escape(body)}</pre>"
         "<p>可以修好环境后重新唤醒。</p>"
     )
 
@@ -65,11 +80,11 @@ def _success_html(stdout: str, artifacts) -> str:
     """回程第一条：结论贴成评论 + 产物路径清单（设计 §3「卡片评论里给路径清单」）。"""
     if artifacts:
         listing = "<p>岛里新增或改动的文件：</p><ul>" + "".join(
-            f"<li>{name}</li>" for name in artifacts
+            f"<li>{escape(name)}</li>" for name in artifacts
         ) + "</ul>"
     else:
         listing = "<p>这次没有新增或改动的文件。</p>"
-    return f"<p><strong>结论</strong></p><pre>{stdout}</pre>{listing}"
+    return f"<p><strong>结论</strong></p><pre>{escape(stdout)}</pre>{listing}"
 
 
 def _run_headless(*, prompt, island, member, env_extra):
@@ -182,6 +197,10 @@ def _execute(run):
         stdout = ""
         stderr = f"Could not start {settings.DSH_BINARY}: {e}"
 
+    # 设计 §2「token 不落盘」压过一切：必须在两个落点之前、也就是**捕获处**抹掉。
+    stdout = _redact_secret(stdout, token)
+    stderr = _redact_secret(stderr, token)
+
     artifacts = diff_snapshot(before_files, snapshot_tree(island))
     session_ref = new_session_ref(before_sessions, session_dirs())
 
@@ -211,14 +230,20 @@ def _execute(run):
             run.status = AgentRunStatusEnum.AWAITING_APPROVAL.value
             run.error = ""
             run.save(update_fields=["plan", "status", "error", "exit_code", "artifacts", "session_ref", "finished_at"])
-            post_bot_comment(
-                member=member,
-                issue=issue,
-                html=(
-                    "<p><strong>计划（还没动手）</strong> —— 回复「批准」我就开始。</p>"
-                    f"<pre>{run.plan}</pre>"
-                ),
-            )
+            # 说话不能把这次「等人批准」翻成失败 —— 评论抛错会冒到兜底，把 run 从
+            # AWAITING_APPROVAL 改写成 FAILED，一次已经拿到计划、正等人批准的运行
+            # 就这么没了（设计 §5「回程三条」）。
+            try:
+                post_bot_comment(
+                    member=member,
+                    issue=issue,
+                    html=(
+                        "<p><strong>计划（还没动手）</strong> —— 回复「批准」我就开始。</p>"
+                        f"<pre>{escape(run.plan)}</pre>"
+                    ),
+                )
+            except Exception as e:
+                log_exception(e)
             return
 
         run.status = AgentRunStatusEnum.SUCCEEDED.value
@@ -226,7 +251,12 @@ def _execute(run):
         run.save(update_fields=["status", "error", "exit_code", "artifacts", "session_ref", "finished_at"])
         # 回程第一条：成功也要以 bot 身份说话 —— 结论 + 产物路径清单。没有它，
         # 一次成功的运行在卡片上是静默的（设计 §5 回程三条第 1/3 条）。
-        post_bot_comment(member=member, issue=issue, html=_success_html(stdout.strip(), artifacts))
+        # 说话本身不能把这次落地变成失败 —— post_bot_comment 抛错会冒到兜底，把 run
+        # 翻成 FAILED，并让下面那次搬卡永远跑不到。
+        try:
+            post_bot_comment(member=member, issue=issue, html=_success_html(stdout.strip(), artifacts))
+        except Exception as e:
+            log_exception(e)
     else:
         run.status = AgentRunStatusEnum.FAILED.value
         run.error = (stderr.strip() or stdout.strip() or f"exit code {exit_code}")[:5000]

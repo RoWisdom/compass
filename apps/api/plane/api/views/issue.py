@@ -1519,7 +1519,10 @@ class IssueCommentListCreateAPIEndpoint(BaseAPIView):
             # Update the created_at and the created_by and save the comment
             issue_comment.created_at = request.data.get("created_at", timezone.now())
             issue_comment.created_by_id = request.data.get("created_by", request.user.id)
-            issue_comment.actor_id = request.data.get("created_by", request.user.id)
+            # 防环不变量写出来，别再靠 ``update_fields`` 恰好漏掉 ``actor`` 撑着：
+            # actor 永远是 API 调用者，不从 ``request.data`` 取（设计 §6「AI 的动作不得
+            # 唤醒 AI」，判据在 ``db/signals/agent_approval.py`` 的 ``actor.is_bot``）。
+            issue_comment.actor_id = request.user.id
             issue_comment.save(update_fields=["created_at", "created_by"])
 
             issue_activity.delay(
