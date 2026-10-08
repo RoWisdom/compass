@@ -25,12 +25,34 @@ PLAN_DISCLAIMER = (
 )
 
 
+def _live_definition(member):
+    """成员行的岗位，**软删感知**：已被删掉的岗位算「没有岗位」。
+
+    与 ``_group_block`` 是**同一条路**：``member.definition`` 也是前向 FK ⇒ 走
+    ``_base_manager`` ⇒ 不过滤软删（钉死在
+    ``tests/unit/models/test_agent_group.py::test_member_group_returns_the_soft_deleted_group``，
+    那条测试用的是 ``member.group``，两条描述符路径一模一样）。少这一句，岗位被删之后
+    成员会继续拿着**旧说明书**跑 —— 一次「它为什么还在做这件事」的静默失义。
+
+    **这一态今天还走不到**（``AgentDefinitionViewSet.destroy`` 的守卫要求「没有活着的成员」
+    才肯删，与 buzz 拒绝删 team-referenced persona 同一手），所以这是纵深防御，不是
+    修一个正在发作的 bug：它挡的是「守卫哪天被绕过 / 将来加了级联删除」那条路。
+    """
+    definition = member.definition
+    if definition is None or definition.deleted_at is not None:
+        return None
+    return definition
+
+
 def member_handbook(member) -> str:
     """岗位说明书 + 挂载技能的正文，顺序拼接（设计 §8：挂载 = 拼接）。
 
     **现场读定义，不读副本** —— 成员行上没有说明书（第二期设计 §2）。
+    岗位已被删掉时返回空串（由 ``_compose`` 过滤掉整节），不是一个没有身份的空标题。
     """
-    definition = member.definition
+    definition = _live_definition(member)
+    if definition is None:
+        return ""
     parts = [f"# 你是谁：{definition.name}", "", (definition.instructions or "").strip()]
     for name in definition.skills or []:
         body = skill_body(name)

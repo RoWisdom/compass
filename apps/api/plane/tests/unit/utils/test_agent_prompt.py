@@ -8,11 +8,15 @@ from plane.utils.agent_prompt import build_execute_prompt, build_plan_prompt, me
 
 
 class FakeDefinition:
+    """``deleted_at`` 默认是 ``None``：真实的 ``member.definition`` 是前向 FK、不过滤软删，
+    所以替身也必须长着一个可读的 ``deleted_at``（少它就是 ``AttributeError``）。"""
+
     def __init__(self, **kwargs):
         self.name = "架构设计"
         self.instructions = "你负责把方案写清楚。"
         self.skills = []
         self.tier = "writer"
+        self.deleted_at = None
         for key, value in kwargs.items():
             setattr(self, key, value)
 
@@ -150,3 +154,25 @@ def test_soft_deleted_group_leaves_no_section(tmp_path):
     )
     assert "你所在的岗位组" not in prompt
     assert "先对齐再动手。" not in prompt
+
+
+def test_soft_deleted_post_leaves_no_handbook(tmp_path):
+    """同一条前向 FK，同一个坑：``member.definition`` 也会把软删的岗位交出来。
+
+    岗位被删之后，成员若还拿着**旧说明书**跑，就是一次「它为什么还在做这件事」的
+    静默失义 —— 与组正文那条一致：整节不出，而不是渲染一个没有身份的空标题。
+    这一态今天被 destroy 守卫挡在门外（是纵深防御），但层内的对称性必须成立。
+    """
+    member = FakeMember(deleted_at=object())
+    prompt = build_plan_prompt(
+        member=member,
+        project=FakeProject(),
+        issue=FakeIssue(),
+        island=Path("/tmp/island"),
+    )
+    assert "你是谁" not in prompt
+    assert "你负责把方案写清楚。" not in prompt
+    # 岗位节没了，其余各节照旧 —— 空串是被 `_compose` 过滤掉的，不是把整篇弄塌
+    assert "ZL-42" in prompt
+    assert "/tmp/island" in prompt
+    assert member_handbook(member) == ""
