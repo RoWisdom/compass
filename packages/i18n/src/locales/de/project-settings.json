@@ -542,7 +542,14 @@
       "remove_confirm_title": "Dieses Mitglied entfernen?",
       "remove_confirm_body": "Der Bot verliert seinen Zugriff auf dieses Projekt und sein Token wird widerrufen. Die Stelle selbst bleibt in der Bibliothek.",
       "never_run": "Nie ausgeführt",
-      "last_run": "Zuletzt ausgeführt"
+      "last_run": "Zuletzt ausgeführt",
+      "deploy": "Gruppe bereitstellen",
+      "deploy_title": "Eine Stellen-Gruppe bereitstellen",
+      "deploy_description": "Jede Stelle in der Gruppe tritt diesem Projekt bei und ist an die Gruppe gebunden.",
+      "deploy_confirm": "Bereitstellen",
+      "deploy_empty": "Noch keine Stellen-Gruppen in diesem Arbeitsbereich.",
+      "deploy_result": "{count} Stellen bereitgestellt.",
+      "deploy_result_trouble": "{count} Stellen bereitgestellt. {conflicts} gehören bereits zu einer anderen Gruppe; {failures} sind fehlgeschlagen."
     },
     "pool": {
       "title": "KI-Stellen",
@@ -575,6 +582,32 @@
       "delete": "Stelle löschen",
       "delete_confirm_title": "Diese Stelle löschen?",
       "delete_confirm_body": "Dies kann nicht rückgängig gemacht werden."
+    },
+    "groups": {
+      "title": "Stellen-Gruppen",
+      "description": "Eine wiederverwendbare Liste von Stellen. Stellen Sie eine in einem einzigen Schritt für ein Projekt bereit.",
+      "create": "Neue Gruppe",
+      "create_title": "Neue Gruppe",
+      "edit_title": "Gruppe bearbeiten",
+      "empty": "Noch keine Stellen-Gruppen. Erstellen Sie eine, um mehrere Stellen auf einmal bereitzustellen.",
+      "roster_count": "{count} Stellen",
+      "roster_none": "Noch keine Stellen in dieser Gruppe",
+      "used_by": "Für {count} Projekte bereitgestellt",
+      "used_by_none": "Noch nirgendwo bereitgestellt",
+      "delete": "Gruppe löschen",
+      "delete_confirm_title": "Diese Gruppe löschen?",
+      "delete_confirm_body": "Dies kann nicht rückgängig gemacht werden."
+    },
+    "group_form": {
+      "name": "Name",
+      "name_placeholder": "Funktionsstart",
+      "description_label": "Beschreibung",
+      "description_placeholder": "Die drei Stellen, mit denen jede Funktion beginnt.",
+      "instructions": "Gruppen-Handbuch",
+      "instructions_hint": "Wird nach dem eigenen Handbuch jeder Stelle ergänzt — eine weitere Ebene, die für die gesamte Gruppe gilt.",
+      "roster": "Stellen",
+      "roster_empty": "Noch keine Stellen in der Bibliothek.",
+      "roster_hint": "Werden gemeinsam bereitgestellt. Eine Stelle, die bereits in einer anderen Gruppe ist, behält diese Gruppe."
     }
   }
 }

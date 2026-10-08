@@ -542,7 +542,14 @@
       "remove_confirm_title": "Bu üye kaldırılsın mı?",
       "remove_confirm_body": "Bot bu projeye erişimini kaybedecek ve tokenı iptal edilecek. Pozisyonun kendisi kitaplıkta kalır.",
       "never_run": "Hiç çalıştırılmadı",
-      "last_run": "Son çalıştırma"
+      "last_run": "Son çalıştırma",
+      "deploy": "Grup dağıt",
+      "deploy_title": "Bir pozisyon grubu dağıt",
+      "deploy_description": "Gruptaki her pozisyon bu projeye katılır ve gruba bağlanır.",
+      "deploy_confirm": "Dağıt",
+      "deploy_empty": "Bu çalışma alanında henüz pozisyon grubu yok.",
+      "deploy_result": "{count} pozisyon dağıtıldı.",
+      "deploy_result_trouble": "{count} pozisyon dağıtıldı. {conflicts} zaten başka bir gruba ait; {failures} başarısız oldu."
     },
     "pool": {
       "title": "Yapay zeka pozisyonları",
@@ -575,6 +582,32 @@
       "delete": "Pozisyonu sil",
       "delete_confirm_title": "Bu pozisyon silinsin mi?",
       "delete_confirm_body": "Bu işlem geri alınamaz."
+    },
+    "groups": {
+      "title": "Pozisyon grupları",
+      "description": "Yeniden kullanılabilir bir pozisyon listesi. Tek adımda bir projeye dağıtın.",
+      "create": "Yeni grup",
+      "create_title": "Yeni grup",
+      "edit_title": "Grubu düzenle",
+      "empty": "Henüz pozisyon grubu yok. Birden çok pozisyonu tek seferde dağıtmak için bir tane oluşturun.",
+      "roster_count": "{count} pozisyon",
+      "roster_none": "Bu listede henüz pozisyon yok",
+      "used_by": "{count} projeye dağıtıldı",
+      "used_by_none": "Henüz hiçbir yere dağıtılmadı",
+      "delete": "Grubu sil",
+      "delete_confirm_title": "Bu grup silinsin mi?",
+      "delete_confirm_body": "Bu işlem geri alınamaz."
+    },
+    "group_form": {
+      "name": "Ad",
+      "name_placeholder": "Özellik başlangıcı",
+      "description_label": "Açıklama",
+      "description_placeholder": "Her özelliğin başladığı üç pozisyon.",
+      "instructions": "Grup el kitabı",
+      "instructions_hint": "Her pozisyonun kendi el kitabından sonra eklenir — tüm grubun paylaştığı bir katman daha.",
+      "roster": "Pozisyonlar",
+      "roster_empty": "Kitaplıkta henüz pozisyon yok.",
+      "roster_hint": "Birlikte dağıtılır. Başka bir grupta olan bir pozisyon o grubu korur."
     }
   }
 }

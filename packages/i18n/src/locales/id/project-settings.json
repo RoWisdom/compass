@@ -542,7 +542,14 @@
       "remove_confirm_title": "Hapus anggota ini?",
       "remove_confirm_body": "Bot akan kehilangan aksesnya ke proyek ini dan tokennya akan dicabut. Posisinya sendiri tetap ada di pustaka.",
       "never_run": "Belum pernah dijalankan",
-      "last_run": "Terakhir dijalankan"
+      "last_run": "Terakhir dijalankan",
+      "deploy": "Terapkan grup",
+      "deploy_title": "Terapkan grup posisi",
+      "deploy_description": "Setiap posisi dalam grup bergabung ke proyek ini, terikat pada grup.",
+      "deploy_confirm": "Terapkan",
+      "deploy_empty": "Belum ada grup posisi di ruang kerja ini.",
+      "deploy_result": "{count} posisi diterapkan.",
+      "deploy_result_trouble": "{count} posisi diterapkan. {conflicts} sudah tergabung di grup lain; {failures} gagal."
     },
     "pool": {
       "title": "Posisi AI",
@@ -575,6 +582,32 @@
       "delete": "Hapus posisi",
       "delete_confirm_title": "Hapus posisi ini?",
       "delete_confirm_body": "Tindakan ini tidak dapat dibatalkan."
+    },
+    "groups": {
+      "title": "Grup posisi",
+      "description": "Daftar posisi yang dapat digunakan ulang. Terapkan satu ke proyek dalam satu langkah.",
+      "create": "Grup baru",
+      "create_title": "Grup baru",
+      "edit_title": "Sunting grup",
+      "empty": "Belum ada grup posisi. Buat satu untuk menerapkan beberapa posisi sekaligus.",
+      "roster_count": "{count} posisi",
+      "roster_none": "Belum ada posisi di grup ini",
+      "used_by": "Diterapkan ke {count} proyek",
+      "used_by_none": "Belum diterapkan di mana pun",
+      "delete": "Hapus grup",
+      "delete_confirm_title": "Hapus grup ini?",
+      "delete_confirm_body": "Tindakan ini tidak dapat dibatalkan."
+    },
+    "group_form": {
+      "name": "Nama",
+      "name_placeholder": "Kickoff fitur",
+      "description_label": "Deskripsi",
+      "description_placeholder": "Tiga posisi yang menjadi awal setiap fitur.",
+      "instructions": "Panduan grup",
+      "instructions_hint": "Ditambahkan setelah panduan masing-masing posisi — satu lapisan lagi, dibagikan ke seluruh grup.",
+      "roster": "Posisi",
+      "roster_empty": "Belum ada posisi di pustaka.",
+      "roster_hint": "Diterapkan bersama. Posisi yang sudah ada di grup lain tetap mempertahankan grup itu."
     }
   }
 }

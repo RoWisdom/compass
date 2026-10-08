@@ -542,7 +542,14 @@
       "remove_confirm_title": "このメンバーを削除しますか？",
       "remove_confirm_body": "ボットはこのプロジェクトへのアクセスを失い、トークンは失効します。ポスト自体はライブラリに残ります。",
       "never_run": "未実行",
-      "last_run": "最終実行"
+      "last_run": "最終実行",
+      "deploy": "グループをデプロイ",
+      "deploy_title": "ポストグループをデプロイ",
+      "deploy_description": "グループ内のすべてのポストがこのプロジェクトに参加し、グループに紐付けられます。",
+      "deploy_confirm": "デプロイ",
+      "deploy_empty": "このワークスペースにはまだポストグループがありません。",
+      "deploy_result": "{count} 件のポストをデプロイしました。",
+      "deploy_result_trouble": "{count} 件のポストをデプロイしました。{conflicts} 件はすでに別のグループに属しており、{failures} 件が失敗しました。"
     },
     "pool": {
       "title": "AIポスト",
@@ -575,6 +582,32 @@
       "delete": "ポストを削除",
       "delete_confirm_title": "このポストを削除しますか？",
       "delete_confirm_body": "この操作は元に戻せません。"
+    },
+    "groups": {
+      "title": "ポストグループ",
+      "description": "再利用できるポストの一覧です。1 つのプロジェクトへ 1 ステップでデプロイできます。",
+      "create": "新規グループ",
+      "create_title": "新規グループ",
+      "edit_title": "グループを編集",
+      "empty": "まだポストグループがありません。作成すると複数のポストをまとめてデプロイできます。",
+      "roster_count": "{count} 件のポスト",
+      "roster_none": "このグループにはまだポストがありません",
+      "used_by": "{count} 件のプロジェクトにデプロイ済み",
+      "used_by_none": "まだどこにもデプロイされていません",
+      "delete": "グループを削除",
+      "delete_confirm_title": "このグループを削除しますか？",
+      "delete_confirm_body": "この操作は元に戻せません。"
+    },
+    "group_form": {
+      "name": "名前",
+      "name_placeholder": "機能キックオフ",
+      "description_label": "説明",
+      "description_placeholder": "すべての機能が最初に使う 3 つのポストです。",
+      "instructions": "グループの手引き",
+      "instructions_hint": "各ポスト自身の手引きの後に追加される、グループ全体で共有されるもう 1 つの層です。",
+      "roster": "ポスト",
+      "roster_empty": "ライブラリにはまだポストがありません。",
+      "roster_hint": "まとめてデプロイされます。すでに別のグループにあるポストは、そのグループのままになります。"
     }
   }
 }

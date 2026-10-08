@@ -542,7 +542,14 @@
       "remove_confirm_title": "Remover este membro?",
       "remove_confirm_body": "O robô perderá o acesso a este projeto e o token dele será revogado. A posição em si permanece na biblioteca.",
       "never_run": "Nunca executado",
-      "last_run": "Última execução"
+      "last_run": "Última execução",
+      "deploy": "Implantar um grupo",
+      "deploy_title": "Implantar um grupo de posições",
+      "deploy_description": "Cada posição do grupo entra neste projeto, vinculada ao grupo.",
+      "deploy_confirm": "Implantar",
+      "deploy_empty": "Ainda não há grupos de posições neste espaço de trabalho.",
+      "deploy_result": "{count} posições implantadas.",
+      "deploy_result_trouble": "{count} posições implantadas. {conflicts} já pertencem a outro grupo; {failures} falharam."
     },
     "pool": {
       "title": "Posições de IA",
@@ -575,6 +582,32 @@
       "delete": "Excluir posição",
       "delete_confirm_title": "Excluir esta posição?",
       "delete_confirm_body": "Isso não pode ser desfeito."
+    },
+    "groups": {
+      "title": "Grupos de posições",
+      "description": "Um conjunto reutilizável de posições. Implante um em um projeto em uma única etapa.",
+      "create": "Novo grupo",
+      "create_title": "Novo grupo",
+      "edit_title": "Editar grupo",
+      "empty": "Ainda não há grupos de posições. Crie um para implantar várias posições de uma vez.",
+      "roster_count": "{count} posições",
+      "roster_none": "Ainda não há posições neste conjunto",
+      "used_by": "Implantado em {count} projetos",
+      "used_by_none": "Ainda não foi implantado em nenhum lugar",
+      "delete": "Excluir grupo",
+      "delete_confirm_title": "Excluir este grupo?",
+      "delete_confirm_body": "Isso não pode ser desfeito."
+    },
+    "group_form": {
+      "name": "Nome",
+      "name_placeholder": "Início de funcionalidade",
+      "description_label": "Descrição",
+      "description_placeholder": "As três posições com que toda funcionalidade começa.",
+      "instructions": "Manual do grupo",
+      "instructions_hint": "Adicionado depois do manual de cada posição — mais uma camada, compartilhada por todo o grupo.",
+      "roster": "Posições",
+      "roster_empty": "Ainda não há posições na biblioteca.",
+      "roster_hint": "Implantadas juntas. Uma posição que já está em outro grupo mantém esse grupo."
     }
   }
 }

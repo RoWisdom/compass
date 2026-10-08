@@ -542,7 +542,14 @@
       "remove_confirm_title": "Elimini acest membru?",
       "remove_confirm_body": "Botul își va pierde accesul la acest proiect, iar tokenul său va fi revocat. Postul în sine rămâne în bibliotecă.",
       "never_run": "Niciodată executat",
-      "last_run": "Ultima rulare"
+      "last_run": "Ultima rulare",
+      "deploy": "Desfășoară un grup",
+      "deploy_title": "Desfășoară un grup de posturi",
+      "deploy_description": "Fiecare post din grup se alătură acestui proiect, legat de grup.",
+      "deploy_confirm": "Desfășoară",
+      "deploy_empty": "Încă nu există grupuri de posturi în acest spațiu de lucru.",
+      "deploy_result": "{count} posturi desfășurate.",
+      "deploy_result_trouble": "{count} posturi desfășurate. {conflicts} aparțin deja altui grup; {failures} au eșuat."
     },
     "pool": {
       "title": "Posturi AI",
@@ -575,6 +582,32 @@
       "delete": "Șterge postul",
       "delete_confirm_title": "Ștergi acest post?",
       "delete_confirm_body": "Această acțiune nu poate fi anulată."
+    },
+    "groups": {
+      "title": "Grupuri de posturi",
+      "description": "O listă reutilizabilă de posturi. Desfășoară unul într-un proiect dintr-un singur pas.",
+      "create": "Grup nou",
+      "create_title": "Grup nou",
+      "edit_title": "Editează grupul",
+      "empty": "Încă nu există grupuri de posturi. Creează unul pentru a desfășura mai multe posturi deodată.",
+      "roster_count": "{count} posturi",
+      "roster_none": "Încă nu există posturi în această listă",
+      "used_by": "Desfășurat în {count} proiecte",
+      "used_by_none": "Nu este desfășurat nicăieri încă",
+      "delete": "Șterge grupul",
+      "delete_confirm_title": "Ștergi acest grup?",
+      "delete_confirm_body": "Această acțiune nu poate fi anulată."
+    },
+    "group_form": {
+      "name": "Nume",
+      "name_placeholder": "Lansarea unei funcționalități",
+      "description_label": "Descriere",
+      "description_placeholder": "Cele trei posturi cu care începe fiecare funcționalitate.",
+      "instructions": "Manualul grupului",
+      "instructions_hint": "Adăugat după manualul fiecărui post — încă un strat, partajat de întregul grup.",
+      "roster": "Posturi",
+      "roster_empty": "Încă nu există posturi în bibliotecă.",
+      "roster_hint": "Desfășurate împreună. Un post care este deja în alt grup păstrează acel grup."
     }
   }
 }

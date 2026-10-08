@@ -542,7 +542,14 @@
       "remove_confirm_title": "Xóa thành viên này?",
       "remove_confirm_body": "Bot sẽ mất quyền truy cập vào dự án này và token của nó sẽ bị thu hồi. Bản thân vị trí vẫn ở lại trong thư viện.",
       "never_run": "Chưa từng chạy",
-      "last_run": "Lần chạy cuối"
+      "last_run": "Lần chạy cuối",
+      "deploy": "Triển khai một nhóm",
+      "deploy_title": "Triển khai một nhóm vị trí",
+      "deploy_description": "Mọi vị trí trong nhóm đều tham gia dự án này và được gắn với nhóm.",
+      "deploy_confirm": "Triển khai",
+      "deploy_empty": "Chưa có nhóm vị trí nào trong không gian làm việc này.",
+      "deploy_result": "Đã triển khai {count} vị trí.",
+      "deploy_result_trouble": "Đã triển khai {count} vị trí. {conflicts} đã thuộc nhóm khác; {failures} thất bại."
     },
     "pool": {
       "title": "Vị trí AI",
@@ -575,6 +582,32 @@
       "delete": "Xóa vị trí",
       "delete_confirm_title": "Xóa vị trí này?",
       "delete_confirm_body": "Không thể hoàn tác thao tác này."
+    },
+    "groups": {
+      "title": "Nhóm vị trí",
+      "description": "Một danh sách vị trí có thể tái sử dụng. Triển khai vào một dự án chỉ trong một bước.",
+      "create": "Nhóm mới",
+      "create_title": "Nhóm mới",
+      "edit_title": "Chỉnh sửa nhóm",
+      "empty": "Chưa có nhóm vị trí nào. Tạo một nhóm để triển khai nhiều vị trí cùng lúc.",
+      "roster_count": "{count} vị trí",
+      "roster_none": "Chưa có vị trí nào trong danh sách này",
+      "used_by": "Đã triển khai vào {count} dự án",
+      "used_by_none": "Chưa được triển khai ở đâu",
+      "delete": "Xóa nhóm",
+      "delete_confirm_title": "Xóa nhóm này?",
+      "delete_confirm_body": "Không thể hoàn tác thao tác này."
+    },
+    "group_form": {
+      "name": "Tên",
+      "name_placeholder": "Khởi động tính năng",
+      "description_label": "Mô tả",
+      "description_placeholder": "Ba vị trí mà mọi tính năng đều bắt đầu.",
+      "instructions": "Cẩm nang nhóm",
+      "instructions_hint": "Được thêm sau cẩm nang riêng của từng vị trí — thêm một lớp nữa, dùng chung cho cả nhóm.",
+      "roster": "Vị trí",
+      "roster_empty": "Chưa có vị trí nào trong thư viện.",
+      "roster_hint": "Được triển khai cùng nhau. Một vị trí đã ở trong nhóm khác sẽ giữ nguyên nhóm đó."
     }
   }
 }

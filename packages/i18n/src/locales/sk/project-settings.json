@@ -542,7 +542,14 @@
       "remove_confirm_title": "Odstrániť tohto člena?",
       "remove_confirm_body": "Bot stratí prístup k tomuto projektu a jeho token bude odvolaný. Pozícia zostane v knižnici.",
       "never_run": "Nikdy nespustené",
-      "last_run": "Posledné spustenie"
+      "last_run": "Posledné spustenie",
+      "deploy": "Nasadiť skupinu",
+      "deploy_title": "Nasadiť skupinu pozícií",
+      "deploy_description": "Každá pozícia v skupine sa pridá do tohto projektu a bude naviazaná na skupinu.",
+      "deploy_confirm": "Nasadiť",
+      "deploy_empty": "V tomto pracovnom priestore zatiaľ nie sú žiadne skupiny pozícií.",
+      "deploy_result": "Nasadených {count} pozícií.",
+      "deploy_result_trouble": "Nasadených {count} pozícií. {conflicts} už patrí do inej skupiny; {failures} zlyhalo."
     },
     "pool": {
       "title": "AI pozície",
@@ -575,6 +582,32 @@
       "delete": "Zmazať pozíciu",
       "delete_confirm_title": "Zmazať túto pozíciu?",
       "delete_confirm_body": "Túto akciu nie je možné vrátiť späť."
+    },
+    "groups": {
+      "title": "Skupiny pozícií",
+      "description": "Opakovane použiteľný zoznam pozícií. Nasaďte ho do projektu jediným krokom.",
+      "create": "Nová skupina",
+      "create_title": "Nová skupina",
+      "edit_title": "Upraviť skupinu",
+      "empty": "Zatiaľ žiadne skupiny pozícií. Vytvorte jednu a nasaďte viac pozícií naraz.",
+      "roster_count": "{count} pozícií",
+      "roster_none": "V tomto zozname zatiaľ nie sú žiadne pozície",
+      "used_by": "Nasadené v {count} projektoch",
+      "used_by_none": "Zatiaľ nie je nasadené nikde",
+      "delete": "Zmazať skupinu",
+      "delete_confirm_title": "Zmazať túto skupinu?",
+      "delete_confirm_body": "Túto akciu nie je možné vrátiť späť."
+    },
+    "group_form": {
+      "name": "Názov",
+      "name_placeholder": "Štart funkcie",
+      "description_label": "Popis",
+      "description_placeholder": "Tri pozície, ktorými začína každá funkcia.",
+      "instructions": "Príručka skupiny",
+      "instructions_hint": "Pridá sa za vlastnú príručku každej pozície — ďalšia vrstva spoločná pre celú skupinu.",
+      "roster": "Pozície",
+      "roster_empty": "V knižnici zatiaľ nie sú žiadne pozície.",
+      "roster_hint": "Nasadené spolu. Pozícia, ktorá už je v inej skupine, si túto skupinu ponechá."
     }
   }
 }

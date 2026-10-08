@@ -542,7 +542,14 @@
       "remove_confirm_title": "¿Quitar a este miembro?",
       "remove_confirm_body": "El bot perderá su acceso a este proyecto y su token se revocará. El puesto permanece en la biblioteca.",
       "never_run": "Nunca ejecutado",
-      "last_run": "Última ejecución"
+      "last_run": "Última ejecución",
+      "deploy": "Desplegar un grupo",
+      "deploy_title": "Desplegar un grupo de puestos",
+      "deploy_description": "Cada puesto del grupo se une a este proyecto, vinculado al grupo.",
+      "deploy_confirm": "Desplegar",
+      "deploy_empty": "Aún no hay grupos de puestos en este espacio de trabajo.",
+      "deploy_result": "Se desplegaron {count} puestos.",
+      "deploy_result_trouble": "Se desplegaron {count} puestos. {conflicts} ya pertenecen a otro grupo; {failures} fallaron."
     },
     "pool": {
       "title": "Puestos de IA",
@@ -575,6 +582,32 @@
       "delete": "Eliminar puesto",
       "delete_confirm_title": "¿Eliminar este puesto?",
       "delete_confirm_body": "Esta acción no se puede deshacer."
+    },
+    "groups": {
+      "title": "Grupos de puestos",
+      "description": "Una lista reutilizable de puestos. Despliegue una en un proyecto en un solo paso.",
+      "create": "Nuevo grupo",
+      "create_title": "Nuevo grupo",
+      "edit_title": "Editar grupo",
+      "empty": "Aún no hay grupos de puestos. Cree uno para desplegar varios puestos a la vez.",
+      "roster_count": "{count} puestos",
+      "roster_none": "Aún no hay puestos en este grupo",
+      "used_by": "Desplegado en {count} proyectos",
+      "used_by_none": "Aún no se ha desplegado en ningún sitio",
+      "delete": "Eliminar grupo",
+      "delete_confirm_title": "¿Eliminar este grupo?",
+      "delete_confirm_body": "Esta acción no se puede deshacer."
+    },
+    "group_form": {
+      "name": "Nombre",
+      "name_placeholder": "Arranque de función",
+      "description_label": "Descripción",
+      "description_placeholder": "Los tres puestos con los que empieza cada función.",
+      "instructions": "Manual del grupo",
+      "instructions_hint": "Se añade después del manual propio de cada puesto: una capa más, compartida por todo el grupo.",
+      "roster": "Puestos",
+      "roster_empty": "Aún no hay puestos en la biblioteca.",
+      "roster_hint": "Se despliegan juntos. Un puesto que ya está en otro grupo conserva ese grupo."
     }
   }
 }

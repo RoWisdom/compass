@@ -542,7 +542,14 @@
       "remove_confirm_title": "Usunąć tego członka?",
       "remove_confirm_body": "Bot utraci dostęp do tego projektu, a jego token zostanie unieważniony. Stanowisko pozostaje w bibliotece.",
       "never_run": "Nigdy nie uruchomiono",
-      "last_run": "Ostatnie uruchomienie"
+      "last_run": "Ostatnie uruchomienie",
+      "deploy": "Wdróż grupę",
+      "deploy_title": "Wdróż grupę stanowisk",
+      "deploy_description": "Każde stanowisko w grupie dołącza do tego projektu i jest powiązane z grupą.",
+      "deploy_confirm": "Wdróż",
+      "deploy_empty": "W tej przestrzeni roboczej nie ma jeszcze grup stanowisk.",
+      "deploy_result": "Wdrożono {count} stanowisk.",
+      "deploy_result_trouble": "Wdrożono {count} stanowisk. {conflicts} należy już do innej grupy; {failures} nie powiodło się."
     },
     "pool": {
       "title": "Stanowiska AI",
@@ -575,6 +582,32 @@
       "delete": "Usuń stanowisko",
       "delete_confirm_title": "Usunąć to stanowisko?",
       "delete_confirm_body": "Tej akcji nie można cofnąć."
+    },
+    "groups": {
+      "title": "Grupy stanowisk",
+      "description": "Lista stanowisk wielokrotnego użytku. Wdróż grupę do projektu w jednym kroku.",
+      "create": "Nowa grupa",
+      "create_title": "Nowa grupa",
+      "edit_title": "Edytuj grupę",
+      "empty": "Nie ma jeszcze grup stanowisk. Utwórz grupę, aby wdrożyć kilka stanowisk naraz.",
+      "roster_count": "{count} stanowisk",
+      "roster_none": "W tej grupie nie ma jeszcze stanowisk",
+      "used_by": "Wdrożone w {count} projektach",
+      "used_by_none": "Jeszcze nigdzie nie wdrożono",
+      "delete": "Usuń grupę",
+      "delete_confirm_title": "Usunąć tę grupę?",
+      "delete_confirm_body": "Tej akcji nie można cofnąć."
+    },
+    "group_form": {
+      "name": "Nazwa",
+      "name_placeholder": "Start funkcji",
+      "description_label": "Opis",
+      "description_placeholder": "Trzy stanowiska, od których zaczyna się każda funkcja.",
+      "instructions": "Podręcznik grupy",
+      "instructions_hint": "Dodawany po podręczniku każdego stanowiska — kolejna warstwa, wspólna dla całej grupy.",
+      "roster": "Stanowiska",
+      "roster_empty": "W bibliotece nie ma jeszcze stanowisk.",
+      "roster_hint": "Wdrażane razem. Stanowisko, które należy już do innej grupy, zachowuje tamtą grupę."
     }
   }
 }

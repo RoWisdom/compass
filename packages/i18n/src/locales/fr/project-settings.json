@@ -542,7 +542,14 @@
       "remove_confirm_title": "Retirer ce membre ?",
       "remove_confirm_body": "Le bot perdra son accès à ce projet et son jeton sera révoqué. Le poste lui-même reste dans la bibliothèque.",
       "never_run": "Jamais exécuté",
-      "last_run": "Dernière exécution"
+      "last_run": "Dernière exécution",
+      "deploy": "Déployer un groupe",
+      "deploy_title": "Déployer un groupe de postes",
+      "deploy_description": "Chaque poste du groupe rejoint ce projet, lié au groupe.",
+      "deploy_confirm": "Déployer",
+      "deploy_empty": "Aucun groupe de postes dans cet espace de travail pour le moment.",
+      "deploy_result": "{count} postes déployés.",
+      "deploy_result_trouble": "{count} postes déployés. {conflicts} appartiennent déjà à un autre groupe ; {failures} ont échoué."
     },
     "pool": {
       "title": "Postes IA",
@@ -575,6 +582,32 @@
       "delete": "Supprimer le poste",
       "delete_confirm_title": "Supprimer ce poste ?",
       "delete_confirm_body": "Cette action ne peut pas être annulée."
+    },
+    "groups": {
+      "title": "Groupes de postes",
+      "description": "Une liste réutilisable de postes. Déployez un groupe dans un projet en une seule étape.",
+      "create": "Nouveau groupe",
+      "create_title": "Nouveau groupe",
+      "edit_title": "Modifier le groupe",
+      "empty": "Aucun groupe de postes pour le moment. Créez-en un pour déployer plusieurs postes d’un coup.",
+      "roster_count": "{count} postes",
+      "roster_none": "Aucun poste dans ce groupe pour le moment",
+      "used_by": "Déployé sur {count} projets",
+      "used_by_none": "Déployé nulle part pour le moment",
+      "delete": "Supprimer le groupe",
+      "delete_confirm_title": "Supprimer ce groupe ?",
+      "delete_confirm_body": "Cette action ne peut pas être annulée."
+    },
+    "group_form": {
+      "name": "Nom",
+      "name_placeholder": "Lancement de fonctionnalité",
+      "description_label": "Description",
+      "description_placeholder": "Les trois postes avec lesquels démarre chaque fonctionnalité.",
+      "instructions": "Manuel de groupe",
+      "instructions_hint": "Ajouté après le manuel propre à chaque poste — une couche supplémentaire, partagée par tout le groupe.",
+      "roster": "Postes",
+      "roster_empty": "Aucun poste dans la bibliothèque pour le moment.",
+      "roster_hint": "Déployés ensemble. Un poste déjà dans un autre groupe conserve ce groupe."
     }
   }
 }

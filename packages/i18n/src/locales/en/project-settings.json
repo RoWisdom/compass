@@ -542,7 +542,14 @@
       "remove_confirm_title": "Remove this member?",
       "remove_confirm_body": "The bot will lose its access to this project and its token will be revoked. The post itself stays in the library.",
       "never_run": "Never run",
-      "last_run": "Last run"
+      "last_run": "Last run",
+      "deploy": "Deploy a group",
+      "deploy_title": "Deploy a post group",
+      "deploy_description": "Every post in the group joins this project, bound to the group.",
+      "deploy_confirm": "Deploy",
+      "deploy_empty": "No post groups in this workspace yet.",
+      "deploy_result": "Deployed {count} posts.",
+      "deploy_result_trouble": "Deployed {count} posts. {conflicts} already belong to another group; {failures} failed."
     },
     "pool": {
       "title": "AI posts",
@@ -575,6 +582,32 @@
       "delete": "Delete post",
       "delete_confirm_title": "Delete this post?",
       "delete_confirm_body": "This cannot be undone."
+    },
+    "groups": {
+      "title": "Post groups",
+      "description": "A reusable roster of posts. Deploy one to a project in a single step.",
+      "create": "New group",
+      "create_title": "New group",
+      "edit_title": "Edit group",
+      "empty": "No post groups yet. Make one to deploy several posts at once.",
+      "roster_count": "{count} posts",
+      "roster_none": "No posts in this roster yet",
+      "used_by": "Deployed to {count} projects",
+      "used_by_none": "Not deployed anywhere yet",
+      "delete": "Delete group",
+      "delete_confirm_title": "Delete this group?",
+      "delete_confirm_body": "This cannot be undone."
+    },
+    "group_form": {
+      "name": "Name",
+      "name_placeholder": "Feature kickoff",
+      "description_label": "Description",
+      "description_placeholder": "The three posts every feature starts with.",
+      "instructions": "Group handbook",
+      "instructions_hint": "Added after each post's own handbook — one more layer, shared by the whole group.",
+      "roster": "Posts",
+      "roster_empty": "No posts in the library yet.",
+      "roster_hint": "Deployed together. A post already in another group keeps that group."
     }
   }
 }

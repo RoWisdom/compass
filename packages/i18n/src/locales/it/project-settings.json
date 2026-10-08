@@ -542,7 +542,14 @@
       "remove_confirm_title": "Rimuovere questo membro?",
       "remove_confirm_body": "Il bot perderà l’accesso a questo progetto e il suo token verrà revocato. La posizione resta nella libreria.",
       "never_run": "Mai eseguito",
-      "last_run": "Ultima esecuzione"
+      "last_run": "Ultima esecuzione",
+      "deploy": "Distribuisci un gruppo",
+      "deploy_title": "Distribuisci un gruppo di posizioni",
+      "deploy_description": "Ogni posizione del gruppo entra in questo progetto, legata al gruppo.",
+      "deploy_confirm": "Distribuisci",
+      "deploy_empty": "Nessun gruppo di posizioni in questo spazio di lavoro.",
+      "deploy_result": "{count} posizioni distribuite.",
+      "deploy_result_trouble": "{count} posizioni distribuite. {conflicts} appartengono già a un altro gruppo; {failures} non riuscite."
     },
     "pool": {
       "title": "Posizioni IA",
@@ -575,6 +582,32 @@
       "delete": "Elimina posizione",
       "delete_confirm_title": "Eliminare questa posizione?",
       "delete_confirm_body": "Questa azione non può essere annullata."
+    },
+    "groups": {
+      "title": "Gruppi di posizioni",
+      "description": "Un elenco riutilizzabile di posizioni. Distribuisci un gruppo in un progetto con un solo passaggio.",
+      "create": "Nuovo gruppo",
+      "create_title": "Nuovo gruppo",
+      "edit_title": "Modifica gruppo",
+      "empty": "Nessun gruppo di posizioni ancora. Creane uno per distribuire più posizioni contemporaneamente.",
+      "roster_count": "{count} posizioni",
+      "roster_none": "Nessuna posizione in questo gruppo",
+      "used_by": "Distribuito in {count} progetti",
+      "used_by_none": "Non ancora distribuito da nessuna parte",
+      "delete": "Elimina gruppo",
+      "delete_confirm_title": "Eliminare questo gruppo?",
+      "delete_confirm_body": "Questa azione non può essere annullata."
+    },
+    "group_form": {
+      "name": "Nome",
+      "name_placeholder": "Avvio della funzionalità",
+      "description_label": "Descrizione",
+      "description_placeholder": "Le tre posizioni con cui inizia ogni funzionalità.",
+      "instructions": "Manuale del gruppo",
+      "instructions_hint": "Aggiunto dopo il manuale di ogni singola posizione — un ulteriore livello, condiviso dall’intero gruppo.",
+      "roster": "Posizioni",
+      "roster_empty": "Nessuna posizione nella libreria.",
+      "roster_hint": "Vengono distribuite insieme. Una posizione già in un altro gruppo mantiene quel gruppo."
     }
   }
 }

@@ -542,7 +542,14 @@
       "remove_confirm_title": "이 멤버를 제거하시겠습니까?",
       "remove_confirm_body": "봇은 이 프로젝트에 대한 액세스 권한을 잃고 토큰은 폐기됩니다. 포스트 자체는 라이브러리에 남습니다.",
       "never_run": "실행 기록 없음",
-      "last_run": "마지막 실행"
+      "last_run": "마지막 실행",
+      "deploy": "그룹 배포",
+      "deploy_title": "포스트 그룹 배포",
+      "deploy_description": "그룹의 모든 포스트가 이 프로젝트에 참여하며 그룹에 연결됩니다.",
+      "deploy_confirm": "배포",
+      "deploy_empty": "이 워크스페이스에는 아직 포스트 그룹이 없습니다.",
+      "deploy_result": "포스트 {count}개를 배포했습니다.",
+      "deploy_result_trouble": "포스트 {count}개를 배포했습니다. {conflicts}개는 이미 다른 그룹에 속해 있으며 {failures}개는 실패했습니다."
     },
     "pool": {
       "title": "AI 포스트",
@@ -575,6 +582,32 @@
       "delete": "포스트 삭제",
       "delete_confirm_title": "이 포스트를 삭제하시겠습니까?",
       "delete_confirm_body": "이 작업은 취소할 수 없습니다."
+    },
+    "groups": {
+      "title": "포스트 그룹",
+      "description": "재사용할 수 있는 포스트 목록입니다. 한 단계로 프로젝트에 배포할 수 있습니다.",
+      "create": "새 그룹",
+      "create_title": "새 그룹",
+      "edit_title": "그룹 편집",
+      "empty": "아직 포스트 그룹이 없습니다. 그룹을 만들어 여러 포스트를 한 번에 배포하세요.",
+      "roster_count": "포스트 {count}개",
+      "roster_none": "이 그룹에는 아직 포스트가 없습니다",
+      "used_by": "{count}개 프로젝트에 배포됨",
+      "used_by_none": "아직 어디에도 배포되지 않았습니다",
+      "delete": "그룹 삭제",
+      "delete_confirm_title": "이 그룹을 삭제하시겠습니까?",
+      "delete_confirm_body": "이 작업은 취소할 수 없습니다."
+    },
+    "group_form": {
+      "name": "이름",
+      "name_placeholder": "기능 킥오프",
+      "description_label": "설명",
+      "description_placeholder": "모든 기능이 시작할 때 사용하는 세 개의 포스트입니다.",
+      "instructions": "그룹 설명서",
+      "instructions_hint": "각 포스트의 설명서 뒤에 추가되는, 그룹 전체가 공유하는 또 하나의 계층입니다.",
+      "roster": "포스트",
+      "roster_empty": "라이브러리에 아직 포스트가 없습니다.",
+      "roster_hint": "함께 배포됩니다. 이미 다른 그룹에 있는 포스트는 그 그룹을 그대로 유지합니다."
     }
   }
 }

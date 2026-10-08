@@ -542,7 +542,14 @@
       "remove_confirm_title": "移除这个成员？",
       "remove_confirm_body": "机器人将失去对这个项目的访问权，令牌会被吊销。岗位本身仍留在岗位库里。",
       "never_run": "从未运行",
-      "last_run": "最近一次运行"
+      "last_run": "最近一次运行",
+      "deploy": "部署岗位组",
+      "deploy_title": "部署一个岗位组",
+      "deploy_description": "组里的每个岗位都会加入这个项目，并绑定到该岗位组。",
+      "deploy_confirm": "部署",
+      "deploy_empty": "本工作区还没有岗位组。",
+      "deploy_result": "已部署 {count} 个岗位。",
+      "deploy_result_trouble": "已部署 {count} 个岗位。{conflicts} 个已属于其他岗位组；{failures} 个失败。"
     },
     "pool": {
       "title": "AI 岗位",
@@ -575,6 +582,32 @@
       "delete": "删除岗位",
       "delete_confirm_title": "删除这个岗位？",
       "delete_confirm_body": "此操作无法撤销。"
+    },
+    "groups": {
+      "title": "岗位组",
+      "description": "可复用的岗位名册。一步就能部署到一个项目。",
+      "create": "新建岗位组",
+      "create_title": "新建岗位组",
+      "edit_title": "编辑岗位组",
+      "empty": "还没有岗位组。新建一个，就能一次部署多个岗位。",
+      "roster_count": "{count} 个岗位",
+      "roster_none": "名册里还没有岗位",
+      "used_by": "已部署到 {count} 个项目",
+      "used_by_none": "尚未部署到任何项目",
+      "delete": "删除岗位组",
+      "delete_confirm_title": "删除这个岗位组？",
+      "delete_confirm_body": "此操作无法撤销。"
+    },
+    "group_form": {
+      "name": "名称",
+      "name_placeholder": "功能启动",
+      "description_label": "简介",
+      "description_placeholder": "每个功能起步时用的三个岗位。",
+      "instructions": "岗位组说明书",
+      "instructions_hint": "加在每个岗位自己的说明书之后 —— 再叠一层，由整个岗位组共用。",
+      "roster": "岗位",
+      "roster_empty": "岗位库里还没有岗位。",
+      "roster_hint": "一起部署。已在其他岗位组里的岗位，仍留在那个组。"
     }
   }
 }

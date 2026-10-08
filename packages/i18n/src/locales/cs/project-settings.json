@@ -542,7 +542,14 @@
       "remove_confirm_title": "Odebrat tohoto člena?",
       "remove_confirm_body": "Bot ztratí přístup k tomuto projektu a jeho token bude odvolán. Pozice zůstane v knihovně.",
       "never_run": "Nikdy nespouštěno",
-      "last_run": "Naposledy spuštěno"
+      "last_run": "Naposledy spuštěno",
+      "deploy": "Nasadit skupinu",
+      "deploy_title": "Nasadit skupinu pozic",
+      "deploy_description": "Každá pozice ve skupině se připojí k tomuto projektu a je svázána se skupinou.",
+      "deploy_confirm": "Nasadit",
+      "deploy_empty": "V tomto pracovním prostoru zatím nejsou žádné skupiny pozic.",
+      "deploy_result": "Nasazeno {count} pozic.",
+      "deploy_result_trouble": "Nasazeno {count} pozic. {conflicts} už patří do jiné skupiny; {failures} selhalo."
     },
     "pool": {
       "title": "AI pozice",
@@ -575,6 +582,32 @@
       "delete": "Smazat pozici",
       "delete_confirm_title": "Smazat tuto pozici?",
       "delete_confirm_body": "Tuto akci nelze vrátit zpět."
+    },
+    "groups": {
+      "title": "Skupiny pozic",
+      "description": "Opakovaně použitelná sada pozic. Nasaďte ji do projektu jediným krokem.",
+      "create": "Nová skupina",
+      "create_title": "Nová skupina",
+      "edit_title": "Upravit skupinu",
+      "empty": "Zatím žádné skupiny pozic. Vytvořte skupinu a nasaďte několik pozic najednou.",
+      "roster_count": "{count} pozic",
+      "roster_none": "V této skupině zatím nejsou žádné pozice",
+      "used_by": "Nasazeno v {count} projektech",
+      "used_by_none": "Zatím není nikde nasazeno",
+      "delete": "Smazat skupinu",
+      "delete_confirm_title": "Smazat tuto skupinu?",
+      "delete_confirm_body": "Tuto akci nelze vrátit zpět."
+    },
+    "group_form": {
+      "name": "Název",
+      "name_placeholder": "Zahájení funkce",
+      "description_label": "Popis",
+      "description_placeholder": "Tři pozice, se kterými začíná každá funkce.",
+      "instructions": "Příručka skupiny",
+      "instructions_hint": "Přidá se za vlastní příručku každé pozice — další vrstva, společná pro celou skupinu.",
+      "roster": "Pozice",
+      "roster_empty": "V knihovně zatím nejsou žádné pozice.",
+      "roster_hint": "Nasazují se společně. Pozice, která už je v jiné skupině, si svou skupinu ponechá."
     }
   }
 }
