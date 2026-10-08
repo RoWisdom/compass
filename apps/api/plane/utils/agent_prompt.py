@@ -5,8 +5,13 @@
 """把一次运行的「任务正文」拼出来。
 
 分层照设计 §3②：**易变的东西进正文，稳定的契约进 profile**。所以这里只有
-说明书 + 挂载技能 + 这张卡 + 岛路径（+ 第二轮的计划原文），**没有**输出契约 ——
-那份契约在 ``~/.dsh/profiles/compass-ai/cordis.patch.yml`` 的 persona 里。
+说明书 + 挂载技能 + **岗位组正文** + 这张卡 + 岛路径（+ 第二轮的计划原文），
+**没有**输出契约 —— 那份契约在 ``~/.dsh/profiles/compass-ai/cordis.patch.yml`` 的 persona 里。
+
+正文的层序（第三期加了「组」这一层，照 buzz）：
+``岗位说明书/技能`` → ``组级正文`` → ``岛`` → ``这张卡`` → ``尾巴``。
+buzz 的原序是 ``<agent-instructions>``（岗位）→ ``<team-instructions>``（组）——
+**组从属于岗位**，所以排在后面。
 """
 
 # Module imports
@@ -34,6 +39,31 @@ def member_handbook(member) -> str:
     return "\n".join(parts).strip()
 
 
+def _group_block(member) -> str:
+    """组级正文 —— 照 buzz 的 ``<team-instructions>``：**排在岗位正文之后**，单独一节。
+
+    这是第三期唯一的**新正文层**。buzz 的层序是
+    ``<agent-instructions>``（岗位）→ ``<team-instructions>``（组），组从属于岗位，
+    所以这里也接在 ``member_handbook`` 后面。
+
+    两条照抄 buzz 的语义：
+    - **空/纯空白 ⇒ 整节不出**（buzz ``spawn_snapshot.rs`` 是 ``trim()`` 后判空）。
+    - **现场解析、不存副本**：只读绑定，所以改一次组正文，所有已部署成员的下一次运行即生效。
+
+    **必须自己判 ``deleted_at``**：前向 FK 走 ``_base_manager``，本仓没有任何
+    ``base_manager_name`` 覆盖 ⇒ ``member.group`` 会把**已软删的组**原样交出来
+    （钉死在 ``tests/unit/models/test_agent_group.py::test_member_group_returns_the_soft_deleted_group``）。
+    少这一句，删掉的组的正文会继续注入。
+    """
+    group = member.group
+    if group is None or group.deleted_at is not None:
+        return ""
+    body = (group.instructions or "").strip()
+    if not body:
+        return ""
+    return f"# 你所在的岗位组：{group.name}\n\n{body}"
+
+
 def _issue_block(project, issue) -> str:
     identifier = f"{project.identifier}-{issue.sequence_id}"
     return "\n".join(
@@ -58,14 +88,16 @@ def _island_block(island) -> str:
 
 
 def _compose(member, project, issue, island, tail: str) -> str:
-    return "\n\n".join(
-        [
-            member_handbook(member),
-            _island_block(island),
-            _issue_block(project, issue),
-            tail,
-        ]
-    )
+    """拼正文。**过滤空节** —— 组正文为空/组被软删时整节不出现，
+    而不是留下一个空行（buzz 也是先过滤再拼，见 ``StandingContext::sections``）。"""
+    blocks = [
+        member_handbook(member),
+        _group_block(member),
+        _island_block(island),
+        _issue_block(project, issue),
+        tail,
+    ]
+    return "\n\n".join(block for block in blocks if block)
 
 
 def build_plan_prompt(*, member, project, issue, island) -> str:

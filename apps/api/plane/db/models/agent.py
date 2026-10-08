@@ -88,6 +88,44 @@ class AgentDefinition(BaseModel):
         return f"{self.name} ({self.tier})"
 
 
+class AgentGroup(BaseModel):
+    """一个**岗位组** = 一组岗位 + 一段组级正文（照 buzz 的 Team，第三期设计 §1）。
+
+    工作区级资产，与 ``AgentDefinition`` 同级。**组不拥有任何行为字段** —— 档位 /
+    模型 / 沙箱全在岗位里；组只贡献 ``instructions``（运行时叠加在岗位正文**之后**）
+    与 ``description``（仅展示）。buzz 原话：team 里没有任何东西能跑。
+
+    **名册是 M2M，不是 JSON 数组**（buzz 用的是 ``personaIds: string[]``）：本仓的家法
+    是靠 FK 拿引用完整性，且反向 FK/M2M 会过滤软删行 —— 这正好把「名册里的岗位没了」
+    变成可检测状态，而不是一堆悬空 id。**代价**：名册编辑**绝不能用** M2M 的 ``set()``
+    （它按可见集整体替换 ⇒ 静默丢掉软删岗位的 through 行），一律走显式增量。
+    """
+
+    workspace = models.ForeignKey("db.Workspace", on_delete=models.CASCADE, related_name="agent_groups")
+    name = models.CharField(max_length=255)
+    #: 只用于展示（组卡片副标题）。280 是 buzz 的上限，与 AgentDefinition.description 同源。
+    description = models.CharField(max_length=280, blank=True)
+    #: 组级正文。**这一层是整期唯一的新正文**，运行时的位置见 utils/agent_prompt.py。
+    instructions = models.TextField(blank=True)
+    definitions = models.ManyToManyField("db.AgentDefinition", related_name="groups", blank=True)
+
+    class Meta:
+        verbose_name = "Agent Group"
+        verbose_name_plural = "Agent Groups"
+        db_table = "agent_groups"
+        ordering = ("-created_at",)
+        constraints = [
+            models.UniqueConstraint(
+                fields=["workspace", "name"],
+                condition=models.Q(deleted_at__isnull=True),
+                name="unique_agent_group_name_per_workspace",
+            )
+        ]
+
+    def __str__(self):
+        return self.name
+
+
 class AgentMember(ProjectBaseModel):
     """一个 AI 成员 = 把一个**岗位**加进一个项目（设计 §2）。
 
@@ -100,6 +138,19 @@ class AgentMember(ProjectBaseModel):
     definition = models.ForeignKey(
         "db.AgentDefinition",
         on_delete=models.PROTECT,
+        related_name="members",
+    )
+    #: 这个成员是**从哪个岗位组部署来的**（buzz 的 ``teamId`` 挂在实例记录上的同位）。
+    #: 组级正文靠它现场解析 —— 只存绑定，不存正文副本，所以改组正文即改已部署成员的下一次运行。
+    #:
+    #: ``PROTECT`` 是**意图声明**，不是栅栏：软删不进 FK collector ⇒ ``ProtectedError`` 永不触发。
+    #: 真正的栅栏是 ``AgentGroupViewSet.destroy`` 里的视图守卫 —— 与第二期
+    #: ``AgentDefinition.destroy`` 同形（见第二期设计 §6 的更正）。
+    group = models.ForeignKey(
+        "db.AgentGroup",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
         related_name="members",
     )
     is_active = models.BooleanField(default=True)
