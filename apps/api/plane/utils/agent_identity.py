@@ -31,8 +31,11 @@ from plane.db.models import (
 )
 
 
-def deploy(*, definition, project, created_by_id):
+def deploy(*, definition, project, created_by_id, group=None):
     """把 ``definition`` 部署进 ``project``，返回成员行。
+
+    ``group`` 是第三期加的：从岗位组部署时，成员的组绑定必须与那次 INSERT **同在一个
+    事务**里（否则会留下一个「已部署但没绑组」的中间态，组正文静默不生效）。
 
     **不是幂等函数。** 第二次调用会在最后那次 ``AgentMember`` INSERT 上撞
     ``(project, definition)`` 的唯一约束并抛 ``IntegrityError`` —— 调用方负责预检、
@@ -43,10 +46,10 @@ def deploy(*, definition, project, created_by_id):
     留下一个**没有成员行的孤儿 bot 用户**（连带两条成员关系）。
     """
     with transaction.atomic():
-        return _deploy(definition=definition, project=project, created_by_id=created_by_id)
+        return _deploy(definition=definition, project=project, created_by_id=created_by_id, group=group)
 
 
-def _deploy(*, definition, project, created_by_id):
+def _deploy(*, definition, project, created_by_id, group=None):
     """``deploy`` 的事务体。别直接调 —— 它是半成品状态，往外可见要靠外面那层 atomic。"""
     workspace = project.workspace
 
@@ -88,6 +91,7 @@ def _deploy(*, definition, project, created_by_id):
         workspace=workspace,
         project=project,
         definition=definition,
+        group=group,
         bot_user=bot_user,
         is_active=True,
         created_by_id=created_by_id,

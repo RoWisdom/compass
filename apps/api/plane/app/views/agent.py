@@ -15,6 +15,7 @@ from rest_framework.response import Response
 from plane.app.permissions import ROLE, allow_permission
 from plane.app.serializers import (
     AgentDefinitionSerializer,
+    AgentGroupSerializer,
     AgentMemberSerializer,
     AgentRunSerializer,
 )
@@ -22,12 +23,20 @@ from plane.bgtasks.agent_run_task import run_agent_member
 from plane.db.models import (
     AGENT_UNFINISHED_STATUSES,
     AgentDefinition,
+    AgentGroup,
     AgentMember,
     AgentRun,
     AgentRunStatusEnum,
     Issue,
     Project,
     Workspace,
+)
+from plane.utils.agent_group import (
+    RosterIncomplete,
+    apply_roster_delta,
+    deploy_group,
+    raw_roster_ids,
+    unbind_members_of,
 )
 from plane.utils.agent_identity import deploy, resync_project_roles, retire
 from plane.utils.exception_logger import log_exception
@@ -189,10 +198,275 @@ class AgentDefinitionViewSet(BaseViewSet):
                 status=status.HTTP_409_CONFLICT,
             )
 
+        # 第三期：还在某个**活着的**岗位组名册里，也拒绝删 —— buzz 的 ``deletePersona``
+        # 同样拒绝 team-referenced 的 persona。要删就先把它从那些组的名册里摘掉。
+        # 注意 ``definition.groups`` 是**反向 M2M ⇒ 过滤软删的组**（钉死在
+        # tests/unit/models/test_agent_group.py），所以「组已经删了但 through 行还在」
+        # 不挡删除 —— 那正是这里想要的行为。
+        group_names = sorted({group.name for group in definition.groups.all()})
+        if group_names:
+            listed = "、".join(group_names)
+            return Response(
+                {
+                    "error": (
+                        f"「{definition.name}」还在 {len(group_names)} 个岗位组的名册里：{listed}。"
+                        "先从那些组里摘出来。"
+                    )
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
         # **queryset 形式，不是 definition.delete()** —— 理由见上面 docstring 的 ⚠️。
         # AgentMember 那边的 destroy 出于同样的理由也走 queryset 形式。
         AgentDefinition.objects.filter(pk=definition.pk).delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+def _resolve_roster(slug, definition_ids):
+    """把请求里的岗位 id 列表收窄到**本工作区、还活着**的岗位。
+
+    返回 ``(ids, error)``：``ids`` 是 ``None`` 表示「请求里没提名册」（与「名册清空」
+    是两件不同的事，见 ``partial_update``），否则是一个 set；``error`` 非 ``None``
+    时调用方原样当 400 返回。
+
+    两道收窄都必要。跨工作区的 UUID 进得来（``ListField(child=UUIDField())`` 不做
+    任何归属校验），而名册是**工作区级**资产 —— 放一个别的工作区的岗位进来，等于
+    给它开了一条**静默生效的正文通道**：部署时 ``_deploy`` 照样按 ``definition``
+    铸 bot 身份，不看它在哪个工作区（连 ``workspace=project.workspace`` 都是现取的）。
+    软删的岗位同理：它已经不该出现在任何名册里，让 ``add()`` 写进一条 through 行
+    只会让下一次部署撞上 ``RosterIncomplete``。
+    """
+    if definition_ids is None:
+        return None, None
+    # 去重保序：客户端勾选框重复提交同一个 id 是常事，不该变成两条 through 行。
+    wanted = list(dict.fromkeys(definition_ids))
+    found = set(
+        AgentDefinition.objects.filter(
+            workspace__slug=slug, pk__in=wanted, deleted_at__isnull=True
+        ).values_list("id", flat=True)
+    )
+    missing = [str(pk) for pk in wanted if pk not in found]
+    if missing:
+        return None, (
+            f"名册里有 {len(missing)} 个岗位不属于这个工作区，或者已经删掉了："
+            f"{'、'.join(missing)}"
+        )
+    return found, None
+
+
+class AgentGroupViewSet(BaseViewSet):
+    """岗位组（工作区级）。第三期设计 §1 / §4 / §5。
+
+    读 `[ADMIN, MEMBER, GUEST]`；写只有 ADMIN —— 与岗位库同一条理由，只是更重：
+    改一个组的正文会**同时**改掉它名下**所有项目**里所有成员的运行说明。
+
+    ⚠️ **这一类全部方法都必须 ``level="WORKSPACE"``**（只有项目内的 ``deploy`` 例外）。
+    ``allow_permission`` 的 ``level`` 默认是 ``"PROJECT"``，而它会**无条件**读
+    ``kwargs["project_id"]``（``app/permissions/base.py:56``）—— 组 CRUD 的 URL 里
+    根本没有项目 ⇒ 照抄 ``AgentMemberViewSet`` 的装饰器会当场 ``KeyError`` ⇒ 500。
+    """
+
+    serializer_class = AgentGroupSerializer
+    model = AgentGroup
+
+    def get_queryset(self):
+        """本工作区的组，各带「被几个项目用着」。
+
+        ``prefetch_related("definitions")`` 不是为了省查询这么简单：列表序列化器把
+        名册**嵌在每一行里**（卡片要按岗位叠色点），不快取就是每组一次查询。
+        """
+        return (
+            AgentGroup.objects.filter(workspace__slug=self.kwargs.get("slug"))
+            .prefetch_related("definitions")
+            .annotate(
+                # 数的是**不同的项目**，不是成员行 —— 与岗位那边不同，同一个组在同一个
+                # 项目里可以有好几个成员（``(project, definition)`` 唯一，组不唯一），
+                # 按成员行去重会把「1 个项目」报成「3」。成员是**反向 FK ⇒ 过滤软删**，
+                # 正是这里要的（这个数字是删组守卫的事实陈述，只该数还活着的成员）。
+                project_count=Count(
+                    "members__project_id",
+                    filter=Q(members__deleted_at__isnull=True),
+                    distinct=True,
+                )
+            )
+            .order_by("created_at")
+        )
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    def list(self, request, slug):
+        return Response(self.get_serializer(self.get_queryset(), many=True).data)
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER, ROLE.GUEST], level="WORKSPACE")
+    def retrieve(self, request, slug, pk):
+        group = self.get_queryset().filter(pk=pk).first()
+        if group is None:
+            return Response({"error": "No such AI group"}, status=status.HTTP_404_NOT_FOUND)
+        return Response(self.get_serializer(group).data)
+
+    @allow_permission([ROLE.ADMIN], level="WORKSPACE")
+    def create(self, request, slug):
+        workspace = Workspace.objects.filter(slug=slug).first()
+        if workspace is None:
+            return Response({"error": "No such workspace"}, status=status.HTTP_404_NOT_FOUND)
+        serializer = self.get_serializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        # ⚠️ **必须在 ``save()`` 之前把 ``definition_ids`` 从 ``validated_data`` 里摘掉。**
+        # 它不是模型字段，而 ``ModelSerializer.create`` 会把剩下的一切原样喂给
+        # ``AgentGroup.objects.create(**validated_data)`` ⇒ 不摘就是
+        # ``TypeError: 'definition_ids' is an invalid keyword argument``。名册由下面
+        # 显式算增量（见 ``utils/agent_group.py`` 的 ⚠️：绝不能用 M2M 的 ``set()``）。
+        definition_ids = serializer.validated_data.pop("definition_ids", None)
+        roster, error = _resolve_roster(slug, definition_ids)
+        if error:
+            return Response({"error": error}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            # 套一层 atomic 的理由与 ``AgentDefinitionViewSet.create`` 逐字相同：
+            # 失败的 INSERT 退回保存点，外层事务仍可用。
+            with transaction.atomic():
+                group = serializer.save(workspace=workspace, created_by_id=request.user.id)
+        except IntegrityError:
+            # 同工作区里组名唯一（0130 的 unique_agent_group_name_per_workspace）。
+            # 与岗位那边同一个陷阱：DRF 造了 ``UniqueTogetherValidator``，但
+            # ``workspace_id`` 只读又无默认值 ⇒ **它会被整条跳过** ⇒ 重名一路撞到
+            # INSERT。不打这个 except 就是 500 + 栈，而不是 409。
+            name = serializer.validated_data.get("name")
+            return Response(
+                {"error": f"这个工作区里已经有叫「{name}」的岗位组了。"},
+                status=status.HTTP_409_CONFLICT,
+            )
+        if roster:
+            with transaction.atomic():
+                # 新建的组旧名册必然是空集 —— 但没有「必然」可言：这条断言靠的是
+                # 「刚 INSERT 的组不可能有 through 行」。直说，别让它变成一句心算。
+                apply_roster_delta(group=group, previous_ids=set(), definition_ids=roster)
+        # 走一遍**带注解的** queryset：``project_count`` 是注解，刚建的对象上没有这个
+        # 属性，直接序列化会抛 AttributeError（岗位/成员那边的 create 同此）。
+        return Response(
+            self.get_serializer(self.get_queryset().filter(pk=group.pk).first()).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+    @allow_permission([ROLE.ADMIN], level="WORKSPACE")
+    def partial_update(self, request, slug, pk):
+        """改组。名册的增删会**扇出到成员行**（设计 §4）—— 这是唯一一处写组会顺带改成员。"""
+        group = self.get_queryset().filter(pk=pk).first()
+        if group is None:
+            return Response({"error": "No such AI group"}, status=status.HTTP_404_NOT_FOUND)
+        serializer = self.get_serializer(group, data=request.data, partial=True)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        definition_ids = serializer.validated_data.pop("definition_ids", None)
+        roster, error = _resolve_roster(slug, definition_ids)
+        if error:
+            return Response({"error": error}, status=status.HTTP_400_BAD_REQUEST)
+        # **「没提名册」与「清空名册」是两件事**：只改名字的 PATCH 不该顺手把名册清掉。
+        # ``definition_ids: []`` 才是「清空」；字段缺席时 ``roster`` 是 ``None``。
+        # 还有一件事同样致命：**旧名册必须在 ``save()`` 之前抓**，且抓的是
+        # ``raw_roster_ids``（全部 through 行，**含软删岗位**）。先 save 再读 ⇒
+        # ``added``/``removed`` 双双为空 ⇒ 整段静默变成空转，而且没有任何测试会红。
+        previous_ids = raw_roster_ids(group) if roster is not None else None
+        try:
+            with transaction.atomic():
+                serializer.save()
+                if roster is not None:
+                    apply_roster_delta(
+                        group=group, previous_ids=previous_ids, definition_ids=roster
+                    )
+        except IntegrityError:
+            name = serializer.validated_data.get("name") or group.name
+            return Response(
+                {"error": f"这个工作区里已经有叫「{name}」的岗位组了。"},
+                status=status.HTTP_409_CONFLICT,
+            )
+        return Response(self.get_serializer(self.get_queryset().filter(pk=pk).first()).data)
+
+    @allow_permission([ROLE.ADMIN], level="WORKSPACE")
+    def destroy(self, request, slug, pk):
+        """还绑着成员就拒绝删，并把挡路的项目名报出来。设计 §5。
+
+        **这是拒绝式，不是级联式** —— 照 buzz 的 ``delete_team_with_cascade``：只要
+        还有实例引用这个组，就删不掉（那句「已部署的 agent 不受影响」是**拒绝的结果**，
+        不是删除的行为）。罗盘的修法与 buzz 同一句话：先把成员从组里解绑。
+
+        ⚠️ 与岗位那边一样，**这道守卫是唯一的栅栏**：``AgentMember.group`` 上的
+        ``on_delete=PROTECT`` 在软删路径上**永远不触发**（软删不进 FK collector），
+        而实例的 ``.delete()`` 会发级联任务、把反向关系里连 PROTECT 都当 CASCADE。
+        所以下面必须是 **queryset 形式**。
+        """
+        group = self.get_queryset().filter(pk=pk).first()
+        if group is None:
+            return Response({"error": "No such AI group"}, status=status.HTTP_404_NOT_FOUND)
+
+        # 与 ``AgentDefinitionViewSet.destroy`` 不同：那边的 ``(project, definition)``
+        # 唯一约束保证成员行与项目一一对应，所以名字列表可以直接由成员行生成。这里一条
+        # 项目可以贡献好几个成员（同一组里好几个岗位部署进同一个项目）⇒ 数字和名单
+        # **都必须按 ``project_id`` 去重**，否则会输出「仍被 1 个项目使用：P、P、P」。
+        blockers = AgentMember.objects.filter(group=group, deleted_at__isnull=True).select_related(
+            "project"
+        )
+        project_names = sorted({m.project.name for m in blockers})
+        project_count = len({m.project_id for m in blockers})
+        if project_count:
+            return Response(
+                {
+                    "error": (
+                        f"「{group.name}」还绑着 {project_count} 个项目里的成员："
+                        f"{'、'.join(project_names)}。先把那些成员从组里解绑，再删这个组。"
+                    )
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        with transaction.atomic():
+            # 守卫保证这里匹配零行；调用它是为了让「组没了、绑定还指着它」这个中间态
+            # **不可表示** —— 万一哪天守卫被绕过，也不会有成员的 ``group_id`` 指向坟头。
+            unbind_members_of(group)
+            AgentGroup.objects.filter(pk=group.pk).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @allow_permission([ROLE.ADMIN])
+    def deploy(self, request, slug, project_id, pk):
+        """把整组岗位一次部署进这个项目。设计 §3。
+
+        ⚠️ 装饰器**没有** ``level`` ⇒ 走默认的 ``"PROJECT"``，而它会去读
+        ``kwargs["project_id"]`` ⇒ 路由里的 kwarg **必须**字面叫 ``project_id``
+        （``<uuid:project_id>``）。写成 ``<uuid:pid>`` 就是 ``KeyError`` ⇒ 500。
+
+        组的取法沿本类的 ``get_queryset()`` ⇒ 自动按 ``workspace__slug`` 收窄。
+        少了这一步，A 工作区的项目管理员能部署 B 工作区的组，而 ``_deploy`` 照样铸
+        身份（它的 ``workspace`` 是现从 ``project`` 上取的，不看组属于谁）。
+        """
+        group = self.get_queryset().filter(pk=pk).first()
+        if group is None:
+            return Response({"error": "No such AI group"}, status=status.HTTP_404_NOT_FOUND)
+        project = Project.objects.filter(workspace__slug=slug, pk=project_id).first()
+        if project is None:
+            return Response({"error": "No such project"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # 外层 atomic：逐项 ``deploy()`` 自带事务（嵌套时退化为保存点），所以里面
+            # 撞唯一约束的那一支回退到保存点、循环能继续 ⇒ **部分成功仍然成立**。
+            # 这一层买的是「意外异常 ⇒ 整组回滚」，不留半个组。
+            with transaction.atomic():
+                result = deploy_group(group=group, project=project, created_by_id=request.user.id)
+        except RosterIncomplete as exc:
+            # 名册里有已删的岗位 = buzz 的「部署按钮禁用 + 红条」。**编辑是修复路径**：
+            # 所以这里只报错、不替用户把死岗位摘掉 —— 摘掉是不可逆的静默编辑。
+            listed = "、".join(sorted(exc.names))
+            return Response(
+                {
+                    "error": (
+                        f"这个岗位组的名册里有 {len(exc.names)} 个岗位已经删掉了：{listed}。"
+                        "先改组，把它们从名册里摘出来。"
+                    )
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+        # 四个格子都报回去（``utils/agent_group.py`` 的 ``deploy_group``）。**部分成功是
+        # 一等公民** —— 前端照 buzz 报「部署 N 个，M 个冲突」，不是一句「失败」。
+        result["group"] = {"id": str(group.id), "name": group.name}
+        return Response(result, status=status.HTTP_200_OK)
 
 
 class AgentMemberViewSet(BaseViewSet):

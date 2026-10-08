@@ -148,6 +148,8 @@ from .page_collection import (
 from .agent import (
     AgentDefinitionLiteSerializer,
     AgentDefinitionSerializer,
+    AgentGroupLiteSerializer,
+    AgentGroupSerializer,
     AgentMemberSerializer,
     AgentRunSerializer,
 )

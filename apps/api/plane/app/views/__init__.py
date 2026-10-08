@@ -241,4 +241,9 @@ from .timezone.base import TimezoneEndpoint
 
 from .page.collection import PageCollectionViewSet, WikiPageDescriptionViewSet, WikiPageViewSet
 
-from .agent import AgentDefinitionViewSet, AgentMemberViewSet, AgentRunViewSet
+from .agent import (
+    AgentDefinitionViewSet,
+    AgentGroupViewSet,
+    AgentMemberViewSet,
+    AgentRunViewSet,
+)
