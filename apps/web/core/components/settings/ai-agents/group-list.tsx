@@ -19,53 +19,60 @@ import { AlertModalCore, EModalPosition, EModalWidth, ModalCore } from "@plane/u
 import { SimpleEmptyState } from "@/components/empty-state/simple-empty-state-root";
 import { SettingsHeading } from "@/components/settings/heading";
 // types
-import type { TAgentDefinition } from "@/services/agent.service";
+import type { TAgentGroup } from "@/services/agent.service";
 // hooks
 import { useAgentStore } from "@/hooks/store/use-agent-store";
 import { useUserPermissions } from "@/hooks/store/user";
 // local imports
-import { TIER_LABEL } from "./constants";
-import { PostForm } from "./post-form";
+import { GroupForm } from "./group-form";
 
-export const PostList = observer(function PostList() {
+/** 卡片上直接列几个岗位名，剩下的折成 `+N`。 */
+const ROSTER_PREVIEW_LIMIT = 4;
+
+/**
+ * 「岗位组」区块 —— 工作区「AI 岗位」页上的**第二个堆叠区块**（照 buzz 的 AgentsView：
+ * 两个堆叠 grid，teams 在后）。
+ *
+ * 为什么不开新设置页：加一个设置页要改五处（types 联合 / constants 映射 + GROUPED /
+ * item-icon / 路由两件套 / i18n），而这一层本来就和岗位是同一件事的两面 —— 一个岗位组
+ * 就是「一组岗位」，放在同一页上还能顺带告诉用户岗位是从哪儿挑的。
+ */
+export const GroupList = observer(function GroupList() {
   // states
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [editingPost, setEditingPost] = useState<TAgentDefinition | undefined>(undefined);
-  const [deletingPost, setDeletingPost] = useState<TAgentDefinition | undefined>(undefined);
+  const [editingGroup, setEditingGroup] = useState<TAgentGroup | undefined>(undefined);
+  const [deletingGroup, setDeletingGroup] = useState<TAgentGroup | undefined>(undefined);
   const [isDeleting, setIsDeleting] = useState(false);
   // router
   const { workspaceSlug } = useParams();
   // store hooks
-  const { getDefinitionList, deleteDefinition } = useAgentStore();
+  const { getGroupList, deleteGroup } = useAgentStore();
   const { allowPermissions } = useUserPermissions();
   // translation
   const { t } = useTranslation();
   // derived values
-  const definitions = getDefinitionList();
-  // The read side is open to every member; the write endpoints are ADMIN-only,
-  // so the create/edit/delete controls are what we gate.
-  const canManagePosts = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.WORKSPACE);
+  const groups = getGroupList();
+  const canManageGroups = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.WORKSPACE);
 
   const closeModals = () => {
     setIsCreateOpen(false);
-    setEditingPost(undefined);
+    setEditingGroup(undefined);
   };
 
   const handleDelete = async () => {
-    if (!workspaceSlug || !deletingPost) return;
+    if (!workspaceSlug || !deletingGroup) return;
 
     setIsDeleting(true);
     try {
-      await deleteDefinition(workspaceSlug, deletingPost.id);
+      await deleteGroup(workspaceSlug, deletingGroup.id);
       setToast({
         type: TOAST_TYPE.SUCCESS,
         title: t("toast.success"),
-        message: deletingPost.name,
+        message: deletingGroup.name,
       });
-      setDeletingPost(undefined);
+      setDeletingGroup(undefined);
     } catch (error) {
-      // The 409 from the backend already names the projects using this post —
-      // surface it verbatim instead of a generic message.
+      // 后端的 409 已经点名了还绑着这个组的项目 —— 原样透出去。
       setToast({
         type: TOAST_TYPE.ERROR,
         title: t("toast.error"),
@@ -79,61 +86,81 @@ export const PostList = observer(function PostList() {
   return (
     <section className="w-full">
       <SettingsHeading
-        title={t("ai_members.pool.title")}
-        description={t("ai_members.pool.description")}
+        title={t("ai_members.groups.title")}
+        description={t("ai_members.groups.description")}
         control={
-          canManagePosts ? (
+          canManageGroups ? (
             <Button variant="primary" size="lg" onClick={() => setIsCreateOpen(true)}>
               <PlusIcon className="mr-1.5 size-4" />
-              {t("ai_members.pool.create")}
+              {t("ai_members.groups.create")}
             </Button>
           ) : undefined
         }
       />
 
       <div className="mt-7 flex flex-col gap-2">
-        {definitions.length === 0 ? (
+        {groups.length === 0 ? (
           <div className="grid w-full place-items-center rounded-lg border border-dashed border-subtle px-4 py-16">
-            <SimpleEmptyState title={t("ai_members.pool.empty")} />
+            <SimpleEmptyState title={t("ai_members.groups.empty")} />
           </div>
         ) : (
-          definitions.map((definition) => (
+          groups.map((group) => (
             <div
-              key={definition.id}
+              key={group.id}
               className="flex items-start justify-between gap-4 rounded-lg border border-subtle px-4 py-3"
             >
               <div className="flex min-w-0 flex-col gap-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-body-sm-medium text-primary">{definition.name}</span>
+                  <span className="text-body-sm-medium text-primary">{group.name}</span>
                   <Pill variant={EPillVariant.DEFAULT} size={EPillSize.SM} className="border-none">
-                    {t(TIER_LABEL[definition.tier])}
+                    {t("ai_members.groups.roster_count", { count: group.definitions.length })}
                   </Pill>
                 </div>
-                {definition.description && (
-                  <p className="text-caption-md-regular text-tertiary">{definition.description}</p>
+                {group.description && <p className="text-caption-md-regular text-tertiary">{group.description}</p>}
+                {/* 名册的预览：只列**活着的**岗位（服务端那份嵌套只读名册本就如此）。 */}
+                {group.definitions.length === 0 ? (
+                  <p className="text-caption-sm-regular text-tertiary">{t("ai_members.groups.roster_none")}</p>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {group.definitions.slice(0, ROSTER_PREVIEW_LIMIT).map((definition) => (
+                      <Pill
+                        key={definition.id}
+                        variant={EPillVariant.DEFAULT}
+                        size={EPillSize.SM}
+                        className="border-none"
+                      >
+                        {definition.name}
+                      </Pill>
+                    ))}
+                    {group.definitions.length > ROSTER_PREVIEW_LIMIT && (
+                      <span className="text-caption-sm-regular text-tertiary">
+                        +{group.definitions.length - ROSTER_PREVIEW_LIMIT}
+                      </span>
+                    )}
+                  </div>
                 )}
                 <p className="text-caption-sm-regular text-tertiary">
-                  {definition.project_count > 0
-                    ? t("ai_members.pool.used_by", { count: definition.project_count })
-                    : t("ai_members.pool.used_by_none")}
+                  {group.project_count > 0
+                    ? t("ai_members.groups.used_by", { count: group.project_count })
+                    : t("ai_members.groups.used_by_none")}
                 </p>
               </div>
 
-              {canManagePosts && (
+              {canManageGroups && (
                 <div className="flex shrink-0 items-center gap-1">
                   <button
                     type="button"
                     aria-label={t("common.edit")}
                     className="grid size-7 place-items-center rounded text-tertiary hover:bg-layer-2 hover:text-primary"
-                    onClick={() => setEditingPost(definition)}
+                    onClick={() => setEditingGroup(group)}
                   >
                     <EditIcon className="size-4" />
                   </button>
                   <button
                     type="button"
-                    aria-label={t("ai_members.pool.delete")}
+                    aria-label={t("ai_members.groups.delete")}
                     className="grid size-7 place-items-center rounded text-tertiary hover:bg-layer-2 hover:text-danger-primary"
-                    onClick={() => setDeletingPost(definition)}
+                    onClick={() => setDeletingGroup(group)}
                   >
                     <TrashIcon className="size-4" />
                   </button>
@@ -146,14 +173,14 @@ export const PostList = observer(function PostList() {
 
       {workspaceSlug && (
         <ModalCore
-          isOpen={isCreateOpen || Boolean(editingPost)}
+          isOpen={isCreateOpen || Boolean(editingGroup)}
           handleClose={closeModals}
           position={EModalPosition.TOP}
           width={EModalWidth.XXL}
         >
           <div className="flex items-center justify-between border-b border-subtle px-5 py-3">
             <h3 className="text-h5-medium text-primary">
-              {editingPost ? t("ai_members.pool.edit_title") : t("ai_members.pool.create_title")}
+              {editingGroup ? t("ai_members.groups.edit_title") : t("ai_members.groups.create_title")}
             </h3>
             <button
               type="button"
@@ -165,10 +192,9 @@ export const PostList = observer(function PostList() {
             </button>
           </div>
           <div className="px-5 py-4">
-            <PostForm
+            <GroupForm
               workspaceSlug={workspaceSlug}
-              definition={editingPost}
-              embedded
+              group={editingGroup}
               onSuccess={() => closeModals()}
               onCancel={closeModals}
             />
@@ -177,14 +203,14 @@ export const PostList = observer(function PostList() {
       )}
 
       <AlertModalCore
-        isOpen={Boolean(deletingPost)}
-        handleClose={() => setDeletingPost(undefined)}
+        isOpen={Boolean(deletingGroup)}
+        handleClose={() => setDeletingGroup(undefined)}
         handleSubmit={() => {
           void handleDelete();
         }}
         isSubmitting={isDeleting}
-        title={t("ai_members.pool.delete_confirm_title")}
-        content={t("ai_members.pool.delete_confirm_body")}
+        title={t("ai_members.groups.delete_confirm_title")}
+        content={t("ai_members.groups.delete_confirm_body")}
         primaryButtonText={{ loading: t("deleting"), default: t("common.delete") }}
         secondaryButtonText={t("common.cancel")}
       />

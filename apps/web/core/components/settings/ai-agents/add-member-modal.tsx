@@ -10,21 +10,15 @@ import { observer } from "mobx-react";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { CloseIcon, PlusIcon } from "@plane/propel/icons";
-import { EPillSize, EPillVariant, Pill } from "@plane/propel/pill";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import { Checkbox, EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
+import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 // types
-import type { TAgentDefinition, TAgentTier } from "@/services/agent.service";
+import type { TAgentDefinition } from "@/services/agent.service";
 // hooks
 import { useAgentStore } from "@/hooks/store/use-agent-store";
 // local imports
+import { DefinitionPicker } from "./definition-picker";
 import { PostForm } from "./post-form";
-
-const TIER_LABEL: Record<TAgentTier, string> = {
-  readonly: "ai_members.pool.tier_readonly",
-  writer: "ai_members.pool.tier_writer",
-  ledger: "ai_members.pool.tier_ledger",
-};
 
 type Props = {
   workspaceSlug: string;
@@ -135,40 +129,12 @@ export const AddMemberModal = observer(function AddMemberModal(props: Props) {
           <>
             <p className="text-caption-md-regular text-tertiary">{t("ai_members.roster.add_description")}</p>
 
-            {candidates.length === 0 ? (
-              <div className="grid w-full place-items-center rounded-lg border border-dashed border-subtle px-4 py-10">
-                <p className="text-caption-md-regular text-tertiary">{t("ai_members.roster.add_none_left")}</p>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-2">
-                {candidates.map((definition) => (
-                  // The label wraps the checkbox plus its copy — same shape (and
-                  // the same lint exception) as post-form's tier radios.
-                  // oxlint-disable-next-line jsx_a11y/label-has-associated-control
-                  <label
-                    key={definition.id}
-                    className="flex cursor-pointer items-start gap-3 rounded-lg border border-subtle px-3 py-2"
-                  >
-                    <Checkbox
-                      checked={selected.includes(definition.id)}
-                      onChange={() => toggleSelected(definition.id)}
-                      containerClassName="mt-0.5"
-                    />
-                    <span className="flex min-w-0 flex-col gap-0.5">
-                      <span className="flex items-center gap-2">
-                        <span className="text-body-sm-medium text-primary">{definition.name}</span>
-                        <Pill variant={EPillVariant.DEFAULT} size={EPillSize.SM} className="border-none">
-                          {t(TIER_LABEL[definition.tier])}
-                        </Pill>
-                      </span>
-                      {definition.description && (
-                        <span className="text-caption-md-regular text-tertiary">{definition.description}</span>
-                      )}
-                    </span>
-                  </label>
-                ))}
-              </div>
-            )}
+            <DefinitionPicker
+              definitions={candidates}
+              selectedIds={selected}
+              onToggle={toggleSelected}
+              emptyLabel={t("ai_members.roster.add_none_left")}
+            />
 
             <div className="flex items-center justify-between pt-1">
               <Button variant="secondary" size="lg" onClick={() => setIsCreatingPost(true)}>

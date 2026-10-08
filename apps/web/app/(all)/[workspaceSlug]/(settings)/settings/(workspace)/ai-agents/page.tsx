@@ -10,6 +10,7 @@ import { observer } from "mobx-react";
 import { useTranslation } from "@plane/i18n";
 // components
 import { PageHead } from "@/components/core/page-title";
+import { GroupList } from "@/components/settings/ai-agents/group-list";
 import { PostList } from "@/components/settings/ai-agents/post-list";
 import { SettingsContentWrapper } from "@/components/settings/content-wrapper";
 // hooks
@@ -22,7 +23,7 @@ import { WorkspaceAiAgentsSettingsHeader } from "./header";
 function WorkspaceAiAgentsSettingsPage({ params }: Route.ComponentProps) {
   const { workspaceSlug } = params;
   // store hooks
-  const { fetchDefinitions } = useAgentStore();
+  const { fetchDefinitions, fetchGroups } = useAgentStore();
   const { currentWorkspace } = useWorkspace();
   // translation
   const { t } = useTranslation();
@@ -31,12 +32,17 @@ function WorkspaceAiAgentsSettingsPage({ params }: Route.ComponentProps) {
 
   useEffect(() => {
     void fetchDefinitions(workspaceSlug);
-  }, [fetchDefinitions, workspaceSlug]);
+    void fetchGroups(workspaceSlug);
+  }, [fetchDefinitions, fetchGroups, workspaceSlug]);
 
   return (
     <SettingsContentWrapper header={<WorkspaceAiAgentsSettingsHeader />}>
       <PageHead title={pageTitle} />
-      <PostList />
+      {/* 两个堆叠区块：岗位，然后是岗位组（照 buzz 的 AgentsView）。 */}
+      <div className="flex flex-col gap-12">
+        <PostList />
+        <GroupList />
+      </div>
     </SettingsContentWrapper>
   );
 }
