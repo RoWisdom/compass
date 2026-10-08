@@ -26,7 +26,7 @@ import { FeaturesAiAgentsProjectSettingsHeader } from "./header";
 function FeaturesAiAgentsProjectSettingsPage({ params }: Route.ComponentProps) {
   const { workspaceSlug, projectId } = params;
   // store hooks
-  const { fetchDefinitions, fetchMembers } = useAgentStore();
+  const { fetchDefinitions, fetchGroups, fetchMembers } = useAgentStore();
   const { currentProjectDetails } = useProject();
   const { workspaceUserInfo, allowPermissions } = useUserPermissions();
   // translation
@@ -38,8 +38,13 @@ function FeaturesAiAgentsProjectSettingsPage({ params }: Route.ComponentProps) {
   const canPerformProjectAdminActions = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.PROJECT);
 
   useEffect(() => {
-    void Promise.all([fetchDefinitions(workspaceSlug), fetchMembers(workspaceSlug, projectId)]).catch(() => {});
-  }, [fetchDefinitions, fetchMembers, workspaceSlug, projectId]);
+    // 岗位组也要拉：本页的「从岗位组部署」要列工作区的组。
+    void Promise.all([
+      fetchDefinitions(workspaceSlug),
+      fetchGroups(workspaceSlug),
+      fetchMembers(workspaceSlug, projectId),
+    ]).catch(() => {});
+  }, [fetchDefinitions, fetchGroups, fetchMembers, workspaceSlug, projectId]);
 
   if (workspaceUserInfo && !canPerformProjectAdminActions) {
     return <NotAuthorizedView section="settings" isProjectView className="h-auto" />;

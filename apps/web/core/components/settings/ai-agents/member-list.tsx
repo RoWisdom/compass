@@ -17,17 +17,13 @@ import { calculateTimeAgoShort, cn } from "@plane/utils";
 // components
 import { SimpleEmptyState } from "@/components/empty-state/simple-empty-state-root";
 // types
-import type { TAgentMember, TAgentTier } from "@/services/agent.service";
+import type { TAgentMember } from "@/services/agent.service";
 // hooks
 import { useAgentStore } from "@/hooks/store/use-agent-store";
 // local imports
 import { AddMemberModal } from "./add-member-modal";
-
-const TIER_LABEL: Record<TAgentTier, string> = {
-  readonly: "ai_members.pool.tier_readonly",
-  writer: "ai_members.pool.tier_writer",
-  ledger: "ai_members.pool.tier_ledger",
-};
+import { TIER_LABEL } from "./constants";
+import { DeployGroupModal } from "./deploy-group-modal";
 
 type Props = {
   workspaceSlug: string;
@@ -53,6 +49,7 @@ const runLabel = (member: TAgentMember, t: ReturnType<typeof useTranslation>["t"
 export const MemberList = observer(function MemberList({ workspaceSlug, projectId }: Props) {
   // states
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [isDeployOpen, setIsDeployOpen] = useState(false);
   const [removingMember, setRemovingMember] = useState<TAgentMember | undefined>(undefined);
   const [isRemoving, setIsRemoving] = useState(false);
   const [togglingMemberId, setTogglingMemberId] = useState<string | null>(null);
@@ -103,7 +100,10 @@ export const MemberList = observer(function MemberList({ workspaceSlug, projectI
 
   return (
     <section className="w-full">
-      <div className="flex items-center justify-end">
+      <div className="flex items-center justify-end gap-2">
+        <Button variant="secondary" size="lg" onClick={() => setIsDeployOpen(true)}>
+          {t("ai_members.roster.deploy")}
+        </Button>
         <Button variant="primary" size="lg" onClick={() => setIsAddOpen(true)}>
           <PlusIcon className="mr-1.5 size-4" />
           {t("ai_members.roster.add")}
@@ -133,6 +133,12 @@ export const MemberList = observer(function MemberList({ workspaceSlug, projectI
                   <Pill variant={member.is_active ? EPillVariant.SUCCESS : EPillVariant.DEFAULT} size={EPillSize.SM}>
                     {member.is_active ? t("ai_members.roster.active") : t("ai_members.roster.inactive")}
                   </Pill>
+                  {/* 所属岗位组 —— 这一行的组级正文就是从这个组来的。换组只能靠重新部署那个组。 */}
+                  {member.group && (
+                    <Pill variant={EPillVariant.DEFAULT} size={EPillSize.SM} className="border-none">
+                      {member.group.name}
+                    </Pill>
+                  )}
                 </div>
                 {member.definition.description && (
                   <p className="text-caption-md-regular text-tertiary">{member.definition.description}</p>
@@ -168,6 +174,13 @@ export const MemberList = observer(function MemberList({ workspaceSlug, projectI
         projectId={projectId}
         isOpen={isAddOpen}
         handleClose={() => setIsAddOpen(false)}
+      />
+
+      <DeployGroupModal
+        workspaceSlug={workspaceSlug}
+        projectId={projectId}
+        isOpen={isDeployOpen}
+        handleClose={() => setIsDeployOpen(false)}
       />
 
       <AlertModalCore
